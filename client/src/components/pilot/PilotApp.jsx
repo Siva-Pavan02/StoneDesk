@@ -40,11 +40,10 @@ export default function PilotApp({ user, onLogout, onLanding, onOpenLoadingLists
   useEffect(() => {
     if (!view.startsWith('bill/')) return;
     const id = view.slice(5);
-    if (record?._id === id) return;
     let cancelled = false;
     request(`/dispatches/${id}`).then(data => { if (!cancelled) setRecord(data); }).catch(err => { if (!cancelled) setError(err.message); });
     return () => { cancelled = true; };
-  }, [view, record?._id]);
+  }, [view]);
   function home() { navigate('home'); refreshLoads(); }
   function newLoad() {
     if (!settings?.businessName) return navigate('profile');

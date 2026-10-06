@@ -13,7 +13,11 @@ function measure(value) {
 function header(doc, dispatch, driver) {
   const business = dispatch.businessSnapshot || {};
   const hasLogo = Boolean(business.logoDataUrl);
-  if (hasLogo) doc.addImage(business.logoDataUrl, 'PNG', 13, 11, 24, 24, undefined, 'FAST');
+  if (hasLogo) {
+    const image = doc.getImageProperties(business.logoDataUrl);
+    const scale = 24 / Math.max(image.width, image.height);
+    doc.addImage(business.logoDataUrl, 'PNG', 13, 11, image.width * scale, image.height * scale, undefined, 'FAST');
+  }
   const left = hasLogo ? 42 : 13, center = (left + 197) / 2;
   doc.setFont('times', 'italic').setFontSize(28).setTextColor(133, 42, 42);
   const name = doc.splitTextToSize(business.businessName || 'GraniteSync', 197 - left);

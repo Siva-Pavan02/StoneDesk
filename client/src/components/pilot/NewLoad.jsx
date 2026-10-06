@@ -8,7 +8,11 @@ import LoadSummary from './LoadSummary.jsx';
 
 export default function NewLoad({ settings, initialDraft, onSaved, onBack, canFinalize = true }) {
   const { pick } = useLanguage();
-  const [draft, setDraft] = useState(() => initialDraft || readDraft() || newDraft(settings.defaultRoyaltyFee));
+  const [draft, setDraft] = useState(() => {
+    const recovery = readDraft();
+    if (initialDraft && recovery?.clientRequestId !== initialDraft.clientRequestId) return initialDraft;
+    return recovery || initialDraft || newDraft(settings.defaultRoyaltyFee);
+  });
   const first = settings.stoneRates[0];
   const [entry, setEntry] = useState(() => draft.entry || { productId: first?._id || '', category: 'Regular', length: '', width: '', quantity: '1', rate: String(first?.defaultRate ?? '') });
   const [review, setReview] = useState(false);

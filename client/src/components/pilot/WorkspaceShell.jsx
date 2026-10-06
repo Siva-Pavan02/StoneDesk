@@ -10,7 +10,7 @@ export default function WorkspaceShell({ settings, user, view, navigate, onNew, 
   const drawer = useRef(null), notifications = useRef(null);
   function go(viewName) { drawer.current.close(); navigate(viewName); }
   return <div className="pilot min-h-dvh bg-gray-50 text-gray-900 pb-24">
-    <a href="#workspace-main" className="skip-link">{pick('Skip to content', 'విషయానికి వెళ్ళండి')}</a>
+    <a href="#workspace-main" className="skip-link" onClick={event => { event.preventDefault(); document.getElementById('workspace-main')?.focus(); }}>{pick('Skip to content', 'విషయానికి వెళ్ళండి')}</a>
     <header className="border-b border-gray-200 bg-white"><div className="mx-auto max-w-lg px-4 py-3">
       <div className="flex items-center gap-2"><button className="icon-button" aria-label={pick('Open navigation', 'మెనూ తెరవండి')} onClick={() => drawer.current.showModal()}><Icon name="menu" /></button>
         <div className="min-w-0 flex-1"><p className="truncate font-bold">{settings?.businessName || 'GraniteSync'}</p><p className="text-xs text-gray-600">{pick('YARD WORKSPACE', 'యార్డ్ వర్క్‌స్పేస్')}</p></div><LanguageToggle /><button className="icon-button" aria-label={pick('Notifications and tasks', 'నోటిఫికేషన్లు')} onClick={() => notifications.current.showModal()}><Icon name="bell" /></button>

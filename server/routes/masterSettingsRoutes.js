@@ -4,6 +4,8 @@ const controller = require('../controllers/masterSettingsController');
 
 router.get('/', controller.getSettings);
 router.put('/', controller.updateSettings);
+router.put('/profile', controller.updateProfile);
+router.post('/logo', express.raw({ type: ['image/png', 'image/jpeg'], limit: '2mb' }), controller.uploadLogo);
 
 router.post('/trucks', controller.addTruck);
 router.delete('/trucks/:truckNumber', controller.deleteTruck);

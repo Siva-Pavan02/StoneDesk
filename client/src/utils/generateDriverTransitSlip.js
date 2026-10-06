@@ -1,7 +1,10 @@
 import { jsPDF } from "jspdf";
+import { driverPdf } from './pilotExports.js';
 import autoTable from "jspdf-autotable";
+import { decimalToFraction } from './fractionParser.js';
 
-export function generateDriverTransitSlip(dispatch) {
+export function generateDriverTransitSlip(dispatch, t) {
+  if (!t || dispatch?.inventory?.some(g => g.measurementRows?.length)) return driverPdf(dispatch);
   if (!dispatch) throw new Error("Missing Dispatch record");
   if (!dispatch.inventory || dispatch.inventory.length === 0) {
     throw new Error("Missing inventory");
@@ -19,12 +22,12 @@ export function generateDriverTransitSlip(dispatch) {
   // Header
   doc.setFontSize(18);
   doc.setFont("helvetica", "bold");
-  doc.text("DRIVER TRANSIT SLIP", 105, 20, { align: "center" });
+  doc.text(t('driverTransitSlip').toUpperCase(), 105, 20, { align: "center" });
 
   doc.setFontSize(11);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(100);
-  doc.text(`GraniteSync Logistics - Pit-2 Unit 04`, 105, 28, { align: "center" });
+  doc.text(`${t('appName')} Logistics - Pit-2 Unit 04`, 105, 28, { align: "center" });
 
   doc.setTextColor(0);
   doc.setFontSize(10);
@@ -33,13 +36,13 @@ export function generateDriverTransitSlip(dispatch) {
   const slipNumber = dispatch.dispatchSlipNumber || 'N/A';
   const dateStr = dispatch.date ? new Date(dispatch.date).toLocaleDateString() : 'N/A';
   
-  doc.text(`Slip Number: ${slipNumber}`, 15, 40);
-  doc.text(`Date: ${dateStr}`, 140, 40);
+  doc.text(`${t('slipNo')}: ${slipNumber}`, 15, 40);
+  doc.text(`${t('date')}: ${dateStr}`, 140, 40);
 
-  doc.text(`Supervisor: ${dispatch.supervisor || 'N/A'}`, 15, 48);
-  doc.text(`Truck Number: ${dispatch.logistics?.truckNumber || 'N/A'}`, 140, 48);
+  doc.text(`${t('supervisor')}: ${dispatch.supervisor || 'N/A'}`, 15, 48);
+  doc.text(`${t('truckNumber')}: ${dispatch.logistics?.truckNumber || 'N/A'}`, 140, 48);
   
-  doc.text(`Destination: ${dispatch.logistics?.buyerDestination || 'N/A'}`, 15, 56);
+  doc.text(`${t('destination')}: ${dispatch.logistics?.buyerDestination || 'N/A'}`, 15, 56);
   
   // Divider
   doc.setLineWidth(0.5);
@@ -53,7 +56,7 @@ export function generateDriverTransitSlip(dispatch) {
   dispatch.inventory.forEach((group, index) => {
     doc.setFontSize(11);
     doc.setFont("helvetica", "bold");
-    doc.text(`Material: ${group.stoneType} (${group.finish})`, 15, startY);
+    doc.text(`${t('stoneType')}: ${group.stoneType} (${group.finish})`, 15, startY);
     
     const tableData = group.pieces.map((p, i) => {
       totalPieces++;
@@ -61,15 +64,15 @@ export function generateDriverTransitSlip(dispatch) {
       totalSqFt += pSqFt;
       return [
         (i + 1).toString(),
-        `${p.lengthFt}`,
-        `${p.widthFt}`,
-        `${pSqFt}`
+        p.lengthDisplay ? p.lengthDisplay : `${p.lengthFt}`,
+        p.widthDisplay ? p.widthDisplay : `${p.widthFt}`,
+        decimalToFraction(pSqFt)
       ];
     });
 
     autoTable(doc, {
       startY: startY + 5,
-      head: [['#', 'Length (ft)', 'Width (ft)', 'Sq Ft']],
+      head: [['#', t('length'), t('width'), t('sqFt')]],
       body: tableData,
       theme: 'grid',
       headStyles: { fillColor: [0, 92, 85] }, // Deep Teal brand color
@@ -98,8 +101,8 @@ export function generateDriverTransitSlip(dispatch) {
   
   doc.setFontSize(11);
   doc.setFont("helvetica", "bold");
-  doc.text(`Total Pieces Loaded: ${totalPieces}`, 15, startY + 5);
-  doc.text(`Total Load Area: ${totalSqFt.toFixed(2)} sq ft`, 130, startY + 5);
+  doc.text(`${t('total')}: ${totalPieces} ${t('pieces')}`, 15, startY + 5);
+  doc.text(`${t('totalDispatchVolume')}: ${totalSqFt.toFixed(2)} ${t('sqFt')}`, 130, startY + 5);
 
   const safeSlipNumber = slipNumber.replace(/[^a-zA-Z0-9-]/g, '_');
   const filename = `GraniteSync-Driver-Slip-${safeSlipNumber}.pdf`;

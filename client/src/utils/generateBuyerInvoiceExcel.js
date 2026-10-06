@@ -1,6 +1,8 @@
 import * as XLSX from "xlsx";
+import { buyerExcel } from './pilotExports.js';
 
-export function generateBuyerInvoiceExcel(dispatch) {
+export function generateBuyerInvoiceExcel(dispatch, t) {
+  if (!t || dispatch?.inventory?.some(g => g.measurementRows?.length)) return buyerExcel(dispatch);
   if (!dispatch) throw new Error("Missing Dispatch record");
   if (!dispatch.summary) throw new Error("Missing financial summary in Dispatch");
   
@@ -15,27 +17,27 @@ export function generateBuyerInvoiceExcel(dispatch) {
   const wsData = [];
   
   // Headers
-  wsData.push(["GraniteSync"]);
-  wsData.push(["Buyer Invoice / விலைப்பட்டியல்"]);
+  wsData.push([t('appName')]);
+  wsData.push([t('buyerInvoiceDoc')]);
   wsData.push([]);
   
   // Metadata
   const slipNumber = dispatch.dispatchSlipNumber || 'N/A';
   const dateStr = dispatch.date ? new Date(dispatch.date).toLocaleDateString() : 'N/A';
   
-  wsData.push(["Slip No / ரசீது எண்:", slipNumber, "Date / தேதி:", dateStr]);
-  wsData.push(["Supervisor / மேற்பார்வையாளர்:", dispatch.supervisor || 'N/A', "Truck Number / லாரி எண்:", dispatch.logistics?.truckNumber || 'N/A']);
-  wsData.push(["Destination / இலக்கு:", dispatch.logistics?.buyerDestination || 'N/A', "", ""]);
+  wsData.push([`${t('slipNo')}:`, slipNumber, `${t('date')}:`, dateStr]);
+  wsData.push([`${t('supervisor')}:`, dispatch.supervisor || 'N/A', `${t('truckNumber')}:`, dispatch.logistics?.truckNumber || 'N/A']);
+  wsData.push([`${t('destination')}:`, dispatch.logistics?.buyerDestination || 'N/A', "", ""]);
   wsData.push([]);
   
   // Table Headers
   wsData.push([
-    "Stone Type / கல் வகை", 
-    "Finish / மேற்பரப்பு", 
-    "Pieces / அளவு", 
-    "Total Sq.Ft / ச.அடி", 
-    "Rate / விலை", 
-    "Amount / தொகை"
+    t('stoneType'), 
+    t('finish'), 
+    t('pieces'), 
+    t('sqFt'), 
+    t('rate'), 
+    t('amount')
   ]);
 
   // Data Rows
@@ -64,9 +66,9 @@ export function generateBuyerInvoiceExcel(dispatch) {
   wsData.push([]);
 
   // Financial Summary
-  wsData.push(["", "", "", "", "Base Material / மொத்தம்", dispatch.summary.baseMaterialTotal]);
-  wsData.push(["", "", "", "", "Loading / Royalty CESS / ராயல்டி / ஏற்றுதல்", dispatch.summary.loadingAndRoyaltyFees]);
-  wsData.push(["", "", "", "", "Net Billable Amount / நிகர தொகை", dispatch.summary.netBillableAmount]);
+  wsData.push(["", "", "", "", t('baseMaterialTotal'), dispatch.summary.baseMaterialTotal]);
+  wsData.push(["", "", "", "", t('loadingAndRoyalty'), dispatch.summary.loadingAndRoyaltyFees]);
+  wsData.push(["", "", "", "", t('netBillableAmount'), dispatch.summary.netBillableAmount]);
 
   // Create workbook and worksheet
   const ws = XLSX.utils.aoa_to_sheet(wsData);

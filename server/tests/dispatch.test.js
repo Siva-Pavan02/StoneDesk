@@ -70,19 +70,19 @@ test('Dispatch API', async (t) => {
   await t.test('5. Reject empty inventory', async () => {
     const p = { ...validPayload, inventory: [] };
     const { status } = await request('POST', '/', p);
-    assert.equal(status, 500);
+    assert.equal(status, 400);
   });
 
   await t.test('6. Reject invalid dimensions', async () => {
     const p = { ...validPayload, inventory: [{ ...validPayload.inventory[0], pieces: [{ lengthFt: -10, widthFt: 5 }] }] };
     const { status } = await request('POST', '/', p);
-    assert.equal(status, 500); 
+    assert.equal(status, 400);
   });
 
   await t.test('7. Reject negative rate', async () => {
     const p = { ...validPayload, inventory: [{ ...validPayload.inventory[0], ratePerSqFt: -100 }] };
     const { status } = await request('POST', '/', p);
-    assert.equal(status, 500);
+    assert.equal(status, 400);
   });
 
   await t.test('1. Create valid Draft / 8-12. Calculations and snapshot', async () => {

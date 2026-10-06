@@ -9,8 +9,11 @@ import { generateBuyerInvoiceExcel } from '../utils/generateBuyerInvoiceExcel';
 import { generateBuyerInvoice } from '../utils/generateBuyerInvoice';
 import { generateDriverTransitSlip } from '../utils/generateDriverTransitSlip';
 import { getMasterSettings, createDispatch, updateDispatch, finalizeDispatch } from '../lib/api';
+import { parseFraction } from '../utils/fractionParser';
+import { useLanguage } from '../i18n/LanguageContext';
 
-export default function DispatchTracker({ onOpenSettings, onOpenHistory }) {
+export default function DispatchTracker({ onOpenSettings, onOpenHistory, onOpenLoadingLists }) {
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
@@ -52,8 +55,17 @@ export default function DispatchTracker({ onOpenSettings, onOpenHistory }) {
 
   const handleAddPiece = () => {
     try {
-      const p = calculatePiece(length, width);
-      setPieces([...pieces, { stoneType, finish, ratePerSqFt, ...p }]);
+      const lenParsed = parseFraction(length);
+      const widParsed = parseFraction(width);
+      if (!lenParsed || !widParsed) return;
+      
+      const p = calculatePiece(lenParsed.numeric, widParsed.numeric);
+      setPieces([...pieces, { 
+        stoneType, finish, ratePerSqFt, 
+        lengthDisplay: lenParsed.display,
+        widthDisplay: widParsed.display,
+        ...p 
+      }]);
       setLength('');
       setWidth('');
     } catch (e) {
@@ -97,8 +109,11 @@ export default function DispatchTracker({ onOpenSettings, onOpenHistory }) {
         };
       }
       inventoryMap[key].pieces.push({
+        lengthDisplay: p.lengthDisplay || p.lengthFt.toString(),
+        widthDisplay: p.widthDisplay || p.widthFt.toString(),
         lengthFt: p.lengthFt,
-        widthFt: p.widthFt
+        widthFt: p.widthFt,
+        sqFt: p.sqFt
       });
     });
 
@@ -141,7 +156,7 @@ export default function DispatchTracker({ onOpenSettings, onOpenHistory }) {
         alert('Please finalize the dispatch first.');
         return;
       }
-      const { blob, filename } = generateBuyerInvoiceExcel(currentDispatch);
+      const { blob, filename } = generateBuyerInvoiceExcel(currentDispatch, t);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -162,7 +177,7 @@ export default function DispatchTracker({ onOpenSettings, onOpenHistory }) {
         return;
       }
       setIsSaving(true);
-      const { blob, filename } = await generateBuyerInvoice(currentDispatch);
+      const { blob, filename } = await generateBuyerInvoice(currentDispatch, t);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -184,7 +199,7 @@ export default function DispatchTracker({ onOpenSettings, onOpenHistory }) {
         alert('Please finalize the dispatch first.');
         return;
       }
-      const { blob, filename } = generateDriverTransitSlip(currentDispatch);
+      const { blob, filename } = generateDriverTransitSlip(currentDispatch, t);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -226,7 +241,7 @@ export default function DispatchTracker({ onOpenSettings, onOpenHistory }) {
 
   return (
     <>
-      <DispatchHeader onOpenSettings={onOpenSettings} onOpenHistory={onOpenHistory} />
+      <DispatchHeader onOpenSettings={onOpenSettings} onOpenHistory={onOpenHistory} onOpenLoadingLists={onOpenLoadingLists} />
       <main className="flex-1 flex flex-col relative w-full max-w-xl mx-auto px-4 pt-24 bg-gray-50">
         <div className="flex flex-col w-full pb-36">
           <DispatchDetails

@@ -1,5 +1,7 @@
 import { jsPDF } from "jspdf";
+import { buyerPdf } from './pilotExports.js';
 import autoTable from "jspdf-autotable";
+import { decimalToFraction } from './fractionParser.js';
 
 function arrayBufferToBase64(buffer) {
   let binary = '';
@@ -10,7 +12,8 @@ function arrayBufferToBase64(buffer) {
   return btoa(binary);
 }
 
-export async function generateBuyerInvoice(dispatch) {
+export async function generateBuyerInvoice(dispatch, t) {
+  if (!t || dispatch?.inventory?.some(g => g.measurementRows?.length)) return buyerPdf(dispatch);
   if (!dispatch) throw new Error("Missing Dispatch record");
   if (!dispatch.summary) throw new Error("Missing financial summary in Dispatch");
   
@@ -19,46 +22,47 @@ export async function generateBuyerInvoice(dispatch) {
   }
   
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  let hasTamil = false;
+  let hasTelugu = false;
   
   try {
     if (typeof window !== 'undefined' && window.location) {
-      const fontRes = await fetch('/fonts/NotoSansTamil-Regular.ttf');
+      const fontRes = await fetch('/fonts/NotoSansTelugu-Regular.ttf');
       if (fontRes.ok) {
         const fontBuffer = await fontRes.arrayBuffer();
         const base64 = arrayBufferToBase64(fontBuffer);
-        doc.addFileToVFS("NotoSansTamil.ttf", base64);
-        doc.addFont("NotoSansTamil.ttf", "NotoSansTamil", "normal");
-        hasTamil = true;
+        doc.addFileToVFS("NotoSansTelugu.ttf", base64);
+        doc.addFont("NotoSansTelugu.ttf", "NotoSansTelugu", "normal");
+        hasTelugu = true;
       }
     }
   } catch (err) {
-    console.warn("Failed to load Tamil font, falling back to standard English font.", err);
+    console.warn("Failed to load Telugu font, falling back to standard English font.", err);
   }
 
   const fmtCurrency = (val) => {
     return 'Rs. ' + Number(val).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  const printBilingual = (english, tamil, x, y, options = {}) => {
-    if (hasTamil) {
-      doc.setFont("NotoSansTamil", "normal");
-      doc.text(`${english} / ${tamil}`, x, y, options);
-      doc.setFont("helvetica", "normal");
+  const printText = (text, x, y, options = {}) => {
+    if (hasTelugu) {
+      doc.setFont("NotoSansTelugu", "normal");
     } else {
-      doc.text(english, x, y, options);
+      doc.setFont("helvetica", "normal");
     }
+    doc.text(text, x, y, options);
+    doc.setFont("helvetica", "normal");
   };
 
   doc.setFontSize(18);
-  doc.setFont("helvetica", "bold");
-  if (hasTamil) doc.setFont("NotoSansTamil", "normal");
-  doc.text(hasTamil ? "Invoice / விலைப்பட்டியல்" : "Invoice", 105, 20, { align: "center" });
+  if (hasTelugu) doc.setFont("NotoSansTelugu", "normal");
+  else doc.setFont("helvetica", "bold");
+  
+  doc.text(t('buyerInvoiceDoc'), 105, 20, { align: "center" });
   doc.setFont("helvetica", "normal");
 
   doc.setFontSize(11);
   doc.setTextColor(100);
-  doc.text(`GraniteSync - Pit-2 Unit 04`, 105, 28, { align: "center" });
+  doc.text(`${t('appName')} - Pit-2 Unit 04`, 105, 28, { align: "center" });
 
   doc.setTextColor(0);
   doc.setFontSize(10);
@@ -66,13 +70,13 @@ export async function generateBuyerInvoice(dispatch) {
   const slipNumber = dispatch.dispatchSlipNumber || 'N/A';
   const dateStr = dispatch.date ? new Date(dispatch.date).toLocaleDateString() : 'N/A';
   
-  printBilingual(`Slip No: ${slipNumber}`, `ரசீது எண்: ${slipNumber}`, 15, 40);
-  printBilingual(`Date: ${dateStr}`, `தேதி: ${dateStr}`, 140, 40);
+  printText(`${t('slipNo')}: ${slipNumber}`, 15, 40);
+  printText(`${t('date')}: ${dateStr}`, 140, 40);
 
-  printBilingual(`Supervisor: ${dispatch.supervisor || 'N/A'}`, `மேற்பார்வையாளர்: ${dispatch.supervisor || 'N/A'}`, 15, 48);
-  printBilingual(`Truck Number: ${dispatch.logistics?.truckNumber || 'N/A'}`, `லாரி எண்: ${dispatch.logistics?.truckNumber || 'N/A'}`, 140, 48);
+  printText(`${t('supervisor')}: ${dispatch.supervisor || 'N/A'}`, 15, 48);
+  printText(`${t('truckNumber')}: ${dispatch.logistics?.truckNumber || 'N/A'}`, 140, 48);
   
-  printBilingual(`Destination: ${dispatch.logistics?.buyerDestination || 'N/A'}`, `இலக்கு: ${dispatch.logistics?.buyerDestination || 'N/A'}`, 15, 56);
+  printText(`${t('destination')}: ${dispatch.logistics?.buyerDestination || 'N/A'}`, 15, 56);
   
   doc.setLineWidth(0.5);
   doc.setDrawColor(200);
@@ -80,12 +84,7 @@ export async function generateBuyerInvoice(dispatch) {
   
   let startY = 70;
   
-  const headEn = ['Stone Type', 'Finish', 'Pieces', 'Sq.Ft', 'Rate', 'Amount'];
-  const headTa = ['கல் வகை', 'மேற்பரப்பு', 'அளவு', 'ச.அடி', 'விலை', 'தொகை'];
-  
-  const headers = hasTamil 
-    ? [headEn.map((e, i) => `${e}\n${headTa[i]}`)]
-    : [headEn];
+  const headers = [[t('stoneType'), t('finish'), t('pieces'), t('sqFt'), t('rate'), t('amount')]];
 
   let tableData = [];
 
@@ -104,7 +103,7 @@ export async function generateBuyerInvoice(dispatch) {
         group.stoneType,
         group.finish,
         piecesCount.toString(),
-        groupSqFt.toFixed(2),
+        decimalToFraction(groupSqFt),
         fmtCurrency(rateVal),
         fmtCurrency(amountVal)
       ]);
@@ -117,7 +116,7 @@ export async function generateBuyerInvoice(dispatch) {
     body: tableData,
     theme: 'grid',
     styles: { 
-      font: hasTamil ? 'NotoSansTamil' : 'helvetica',
+      font: hasTelugu ? 'NotoSansTelugu' : 'helvetica',
       fontSize: 9, 
       cellPadding: 3 
     },
@@ -141,7 +140,7 @@ export async function generateBuyerInvoice(dispatch) {
     startY = 20;
   }
 
-  doc.setFont(hasTamil ? "NotoSansTamil" : "helvetica", "normal");
+  doc.setFont(hasTelugu ? "NotoSansTelugu" : "helvetica", "normal");
   
   const summaryBoxX = 110;
   doc.setDrawColor(200);
@@ -149,19 +148,18 @@ export async function generateBuyerInvoice(dispatch) {
 
   let currentY = startY;
   
-  printBilingual('Base Material', 'மொத்தம்', summaryBoxX, currentY);
+  printText(t('baseMaterialTotal'), summaryBoxX, currentY);
   doc.text(fmtCurrency(dispatch.summary.baseMaterialTotal), 195, currentY, { align: 'right' });
   currentY += 10;
   
-  printBilingual('Loading/Royalty CESS', 'ராயல்டி/ஏற்றுதல்', summaryBoxX, currentY);
+  printText(t('loadingAndRoyalty'), summaryBoxX, currentY);
   doc.text(fmtCurrency(dispatch.summary.loadingAndRoyaltyFees), 195, currentY, { align: 'right' });
   currentY += 10;
 
   doc.line(summaryBoxX - 5, currentY - 5, 195, currentY - 5);
   
-  doc.setFont(hasTamil ? "NotoSansTamil" : "helvetica", "bold");
   doc.setFontSize(12);
-  printBilingual('Net Billable Amount', 'நிகர தொகை', summaryBoxX, currentY + 2);
+  printText(t('netBillableAmount'), summaryBoxX, currentY + 2);
   doc.text(fmtCurrency(dispatch.summary.netBillableAmount), 195, currentY + 2, { align: 'right' });
 
   const safeSlipNumber = (dispatch.dispatchSlipNumber || 'Unknown').replace(/[^a-zA-Z0-9-]/g, '_');

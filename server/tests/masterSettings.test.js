@@ -29,7 +29,7 @@ test('MasterSettings API', async (t) => {
     const { status, data } = await request('GET', '');
     assert.equal(status, 200);
     assert.equal(data.quarryId, 'unit_04');
-    assert.equal(data.defaultRoyaltyFee, 8500);
+    assert.equal(data.defaultRoyaltyFee, 0);
   });
 
   await t.test('3. Add truck', async () => {

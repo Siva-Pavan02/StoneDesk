@@ -15,6 +15,23 @@
 .pilot .btn { min-height: 3rem; height: auto; padding-block: .65rem; white-space: normal; }
 .pilot .input { width: 100%; height: 3rem; border: 2px solid #d1d5db; background: white; color: #111827; font-size: 16px; }
 .pilot input:focus-visible, .pilot select:focus-visible, .pilot button:focus-visible { outline: 3px solid #0f766e; outline-offset: 2px; }
+.pilot { line-height: 1.5; }
+.pilot button { cursor: pointer; }
+.pilot button:disabled { cursor: not-allowed; }
+.pilot .btn { transition: background-color 150ms, transform 150ms; }
+.pilot .btn:active:not(:disabled) { transform: translateY(1px); }
+.brand-mark { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; background: #115e59; color: white; }
+.eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .12em; color: #374151; }
+.text-button { min-height: 48px; padding: 8px 4px; font-size: 14px; font-weight: 600; }
+.icon-button { display: inline-flex; align-items: center; justify-content: center; min-width: 48px; min-height: 48px; border-radius: 12px; }
+.status-tag { display: inline-flex; border-radius: 6px; padding: 4px 8px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.app-dialog { width: min(440px, calc(100% - 24px)); max-height: calc(100dvh - 32px); margin: auto; padding: 0; border: 1px solid #d1d5db; border-radius: 20px; color: #111827; background: white; overflow-y: auto; }
+.app-dialog::backdrop { background: rgb(17 24 39 / .5); }
+.app-dialog.nav-drawer { width: min(340px, calc(100% - 24px)); height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0 20px 20px 0; }
+.bottom-nav { position: fixed; z-index: 20; bottom: 0; left: 0; right: 0; padding-bottom: env(safe-area-inset-bottom); background: white; border-top: 1px solid #d1d5db; }
+.skip-link { position: fixed; top: -100px; left: 12px; z-index: 30; padding: 12px; background: white; border: 2px solid #115e59; }
+.skip-link:focus { top: 8px; }
+@media (prefers-reduced-motion: reduce) { .pilot *, .pilot *::before, .pilot *::after { transition: none !important; animation: none !important; } }
 
 @theme {
   --color-surface: #f8f9ff;

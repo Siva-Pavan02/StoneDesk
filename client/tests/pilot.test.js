@@ -41,8 +41,17 @@ test('driver slip never reads financial values', async () => {
   assert.doesNotMatch(text, /4617|4,617|Net payable|Rate/);
 });
 test('long bills paginate without dropping measurement rows', async () => {
-  const big = { ...record, inventory: [{ ...record.inventory[0], measurementRows: Array.from({ length: 120 }, () => ({ ...row })) }] };
+  const big = { ...record, inventory: [{ ...record.inventory[0], totalSqFt: 13680, lineTotal: 554040, measurementRows: Array.from({ length: 120 }, () => ({ ...row })) }], summary: { totalPieces: 2280, totalDispatchVolumeSqFt: 13680, baseMaterialTotal: 554040, loadingAndRoyaltyFees: 0, netBillableAmount: 554040 } };
   const text = await buyerPdf(big).blob.text();
   assert.ok((text.match(/\/Type \/Page\b/g) || []).length > 2);
-  assert.equal((text.match(/\(114.00\)/g) || []).length, 121);
+  assert.equal((text.match(/\(114\)/g) || []).length, 120);
+  assert.match(text, /13,680|13680/);
+});
+
+test('ledger includes TOP groups, fractions and original stored money without recalculation', async () => {
+  const frozen = { ...record, inventory: [{ ...record.inventory[0], lineTotal: 5000, measurementRows: [row, { ...row, category: 'TOP', lengthFt: 3.5, widthFt: 1.5, quantity: 25, sqFt: 131.25, lineTotal: 383 }] }], summary: { totalPieces: 44, totalDispatchVolumeSqFt: 245.25, baseMaterialTotal: 5000, loadingAndRoyaltyFees: 5, netBillableAmount: 5005 } };
+  const text = await buyerPdf(frozen).blob.text();
+  assert.match(text, /TOP subtotal/); assert.match(text, /No. of pcs/);
+  assert.match(text, /5,005.00/); assert.match(text, /5,000.00/);
+  assert.match(text, /Running total area/);
 });

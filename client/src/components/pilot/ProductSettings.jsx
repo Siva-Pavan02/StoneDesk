@@ -4,7 +4,7 @@ import { request, settingsPath } from '../../lib/pilotApi.js';
 import { Button, Card, Field, ErrorMessage } from './Controls.jsx';
 import { money } from '../../utils/pilotDraft.js';
 const empty = { stoneType: '', finish: '', defaultRate: '' };
-export default function ProductSettings({ settings, onChanged, onBack }) {
+export default function ProductSettings({ settings, onChanged, onBack, onboarding = false }) {
   const { pick } = useLanguage();
   const [form, setForm] = useState(empty);
   const [editId, setEditId] = useState(null);
@@ -38,6 +38,6 @@ export default function ProductSettings({ settings, onChanged, onBack }) {
       <div className="flex justify-between gap-3"><div className="min-w-0 break-words"><h2 className="font-bold">{p.stoneType}</h2><p className="text-gray-600">{p.finish}</p></div><strong>{money(p.defaultRate)}<span className="block text-xs font-normal text-gray-600">/ {pick('sq ft', 'చ.అ.')}</span></strong></div>
       <div className="grid grid-cols-2 gap-2"><Button disabled={busy} en="Edit" te="మార్చండి" onClick={() => { setForm({ ...p, defaultRate: String(p.defaultRate) }); setEditId(p._id); window.scrollTo(0, 0); }} /><Button disabled={busy} en="Remove" te="తొలగించండి" onClick={() => remove(p)} /></div>
     </Card>)}
-    <Button className="w-full" disabled={busy} en="Back to home" te="హోమ్‌కు వెళ్ళండి" onClick={onBack} />
+    <Button className="w-full" primary={onboarding} disabled={busy || !settings.stoneRates.length} en={onboarding ? 'Open workspace' : 'Back to home'} te={onboarding ? 'వర్క్‌స్పేస్ తెరవండి' : 'హోమ్‌కు వెళ్ళండి'} onClick={onBack} />
   </div>;
 }

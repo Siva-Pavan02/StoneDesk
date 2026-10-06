@@ -19,12 +19,13 @@ test('Dispatch API', async (t) => {
   const server = http.createServer(app);
   await new Promise(r => server.listen(0, r));
   const port = server.address().port;
+  const cookie = await require('./authHelper').adminCookie(`http://localhost:${port}`);
   const baseUrl = `http://localhost:${port}/api/dispatches`;
 
   const request = async (method, path, body) => {
     const res = await fetch(`${baseUrl}${path}`, {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
       body: body ? JSON.stringify(body) : undefined
     });
     const data = await res.json().catch(() => null);

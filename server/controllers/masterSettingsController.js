@@ -7,9 +7,13 @@ exports.updateProfile = async (req, res, next) => {
     const businessName = text(req.body.businessName, 'business name');
     const address = typeof req.body.address === 'string' ? req.body.address.trim() : '';
     const phone = typeof req.body.phone === 'string' ? req.body.phone.trim() : '';
+    const gstNumber = typeof req.body.gstNumber === 'string' ? req.body.gstNumber.trim().toUpperCase() : '';
+    const tradeLicense = typeof req.body.tradeLicense === 'string' ? req.body.tradeLicense.trim() : '';
+    if (gstNumber && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gstNumber)) return res.status(400).json({ error: 'Enter a valid 15-character GST number, or leave it blank' });
+    if (tradeLicense.length > 80) return res.status(400).json({ error: 'Trade license is too long' });
     if (address.length > 300 || phone.length > 30) return res.status(400).json({ error: 'Address or phone is too long' });
     const settings = await getOrCreateSettings(req.params.quarryId);
-    Object.assign(settings, { businessName, address, phone });
+    Object.assign(settings, { businessName, address, phone, gstNumber, tradeLicense });
     if (req.body.removeLogo === true) settings.logoPath = undefined;
     if (req.body.defaultRoyaltyFee !== undefined) settings.defaultRoyaltyFee = number(req.body.defaultRoyaltyFee, 'charges');
     await settings.save();

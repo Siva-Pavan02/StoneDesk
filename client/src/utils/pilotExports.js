@@ -1,73 +1,12 @@
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { ledgerPdf } from './ledgerPdf.js';
 import * as XLSX from 'xlsx';
 import { assertBill, billRows, subtotals } from './billData.js';
 
-const currency = n => `Rs. ${Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 function filename(dispatch, kind, ext) {
   return `GraniteSync-${kind}-${String(dispatch.dispatchSlipNumber || 'Unknown').replace(/[^a-zA-Z0-9-]/g, '_')}.${ext}`;
 }
-function branding(doc, dispatch, title) {
-  const business = dispatch.businessSnapshot || { businessName: 'GraniteSync' };
-  if (business.logoDataUrl) doc.addImage(business.logoDataUrl, 'PNG', 15, 12, 20, 20, undefined, 'FAST');
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
-  const name = doc.splitTextToSize(business.businessName || 'GraniteSync', 150);
-  doc.text(name, 40, 18);
-  let y = Math.max(36, 18 + name.length * 7);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-  for (const line of [business.address, business.phone, title,
-    `Slip: ${dispatch.dispatchSlipNumber || 'N/A'}`,
-    `Date: ${new Date(dispatch.date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })} | Truck: ${dispatch.logistics?.truckNumber || 'N/A'}`,
-    `Party: ${dispatch.partyName || 'N/A'}`,
-    `Destination: ${dispatch.logistics?.buyerDestination || 'N/A'} | Supervisor: ${dispatch.supervisor || 'N/A'}`]) {
-    if (!line) continue;
-    const lines = doc.splitTextToSize(String(line), 180);
-    doc.text(lines, 15, y); y += lines.length * 5 + 2;
-  }
-  return y + 3;
-}
-function table(doc, y, head, body) {
-  autoTable(doc, { startY: y, head: [head], body, theme: 'grid',
-    margin: { left: 15, right: 15, top: 15, bottom: 18 },
-    styles: { font: 'helvetica', fontSize: 8, cellPadding: 2.5, overflow: 'linebreak' },
-    headStyles: { fillColor: [17, 94, 89] } });
-  return doc.lastAutoTable.finalY + 8;
-}
-export function buyerPdf(dispatch) {
-  assertBill(dispatch);
-  const doc = new jsPDF();
-  const rows = billRows(dispatch);
-  let y = branding(doc, dispatch, 'Buyer load bill');
-  y = table(doc, y, ['Product / finish', 'Type', 'L (ft)', 'W (ft)', 'Qty', 'Sq ft', 'Rate', 'Amount'], rows.map(r => [
-    `${r.stoneType} / ${r.finish}`, r.category, r.lengthFt, r.widthFt, r.quantity, r.sqFt.toFixed(2), currency(r.ratePerSqFt), r.lineTotal === undefined ? 'See subtotal' : currency(r.lineTotal)
-  ]));
-  if (dispatch.inventory.some(g => g.measurementRows?.length)) {
-    y = table(doc, y, ['Product / finish / type', 'Pieces', 'Sq ft', 'Amount'], subtotals(rows).map(g => [`${g.stoneType} / ${g.finish} / ${g.category}`, g.quantity, g.sqFt.toFixed(2), currency(g.lineTotal)]));
-  } else {
-    y = table(doc, y, ['Product / finish', 'Stored group amount'], dispatch.inventory.map(g => [`${g.stoneType} / ${g.finish}`, currency(g.lineTotal)]));
-  }
-  const s = dispatch.summary;
-  if (y > 225) { doc.addPage(); y = 20; }
-  table(doc, y, ['Summary', 'Total'], [
-    ['Total pieces', s.totalPieces ?? rows.reduce((sum, r) => sum + r.quantity, 0)],
-    ['Total square feet', s.totalDispatchVolumeSqFt.toFixed(2)],
-    ['Material amount', currency(s.baseMaterialTotal)], ['Loading / royalty', currency(s.loadingAndRoyaltyFees)], ['Net payable', currency(s.netBillableAmount)]
-  ]);
-  return { blob: doc.output('blob'), filename: filename(dispatch, 'Buyer-Invoice', 'pdf') };
-}
-export function driverPdf(dispatch) {
-  assertBill(dispatch, 'transit slip');
-  const doc = new jsPDF();
-  // This path never reads rate or amount fields, including from summary.
-  const rows = billRows(dispatch, false);
-  let y = branding(doc, dispatch, 'Driver transit slip');
-  y = table(doc, y, ['Product / finish', 'Type', 'L (ft)', 'W (ft)', 'Qty', 'Sq ft'], rows.map(r => [
-    `${r.stoneType} / ${r.finish}`, r.category, r.lengthFt, r.widthFt, r.quantity, r.sqFt.toFixed(2)
-  ]));
-  if (y > 260) { doc.addPage(); y = 20; }
-  table(doc, y, ['Total pieces', 'Total square feet'], [[rows.reduce((sum, r) => sum + r.quantity, 0), rows.reduce((sum, r) => sum + r.sqFt, 0).toFixed(2)]]);
-  return { blob: doc.output('blob'), filename: filename(dispatch, 'Driver-Slip', 'pdf') };
-}
+export const buyerPdf = dispatch => ledgerPdf(dispatch);
+export const driverPdf = dispatch => ledgerPdf(dispatch, true);
 export function buyerExcel(dispatch) {
   assertBill(dispatch, 'Excel invoice');
   const business = dispatch.businessSnapshot || { businessName: 'GraniteSync' };

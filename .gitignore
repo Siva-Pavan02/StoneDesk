@@ -3,5 +3,18 @@
 **/.env
 server/uploads/
 *.log
-output/pilot/
+output/
 tmp/
+
+# Unwanted skills and agent files
+.agents/
+skills-lock.json
+
+# Stitch files
+.stitch/
+
+# Unwanted scripts
+apply*.js
+convert.js
+split.js
+testFraction.js

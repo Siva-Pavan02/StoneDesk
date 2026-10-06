@@ -6,6 +6,7 @@ const connectDB = require('./config/db');
 const masterSettingsRoutes = require('./routes/masterSettingsRoutes');
 const dispatchRoutes = require('./routes/dispatchRoutes');
 const loadingListRoutes = require('./routes/loadingListRoutes');
+const auth = require('./utils/auth');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -14,12 +15,19 @@ if (process.env.NODE_ENV !== 'test') {
   connectDB();
 }
 
-app.use(cors());
+app.use((req, res, next) => {
+  if (req.headers.origin && !auth.allowedOrigin(req.headers.origin, req)) return res.status(403).json({ error: 'Origin is not allowed' });
+  next();
+});
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
-app.use('/uploads', express.static(require('./utils/businessBranding').uploadDir, {
-  immutable: true, maxAge: '1y', setHeaders: res => res.setHeader('X-Content-Type-Options', 'nosniff')
+app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
+app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/uploads', auth.requireSession, auth.requireActive, express.static(require('./utils/businessBranding').uploadDir, {
+  maxAge: 0, setHeaders: res => { res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('Cache-Control', 'private, no-store'); }
 }));
 
+app.use('/api', auth.requireSession, auth.requireActive);
 app.use('/api/master-settings/:quarryId', masterSettingsRoutes);
 app.use('/api/dispatches', dispatchRoutes);
 app.use('/api/loading-lists', loadingListRoutes);

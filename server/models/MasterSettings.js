@@ -5,6 +5,8 @@ const MasterSettingsSchema = new mongoose.Schema({
   businessName: { type: String, trim: true, maxlength: 120 },
   address: { type: String, trim: true, maxlength: 300 },
   phone: { type: String, trim: true, maxlength: 30 },
+  gstNumber: { type: String, trim: true, maxlength: 15 },
+  tradeLicense: { type: String, trim: true, maxlength: 80 },
   logoPath: String,
   savedTrucks: [{ type: String, uppercase: true }],
   savedDestinations: [{ type: String }],

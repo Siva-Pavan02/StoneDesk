@@ -21,9 +21,10 @@ test('pilot setup, upload, draft retries, finalization and historical bills', as
   await Dispatch.init(); await Settings.init();
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
+  const cookie = await require('./authHelper').adminCookie(base);
   const settingsPath = '/api/master-settings/unit_04';
   async function call(method, route, body, mime) {
-    const response = await fetch(base + route, { method, headers: { 'Content-Type': mime || 'application/json' }, body: body === undefined ? undefined : mime ? body : JSON.stringify(body) });
+    const response = await fetch(base + route, { method, headers: { 'Content-Type': mime || 'application/json', Cookie: cookie }, body: body === undefined ? undefined : mime ? body : JSON.stringify(body) });
     return { status: response.status, data: await response.json() };
   }
   assert.equal((await call('GET', settingsPath)).data.defaultRoyaltyFee, 0);
@@ -33,7 +34,7 @@ test('pilot setup, upload, draft retries, finalization and historical bills', as
   const logo = await sharp({ create: { width: 20, height: 20, channels: 3, background: '#115e59' } }).png().toBuffer();
   const uploaded = await call('POST', settingsPath + '/logo', logo, 'image/png');
   assert.equal(uploaded.status, 200);
-  assert.equal((await fetch(base + uploaded.data.logoPath)).status, 200);
+  assert.equal((await fetch(base + uploaded.data.logoPath, { headers: { Cookie: cookie } })).status, 200);
   assert.equal((await call('POST', settingsPath + '/logo', Buffer.from('fake'), 'image/png')).status, 400);
   assert.equal((await call('POST', settingsPath + '/logo', logo, 'image/jpeg')).status, 400);
   assert.equal((await call('POST', settingsPath + '/logo', Buffer.alloc(2 * 1024 * 1024 + 1), 'image/png')).status, 413);

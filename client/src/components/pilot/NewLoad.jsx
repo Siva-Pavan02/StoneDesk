@@ -6,7 +6,7 @@ import { Button, Card, Field, ErrorMessage } from './Controls.jsx';
 import MeasurementEntry from './MeasurementEntry.jsx';
 import LoadSummary from './LoadSummary.jsx';
 
-export default function NewLoad({ settings, initialDraft, onSaved, onBack }) {
+export default function NewLoad({ settings, initialDraft, onSaved, onBack, canFinalize = true }) {
   const { pick } = useLanguage();
   const [draft, setDraft] = useState(() => initialDraft || readDraft() || newDraft(settings.defaultRoyaltyFee));
   const first = settings.stoneRates[0];
@@ -83,7 +83,7 @@ export default function NewLoad({ settings, initialDraft, onSaved, onBack }) {
     <LoadSummary rows={rows} summary={summary} />
     {review ? <>
       <p className="text-sm text-gray-700">{pick('Finalizing locks this bill’s quantities, prices, totals, and business branding.', 'ఖరారు చేసిన తర్వాత ఈ బిల్లులోని కొలతలు, ధరలు, మొత్తాలు మరియు వ్యాపార వివరాలు మారవు.')}</p>
-      <Button className="w-full" primary disabled={busy} en={busy ? 'Saving…' : 'Finalize bill'} te={busy ? 'సేవ్ అవుతోంది…' : 'బిల్లును ఖరారు చేయండి'} onClick={() => save(true)} />
+      {canFinalize ? <Button className="w-full" primary disabled={busy} en={busy ? 'Saving…' : 'Finalize & dispatch'} te={busy ? 'సేవ్ అవుతోంది…' : 'ఖరారు చేసి పంపండి'} onClick={() => save(true)} /> : <p className="font-semibold">{pick('Save the draft for your dispatcher to finalize.', 'డిస్పాచర్ ఖరారు చేయడానికి డ్రాఫ్ట్ సేవ్ చేయండి.')}</p>}
       <Button className="w-full" disabled={busy} en="Back to edit" te="వివరాలు మార్చండి" onClick={() => setReview(false)} />
     </> : <Button className="w-full" primary en="Review load" te="లోడ్ తనిఖీ చేయండి" onClick={openReview} />}
     <Button className="w-full" disabled={busy} en="Save draft" te="డ్రాఫ్ట్ సేవ్ చేయండి" onClick={() => save(false)} />

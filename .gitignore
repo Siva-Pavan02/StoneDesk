@@ -9,6 +9,8 @@ tmp/
 # Unwanted skills and agent files
 .agents/
 skills-lock.json
+AGENTS.md
+PILOT.md
 
 # Stitch files
 .stitch/

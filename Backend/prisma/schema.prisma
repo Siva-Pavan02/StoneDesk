@@ -1,0 +1,151 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @db.Uuid
+  organization   MasterSettings @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String    @db.VarChar(120)
+  email          String    @unique @db.VarChar(254)
+  passwordHash   String
+  passwordSalt   String
+  role           Role      @default(Dispatcher)
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  sessions       Session[]
+  passwordResetTokens PasswordResetToken[]
+
+  @@index([organizationId])
+}
+
+enum Role {
+  Admin
+  YardManager
+  Dispatcher
+}
+
+model Session {
+  id         String   @id @default(uuid()) @db.Uuid
+  tokenHash  String   @unique
+  userId     String   @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+
+  @@index([userId])
+}
+
+model MasterSettings {
+  id                String   @id @default(uuid()) @db.Uuid
+  organizationId    String   @unique
+  businessName      String?  @db.VarChar(120)
+  address           String?  @db.VarChar(300)
+  phone             String?  @db.VarChar(30)
+  gstNumber         String?  @db.VarChar(15)
+  tradeLicense      String?  @db.VarChar(80)
+  logoPath          String?
+  savedTrucks       String[] 
+  savedDestinations String[]
+  stoneRates        Json     @default("{}")
+  defaultRoyaltyFee Float    @default(0)
+  version           Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  users             User[]
+  dispatches        Dispatch[]
+  loadingLists      LoadingList[]
+}
+
+model LoadingList {
+  id                 String   @id @default(uuid()) @db.Uuid
+  organizationId     String   @db.Uuid
+  organization       MasterSettings @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  loadingListNumber  String
+  date               DateTime @default(now())
+  supervisor         String
+  buyerDestination   String
+  stoneType          String
+  finish             String
+  requirements       Json     
+  status             LoadingStatus @default(Draft)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([organizationId, loadingListNumber])
+  @@index([organizationId, date])
+}
+
+enum LoadingStatus {
+  Draft
+  Loading
+  Completed
+}
+
+model Dispatch {
+  id                 String   @id @default(uuid()) @db.Uuid
+  organizationId     String   @db.Uuid
+  organization       MasterSettings @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  dispatchSlipNumber String
+  date               DateTime @default(now())
+  supervisor         String
+  partyName          String?
+  clientRequestId    String?  @unique
+  businessSnapshot   Json?
+  logistics          Json     
+  inventory          Json     
+  summary            Json     
+  status             DispatchStatus @default(Draft)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([organizationId, dispatchSlipNumber])
+  @@index([organizationId, date])
+  @@index([organizationId, status, createdAt])
+}
+
+enum DispatchStatus {
+  Draft
+  Dispatched
+  Delivered
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  tokenHash String   @unique
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model AuditLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  action        String   @db.VarChar(64)
+  organizationId String?  @db.Uuid
+  userId        String?  @db.Uuid
+  userEmail     String?  @db.VarChar(254)
+  userRole      String?  @db.VarChar(32)
+  ip            String?  @db.VarChar(45)
+  userAgent     String?  @db.Text
+  details       Json
+  timestamp     DateTime @default(now())
+
+  @@index([organizationId, timestamp])
+  @@index([userId, timestamp])
+  @@index([action, timestamp])
+}

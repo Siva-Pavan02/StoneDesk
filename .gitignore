@@ -4,11 +4,11 @@
 **/.env
 **/.env.*
 !**/.env.example
-server/uploads/
+**/uploads/
 *.log
 output/
 tmp/
-
+/graphify-out/
 # Unwanted skills and agent files
 .agents/
 skills-lock.json
@@ -23,3 +23,8 @@ apply*.js
 convert.js
 split.js
 testFraction.js
+
+!**/.env.test.example
+.playwright-cli/
+
+Backend/mock/mock-data.json

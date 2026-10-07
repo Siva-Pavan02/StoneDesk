@@ -1,4 +1,4 @@
-# GraniteSync Development Roadmap
+# StoneDesk Development Roadmap
 
 ## Phase 1: Environment Setup (Completed)
 - [x] Initialize Node/Express backend.

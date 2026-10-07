@@ -1,4 +1,4 @@
-export const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+export const API_BASE = (import.meta.env?.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
 export const QUARRY_ID = 'unit_04';
 export function logoUrl(path) {
   return path ? `${API_BASE.replace(/\/api\/?$/, '')}${path}` : undefined;

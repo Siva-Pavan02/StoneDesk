@@ -31,7 +31,7 @@ test('Driver Transit Slip Generator', async (t) => {
   await t.test('1. Valid finalized Dispatch generates a PDF Blob', () => {
     const res = generateDriverTransitSlip(dispatch);
     assert.ok(res.blob);
-    assert.equal(res.filename, 'GraniteSync-Driver-Slip-GS-12345.pdf');
+    assert.equal(res.filename, 'StoneDesk-Driver-Slip-GS-12345.pdf');
   });
 
   await t.test('9. Missing Dispatch is rejected', () => {

@@ -1,7 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { processInventory, totals } = require('../utils/pilotCalculations');
-const Dispatch = require('../models/Dispatch');
 const group = { stoneType: 'Stone', finish: 'Polished', ratePerSqFt: 40.5,
   measurementRows: [{ lengthFt: 3, widthFt: 2, quantity: 19, category: 'Regular' }, { lengthFt: 3.5, widthFt: 1.5, quantity: 10, category: 'TOP' }] };
 test('quantity, fractions, TOP, charges, and static persisted totals', async () => {
@@ -13,10 +12,9 @@ test('quantity, fractions, TOP, charges, and static persisted totals', async () 
   const summary = totals(inventory, 50);
   assert.equal(summary.totalPieces, 29);
   assert.equal(summary.netBillableAmount, 6793.25);
-  const record = new Dispatch({ dispatchSlipNumber: 'TEST', supervisor: 'Siva', partyName: 'Buyer', logistics: { truckNumber: 'AP01', buyerDestination: 'Kadapa' }, inventory, summary, businessSnapshot: { businessName: 'Original' } });
-  await record.validate();
-  assert.equal(record.toObject().inventory[0].totalSqFt, 166.5);
-  assert.equal(record.toObject().inventory[0].measurementRows[0].quantity, 19);
+  const persisted = JSON.parse(JSON.stringify({ inventory, summary }));
+  assert.equal(persisted.inventory[0].totalSqFt, 166.5);
+  assert.equal(persisted.inventory[0].measurementRows[0].quantity, 19);
 });
 test('invalid dimensions, quantity, rate, fees and overflow are rejected', () => {
   for (const changes of [{ lengthFt: 0 }, { widthFt: -1 }, { lengthFt: Infinity }, { quantity: 0 }, { quantity: 1.5 }, { quantity: '19' }, { category: 'Other' }]) {

@@ -9,22 +9,53 @@ export default function AuthDialog({ mode, onClose, onSignedIn, onMode }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [createOrganization, setCreateOrganization] = useState(false);
   const signup = mode === 'signup';
+  
   useEffect(() => { if (mode) { dialog.current.showModal(); } else dialog.current.close(); }, [mode]);
+  
   async function submit(e) {
     e.preventDefault(); if (busy) return;
     setBusy(true); setError('');
     const values = Object.fromEntries(new FormData(e.currentTarget));
-    try { const data = await request(`/auth/${mode}`, { method: 'POST', body: values }); e.target.reset(); onSignedIn(data.user); }
+    if (signup) values.createOrganization = createOrganization;
+    try { 
+      const data = await request(`/auth/${mode}`, { method: 'POST', body: values }); 
+      e.target.reset(); 
+      onSignedIn(data.user); 
+    }
     catch (err) { setError(err.message); } finally { setBusy(false); }
   }
+  
   return <dialog ref={dialog} className="app-dialog pilot" aria-labelledby="auth-title" onCancel={e => { if (busy) e.preventDefault(); else onClose(); }}>
-    <div className="p-6"><div className="flex items-center justify-between gap-3"><p className="eyebrow">GRANITESYNC</p><button type="button" className="text-button" disabled={busy} onClick={onClose}>{pick('Close', 'మూసివేయండి')}</button></div>
+    <div className="p-6"><div className="flex items-center justify-between gap-3"><p className="eyebrow">STONEDESK</p><button type="button" className="text-button" disabled={busy} onClick={onClose}>{pick('Close', 'మూసివేయండి')}</button></div>
       <h2 id="auth-title" className="mt-3 text-2xl font-bold">{signup ? pick('Set up your account', 'మీ ఖాతా సృష్టించండి') : pick('Welcome back', 'తిరిగి స్వాగతం')}</h2>
-      <p className="mt-3 mb-5 text-sm leading-relaxed text-gray-700">{signup ? pick('The first account becomes the business administrator. Team members join with administrator approval.', 'మొదటి ఖాతా వ్యాపార అడ్మిన్ అవుతుంది. బృంద సభ్యులకు అడ్మిన్ ఆమోదం అవసరం.') : pick('Sign in to your business workspace.', 'మీ వ్యాపార వర్క్‌స్పేస్‌లో లాగిన్ అవ్వండి.')}</p>
+      
+      {signup && (
+        <div className="mt-4 mb-2 flex gap-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="orgMode" checked={!createOrganization} onChange={() => setCreateOrganization(false)} className="accent-teal-800" />
+            <span className="text-sm font-medium">{pick('Join Existing', 'ఇప్పటికే ఉన్నదాంట్లో చేరండి')}</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="orgMode" checked={createOrganization} onChange={() => setCreateOrganization(true)} className="accent-teal-800" />
+            <span className="text-sm font-medium">{pick('Create New Workspace', 'కొత్త వర్క్‌స్పేస్ సృష్టించండి')}</span>
+          </label>
+        </div>
+      )}
+
+      <p className="mt-3 mb-5 text-sm leading-relaxed text-gray-700">
+        {signup 
+          ? (createOrganization 
+              ? pick('Create a new organization workspace. You will be the administrator.', 'కొత్త ఆర్గనైజేషన్ సృష్టించండి. మీరు అడ్మిన్ అవుతారు.')
+              : pick('Enter the Organization Code provided by your administrator to join their workspace.', 'అడ్మిన్ ఇచ్చిన ఆర్గనైజేషన్ కోడ్ ఎంటర్ చేసి చేరండి.'))
+          : pick('Sign in to your business workspace.', 'మీ వ్యాపార వర్క్‌స్పేస్‌లో లాగిన్ అవ్వండి.')}
+      </p>
+
       <form className="space-y-4" onSubmit={submit}>
         <ErrorMessage error={error} />
         {signup && <Field name="name" en="Your name" te="మీ పేరు" autoComplete="name" required maxLength={120} />}
+        {signup && <Field name="organizationId" en="Organization Code" te="ఆర్గనైజేషన్ కోడ్" required maxLength={50} pattern="[a-zA-Z0-9-]+" title="Only letters, numbers, and hyphens" />}
         <Field name="email" en="Email address" te="ఇమెయిల్ చిరునామా" type="email" autoComplete="username" required maxLength={254} />
         <Field name="password" en="Password" te="పాస్‌వర్డ్" type={showPassword ? 'text' : 'password'} autoComplete={signup ? 'new-password' : 'current-password'} minLength={12} maxLength={128} required />
         <label className="flex min-h-12 items-center gap-3"><input type="checkbox" className="h-5 w-5 accent-teal-800" checked={showPassword} onChange={e => setShowPassword(e.target.checked)} />{pick('Show password', 'పాస్‌వర్డ్ చూపండి')}</label>

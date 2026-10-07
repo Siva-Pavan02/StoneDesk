@@ -38,7 +38,7 @@ export default function BillView({ record, onBack, onResume, onChanged, canFinal
     <ErrorMessage error={error} />
     <Card className="gap-2">
       {record.businessSnapshot?.logoDataUrl && <img src={record.businessSnapshot.logoDataUrl} alt="Bill business logo" className="h-20 w-20 object-contain" />}
-      <h2 className="font-bold text-xl break-words">{record.businessSnapshot?.businessName || 'GraniteSync'}</h2>
+      <h2 className="font-bold text-xl break-words">{record.businessSnapshot?.businessName || 'StoneDesk'}</h2>
       <p className="break-words">{record.businessSnapshot?.address} {record.businessSnapshot?.phone}</p>
       <p className="text-xs break-all text-gray-700">{record.dispatchSlipNumber}</p>
       <strong className="break-words">{record.partyName || 'Legacy load'} · {t(record.status.toLowerCase())}</strong>

@@ -32,7 +32,7 @@ export default function App() {
   }
   function workspace() { window.location.hash = 'home'; setWelcome(false); setLegacy(null); }
   function signedIn(value) { setUser(value); setAuthMode(null); setError(''); workspace(); }
-  if (checking) return <div className="pilot min-h-dvh bg-gray-50 p-6 text-gray-900" role="status">{pick('Opening GraniteSync…', 'GraniteSync తెరుస్తోంది…')}</div>;
+  if (checking) return <div className="pilot min-h-dvh bg-gray-50 p-6 text-gray-900" role="status">{pick('Opening StoneDesk…', 'StoneDesk తెరుస్తోంది…')}</div>;
   return <>
     {error && <div className="pilot mx-auto max-w-lg p-4"><ErrorMessage error={error} /></div>}
     {!user || welcome ? <LandingPage user={user} onWorkspace={workspace} onStart={() => setAuthMode('signup')} onLogin={() => setAuthMode('login')} /> : !user.active ? <div className="pilot min-h-dvh bg-gray-50 px-4 py-12"><Card className="mx-auto max-w-lg gap-5"><h1 className="text-2xl font-bold">{pick('Your account is ready for approval', 'మీ ఖాతా ఆమోదం కోసం సిద్ధంగా ఉంది')}</h1><p>{pick('Ask your business administrator to approve your account in Settings → Team & access.', 'సెట్టింగ్స్ → బృందం మరియు యాక్సెస్‌లో మీ ఖాతాను ఆమోదించమని అడ్మిన్‌ను అడగండి.')}</p><p className="break-all font-semibold">{user.email}</p><Button primary en="Check approval" te="ఆమోదం తనిఖీ చేయండి" onClick={checkSession} /><Button en="Log out" te="లాగ్ అవుట్" onClick={logout} /></Card></div> :

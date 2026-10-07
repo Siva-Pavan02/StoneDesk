@@ -1,6 +1,12 @@
-const MasterSettings = require('../models/MasterSettings');
-const { text, number } = require('../utils/pilotCalculations');
+const prisma = require('../utils/prisma');
+const { text, number, bad } = require('../utils/pilotCalculations');
 const { storeLogo } = require('../utils/businessBranding');
+const { randomUUID } = require('crypto');
+
+const getOrCreateSettings = async (organizationId) => {
+  if (!organizationId) throw new Error('Missing organizationId');
+  return prisma.masterSettings.upsert({ where: { organizationId }, update: {}, create: { organizationId, stoneRates: [], savedTrucks: [], savedDestinations: [] } });
+};
 
 exports.updateProfile = async (req, res, next) => {
   try {
@@ -12,194 +18,122 @@ exports.updateProfile = async (req, res, next) => {
     if (gstNumber && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gstNumber)) return res.status(400).json({ error: 'Enter a valid 15-character GST number, or leave it blank' });
     if (tradeLicense.length > 80) return res.status(400).json({ error: 'Trade license is too long' });
     if (address.length > 300 || phone.length > 30) return res.status(400).json({ error: 'Address or phone is too long' });
-    const settings = await getOrCreateSettings(req.params.quarryId);
-    Object.assign(settings, { businessName, address, phone, gstNumber, tradeLicense });
-    if (req.body.removeLogo === true) settings.logoPath = undefined;
-    if (req.body.defaultRoyaltyFee !== undefined) settings.defaultRoyaltyFee = number(req.body.defaultRoyaltyFee, 'charges');
-    await settings.save();
-    res.json(settings);
-  } catch (err) { next(err); }
-};
-exports.uploadLogo = async (req, res, next) => {
-  try {
-    const logoPath = await storeLogo(req.body, req.get('Content-Type'));
-    const settings = await getOrCreateSettings(req.params.quarryId);
-    settings.logoPath = logoPath;
-    await settings.save();
+
+    let settings = await getOrCreateSettings(req.user.organizationId);
+    const logoChange = req.body.removeLogo === true ? { logoPath: null } : {};
+
+    const feeChange = req.body.defaultRoyaltyFee === undefined ? {} : { defaultRoyaltyFee: number(req.body.defaultRoyaltyFee, 'charges') };
+
+    settings = await prisma.masterSettings.update({
+      where: { id: settings.id },
+      data: { businessName, address, phone, gstNumber, tradeLicense, ...logoChange, ...feeChange }
+    });
     res.json(settings);
   } catch (err) { next(err); }
 };
 
-const getOrCreateSettings = async (quarryId) => {
-  if (!quarryId) throw new Error('Missing quarryId');
-  let settings = await MasterSettings.findOne({ quarryId });
-  if (!settings) {
-    settings = await MasterSettings.create({ quarryId });
-  }
-  return settings;
+exports.uploadLogo = async (req, res, next) => {
+  try {
+    const logoPath = await storeLogo(req.body, req.get('Content-Type'));
+    let settings = await getOrCreateSettings(req.user.organizationId);
+    settings = await prisma.masterSettings.update({
+      where: { id: settings.id },
+      data: { logoPath }
+    });
+    res.json(settings);
+  } catch (err) { next(err); }
 };
 
 exports.getSettings = async (req, res, next) => {
   try {
-    const settings = await getOrCreateSettings(req.params.quarryId);
+    const settings = await getOrCreateSettings(req.user.organizationId);
+    if (!settings.stoneRates) settings.stoneRates = [];
     res.json(settings);
-  } catch (error) {
-    next(error);
-  }
+  } catch (error) { next(error); }
 };
 
 exports.updateSettings = async (req, res, next) => {
   try {
-    const settings = await MasterSettings.findOneAndUpdate(
-      { quarryId: req.params.quarryId },
-      { $set: Object.fromEntries(Object.entries(req.body).filter(([key]) => ['savedTrucks', 'savedDestinations', 'stoneRates', 'defaultRoyaltyFee'].includes(key))) },
-      { new: true, runValidators: true }
-    );
-    if (!settings) return res.status(404).json({ error: 'Not found' });
-    res.json(settings);
-  } catch (error) {
-    next(error);
-  }
-};
-
-exports.addTruck = async (req, res, next) => {
-  try {
-    const { truckNumber } = req.body;
-    if (!truckNumber || typeof truckNumber !== 'string' || truckNumber.trim() === '') {
-      return res.status(400).json({ error: 'Invalid truck number' });
+    const allowed = ['savedTrucks', 'savedDestinations', 'stoneRates', 'defaultRoyaltyFee'];
+    const data = Object.fromEntries(Object.entries(req.body).filter(([key]) => allowed.includes(key)));
+    if (data.defaultRoyaltyFee !== undefined) number(data.defaultRoyaltyFee, 'charges');
+    for (const field of ['savedTrucks', 'savedDestinations']) if (data[field] !== undefined) {
+      if (!Array.isArray(data[field])) return res.status(400).json({ error: 'Invalid list' });
+      data[field] = [...new Set(data[field].map(value => text(value, field)))];
     }
-    const settings = await getOrCreateSettings(req.params.quarryId);
-    if (settings.savedTrucks.includes(truckNumber.toUpperCase())) {
-      return res.status(409).json({ error: 'Duplicate truck' });
+    if (data.stoneRates !== undefined) {
+      if (!Array.isArray(data.stoneRates)) return res.status(400).json({ error: 'Invalid products' });
+      const ids = new Set(), products = new Set();
+      data.stoneRates = data.stoneRates.map(r => ({ _id: r?._id === undefined ? randomUUID() : text(r._id, 'product ID', 80), stoneType: text(r?.stoneType, 'product'), finish: text(r?.finish, 'finish'), defaultRate: number(r?.defaultRate, 'rate') }));
+      for (const rate of data.stoneRates) {
+        const key = JSON.stringify([rate.stoneType, rate.finish]);
+        if (ids.has(rate._id) || products.has(key)) bad('Duplicate product or product ID');
+        ids.add(rate._id); products.add(key);
+      }
     }
-    settings.savedTrucks.push(truckNumber.toUpperCase());
-    await settings.save();
+    const settings = await prisma.masterSettings.update({
+      where: { organizationId: req.user.organizationId },
+      data
+    });
     res.json(settings);
   } catch (error) {
+    if (error.code === 'P2025') return res.status(404).json({ error: 'Not found' });
     next(error);
   }
 };
 
-exports.deleteTruck = async (req, res, next) => {
-  try {
-    const { truckNumber } = req.params;
-    const settings = await MasterSettings.findOneAndUpdate(
-      { quarryId: req.params.quarryId },
-      { $pull: { savedTrucks: truckNumber.toUpperCase() } },
-      { new: true }
-    );
-    res.json(settings);
-  } catch (error) {
-    next(error);
-  }
-};
 
-exports.addDestination = async (req, res, next) => {
-  try {
-    const { destination } = req.body;
-    if (!destination || typeof destination !== 'string' || destination.trim() === '') {
-      return res.status(400).json({ error: 'Invalid destination' });
-    }
-    const settings = await getOrCreateSettings(req.params.quarryId);
-    if (settings.savedDestinations.includes(destination)) {
-      return res.status(409).json({ error: 'Duplicate destination' });
-    }
-    settings.savedDestinations.push(destination);
-    await settings.save();
-    res.json(settings);
-  } catch (error) {
-    next(error);
+// Compare the arrays read by this request before replacing JSON or native arrays.
+// Retry on a concurrent edit instead of silently losing another administrator's change.
+async function mutateSettings(organizationId, change) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const settings = await getOrCreateSettings(organizationId);
+    const where = { id: settings.id, stoneRates: { equals: settings.stoneRates }, savedTrucks: { equals: settings.savedTrucks }, savedDestinations: { equals: settings.savedDestinations } };
+    const data = change(structuredClone(settings));
+    const result = await prisma.masterSettings.updateMany({ where, data });
+    if (result.count) return prisma.masterSettings.findUnique({ where: { id: settings.id } });
   }
+  throw Object.assign(new Error('Settings changed. Please retry.'), { status: 409 });
+}
+function conflict(message) { throw Object.assign(new Error(message), { status: 409 }); }
+function missing() { throw Object.assign(new Error('Not found'), { status: 404 }); }
+const mutate = change => async (req, res, next) => {
+  try { res.json(await mutateSettings(req.user.organizationId, settings => change(settings, req))); }
+  catch (error) { next(error); }
 };
-
-exports.deleteDestination = async (req, res, next) => {
-  try {
-    const { destination } = req.params;
-    const settings = await MasterSettings.findOneAndUpdate(
-      { quarryId: req.params.quarryId },
-      { $pull: { savedDestinations: destination } },
-      { new: true }
-    );
-    res.json(settings);
-  } catch (error) {
-    next(error);
-  }
-};
-
-exports.addStoneRate = async (req, res, next) => {
-  try {
-    const { stoneType, finish, defaultRate } = req.body;
-    if (typeof stoneType !== 'string' || !stoneType.trim() || typeof finish !== 'string' || !finish.trim() || typeof defaultRate !== 'number' || !Number.isFinite(defaultRate) || defaultRate < 0) {
-      return res.status(400).json({ error: 'Invalid stone rate entry' });
-    }
-    const settings = await getOrCreateSettings(req.params.quarryId);
-    const exists = settings.stoneRates.some(r => r.stoneType === stoneType && r.finish === finish);
-    if (exists) {
-      return res.status(409).json({ error: 'Duplicate stone-rate combination' });
-    }
-    settings.stoneRates.push({ stoneType: stoneType.trim(), finish: finish.trim(), defaultRate });
-    await settings.save();
-    res.json(settings);
-  } catch (error) {
-    next(error);
-  }
-};
-
-exports.updateStoneRate = async (req, res, next) => {
-  try {
-    const { rateId } = req.params;
-    const { defaultRate } = req.body;
-    if (typeof defaultRate !== 'number' || !Number.isFinite(defaultRate) || defaultRate < 0) {
-      return res.status(400).json({ error: 'Invalid rate' });
-    }
-    const settings = await MasterSettings.findOne({ quarryId: req.params.quarryId });
-    const rate = settings?.stoneRates.id(rateId);
-    if (!rate) return res.status(404).json({ error: 'Not found' });
-    const stoneType = req.body.stoneType === undefined ? rate.stoneType : text(req.body.stoneType, 'product');
-    const finish = req.body.finish === undefined ? rate.finish : text(req.body.finish, 'finish');
-    if (settings.stoneRates.some(r => String(r._id) !== rateId && r.stoneType === stoneType && r.finish === finish)) return res.status(409).json({ error: 'Duplicate stone-rate combination' });
-    Object.assign(rate, { stoneType, finish, defaultRate });
-    await settings.save();
-    if (!settings) return res.status(404).json({ error: 'Not found' });
-    res.json(settings);
-  } catch (error) {
-    next(error);
-  }
-};
-
-exports.deleteStoneRate = async (req, res, next) => {
-  try {
-    const { rateId } = req.params;
-    const settings = await MasterSettings.findOneAndUpdate(
-      { quarryId: req.params.quarryId },
-      { $pull: { stoneRates: { _id: rateId } } },
-      { new: true }
-    );
-    res.json(settings);
-  } catch (error) {
-    next(error);
-  }
-};
-
+exports.addTruck = mutate((settings, req) => {
+  const value = text(req.body.truckNumber, 'truck number', 40).toUpperCase();
+  if (settings.savedTrucks.includes(value)) conflict('Duplicate truck');
+  return { savedTrucks: { push: value } };
+});
+exports.deleteTruck = mutate((settings, req) => ({ savedTrucks: { set: settings.savedTrucks.filter(value => value !== req.params.truckNumber.trim().toUpperCase()) } }));
+exports.addDestination = mutate((settings, req) => {
+  const value = text(req.body.destination, 'destination', 200);
+  if (settings.savedDestinations.includes(value)) conflict('Duplicate destination');
+  return { savedDestinations: { push: value } };
+});
+exports.deleteDestination = mutate((settings, req) => ({ savedDestinations: { set: settings.savedDestinations.filter(value => value !== req.params.destination.trim()) } }));
+exports.addStoneRate = mutate((settings, req) => {
+  const stoneType = text(req.body.stoneType, 'product'), finish = text(req.body.finish, 'finish'), defaultRate = number(req.body.defaultRate, 'rate');
+  if (settings.stoneRates.some(r => r.stoneType === stoneType && r.finish === finish)) conflict('Duplicate stone-rate combination');
+  return { stoneRates: [...settings.stoneRates, { _id: randomUUID(), stoneType, finish, defaultRate }] };
+});
+exports.updateStoneRate = mutate((settings, req) => {
+  const rate = settings.stoneRates.find(r => r._id === req.params.rateId);
+  if (!rate) missing();
+  const stoneType = req.body.stoneType === undefined ? rate.stoneType : text(req.body.stoneType, 'product');
+  const finish = req.body.finish === undefined ? rate.finish : text(req.body.finish, 'finish');
+  const defaultRate = number(req.body.defaultRate, 'rate');
+  if (settings.stoneRates.some(r => r._id !== rate._id && r.stoneType === stoneType && r.finish === finish)) conflict('Duplicate stone-rate combination');
+  return { stoneRates: settings.stoneRates.map(r => r._id === rate._id ? { ...r, stoneType, finish, defaultRate } : r) };
+});
+exports.deleteStoneRate = mutate((settings, req) => {
+  if (!settings.stoneRates.some(r => r._id === req.params.rateId)) missing();
+  return { stoneRates: settings.stoneRates.filter(r => r._id !== req.params.rateId) };
+});
 exports.updateRoyalty = async (req, res, next) => {
   try {
-    const { defaultRoyaltyFee } = req.body;
-    if (typeof defaultRoyaltyFee !== 'number' || !Number.isFinite(defaultRoyaltyFee) || defaultRoyaltyFee < 0) {
-      return res.status(400).json({ error: 'Invalid royalty fee' });
-    }
-    const settings = await MasterSettings.findOneAndUpdate(
-      { quarryId: req.params.quarryId },
-      { $set: { defaultRoyaltyFee } },
-      { new: true, runValidators: true }
-    );
-    if (!settings) {
-       const newSettings = await getOrCreateSettings(req.params.quarryId);
-       newSettings.defaultRoyaltyFee = defaultRoyaltyFee;
-       await newSettings.save();
-       return res.json(newSettings);
-    }
-    res.json(settings);
-  } catch (error) {
-    next(error);
-  }
+    const defaultRoyaltyFee = number(req.body.defaultRoyaltyFee, 'charges');
+    res.json(await prisma.masterSettings.upsert({ where: { organizationId: req.user.organizationId }, create: { organizationId: req.user.organizationId, defaultRoyaltyFee, stoneRates: [], savedTrucks: [], savedDestinations: [] }, update: { defaultRoyaltyFee } }));
+  } catch (error) { next(error); }
 };

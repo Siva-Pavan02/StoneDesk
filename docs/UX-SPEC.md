@@ -1,4 +1,4 @@
-# GraniteSync: journey, screens and delivery boundaries
+# StoneDesk: journey, screens and delivery boundaries
 
 ## Information architecture and user journey
 
@@ -8,16 +8,16 @@ flowchart TD
     Landing --> Login[Log in]
     Signup --> Owner{First account?}
     Owner -->|Yes| Admin[Business administrator]
-    Owner -->|No| Pending[Wait for administrator approval]
+    Owner -->|No| Active[Active Dispatcher account]
     Admin --> Business[1 Business name / logo / identifiers]
     Business --> Contact[2 Contact and yard address]
     Contact --> Defaults[3 Feet / sq ft / INR / charges]
     Defaults --> Products[Add at least one product and rate]
     Products --> Home[Dashboard]
-    Login --> Active{Approved account?}
+    Login --> Active{Active account?}
     Active -->|No| Pending
     Active -->|Yes| Home
-    Pending -->|Admin approves in Settings| Home
+    Pending -->|Admin reactivates in Settings| Home
     Home --> Loads[Loading entries / search]
     Home --> Monitor[Monitor and dispatch]
     Home --> Invoices[Invoices]
@@ -40,7 +40,7 @@ One business serves all approved staff. There is one current account, with logou
 
 Mobile reading order:
 
-1. Compact header: GraniteSync identity, language toggle and Log in. For signed-in people, the action opens the workspace.
+1. Compact header: StoneDesk identity, language toggle and Log in. For signed-in people, the action opens the workspace.
 2. Hero: “Every load. Accounted for.” A short yard-to-bill explanation, full-width Get Started, and a one-business/team/language note.
 3. Example ledger card: clearly marked EXAMPLE LOAD, showing `3 × 2 ft`, 19 pieces and 114 sq ft. This is a calculation illustration, not a live customer metric.
 4. Three vertical feature sections: Log the load; Keep dispatch moving; Finish with a clear bill. Each uses a consistent outline icon and a short explanation.
@@ -56,7 +56,7 @@ The requested social-proof area is intentionally not populated with fabricated t
 - Native dialog; title, explanation, name on signup, email, password, show-password checkbox, primary submit, mode switch and Close.
 - Minimum 12-character password; support paste and password managers. Password values are not stored in browser localStorage.
 - Email/password works locally. Google and Phone OTP are unavailable until a provider is connected, following the user's decision to start locally. No email verification or email reset service is implied.
-- First account becomes owner/Admin. Further accounts are pending. Pending users can check approval or log out; they cannot read business records.
+- First account becomes owner/Admin. Further accounts start active as Dispatchers. Administrators can pause access or change roles; paused users cannot read business records.
 - Expired sessions return to login. The existing load recovery copy stays on the device.
 
 ### Profile wizard

@@ -23,7 +23,7 @@ async function storeLogo(buffer, mime) {
   return `/uploads/${filename}`;
 }
 async function snapshot(settings) {
-  const result = { businessName: settings?.businessName || 'GraniteSync', address: settings?.address || '', phone: settings?.phone || '' };
+  const result = { businessName: settings?.businessName || 'StoneDesk', address: settings?.address || '', phone: settings?.phone || '' };
   if (settings?.logoPath) {
     const filename = settings.logoPath.match(/^\/uploads\/([a-f0-9-]+\.png)$/)?.[1];
     if (!filename) bad('Invalid stored logo');

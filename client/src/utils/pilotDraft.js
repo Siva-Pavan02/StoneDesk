@@ -1,5 +1,5 @@
 import { parseFraction } from './fractionParser.js';
-export const DRAFT_KEY = 'granitesync:pilot-draft:v1';
+export const DRAFT_KEY = 'stonedesk:pilot-draft:v1';
 export const money = value => Number(value).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 });
 export const round = value => Math.round((value + Number.EPSILON) * 100) / 100;
 export function localDate() {
@@ -11,7 +11,9 @@ export function newDraft(fee = 0) {
 export function readDraft(storage = localStorage) {
   try {
     const value = JSON.parse(storage.getItem(DRAFT_KEY));
-    return value && Array.isArray(value.rows) && typeof value.clientRequestId === 'string' ? value : null;
+    if (!value || !Array.isArray(value.rows) || typeof value.clientRequestId !== 'string') return null;
+    if (!value.rows.every(row => row && typeof row.stoneType === 'string' && typeof row.finish === 'string' && Number.isFinite(row.lengthFt) && row.lengthFt > 0 && Number.isFinite(row.widthFt) && row.widthFt > 0 && Number.isSafeInteger(row.quantity) && row.quantity > 0 && Number.isFinite(row.ratePerSqFt) && row.ratePerSqFt >= 0)) return null;
+    return value;
   } catch { return null; }
 }
 export function previewRows(rows) {

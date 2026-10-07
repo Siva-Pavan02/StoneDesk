@@ -10,7 +10,7 @@ export async function generateLoadingListPdf(listData) {
   // HEADER
   doc.setFont(font, 'bold');
   doc.setFontSize(16);
-  doc.text("GraniteSync", 14, y);
+  doc.text("StoneDesk", 14, y);
   y += 6;
   doc.setFontSize(12);
   doc.text("SUPERVISOR LOADING LIST", 14, y);

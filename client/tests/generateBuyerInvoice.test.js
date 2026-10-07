@@ -35,7 +35,7 @@ test('Buyer Invoice Generator', async (t) => {
   await t.test('1. Valid finalized Dispatch generates a PDF Blob', async () => {
     const res = await generateBuyerInvoice(historicalDispatch);
     assert.ok(res.blob);
-    assert.equal(res.filename, 'GraniteSync-Buyer-Invoice-GS-OLD-999.pdf');
+    assert.equal(res.filename, 'StoneDesk-Buyer-Invoice-GS-OLD-999.pdf');
   });
 
   await t.test('9. Missing Dispatch is rejected', async () => {

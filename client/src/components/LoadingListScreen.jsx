@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '../i18n/LanguageContext';
 import LanguageToggle from './LanguageToggle.jsx';
 import { getMasterSettings } from '../lib/api';
@@ -9,7 +9,10 @@ import { generateLoadingListPdf } from '../utils/generateLoadingListPdf';
 import { generateLoadingListExcel } from '../utils/generateLoadingListExcel';
 
 export default function LoadingListScreen({ onClose }) {
-  const { t } = useLanguage();
+  const { t, pick } = useLanguage();
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const savingLock = useRef(false);
   const [settings, setSettings] = useState(null);
   
   // Active Form State
@@ -47,16 +50,16 @@ export default function LoadingListScreen({ onClose }) {
       const lists = await fetchLoadingLists();
       setSavedLists(lists);
     } catch (e) {
-      console.error(e);
+      setError(e.message);
     }
   };
 
   const handleAddRequirement = () => {
     const pLen = parseFraction(reqLen);
     const pWid = parseFraction(reqWid);
-    const qty = parseInt(reqQty, 10);
+    const qty = Number(reqQty);
 
-    if (!pLen || !pWid || isNaN(qty) || qty <= 0) {
+    if (!pLen || !pWid || !Number.isSafeInteger(qty) || qty <= 0) {
       alert(t('invalid') || 'Invalid input');
       return;
     }
@@ -166,6 +169,7 @@ export default function LoadingListScreen({ onClose }) {
   };
 
   const handleSaveList = async () => {
+    if (savingLock.current) return;
     if (!supervisor || !buyerDestination || !stoneType || !finish) {
       alert('Please fill out all basic details');
       return;
@@ -181,6 +185,7 @@ export default function LoadingListScreen({ onClose }) {
       status: 'Loading'
     };
 
+    savingLock.current = true; setSaving(true); setError('');
     try {
       if (activeListId) {
         await updateLoadingList(activeListId, payload);
@@ -192,8 +197,8 @@ export default function LoadingListScreen({ onClose }) {
       alert('Saved Loading List');
       loadData();
     } catch (e) {
-      alert('Failed to save');
-    }
+      setError(e.message);
+    } finally { savingLock.current = false; setSaving(false); }
   };
 
   const handleGeneratePdf = () => {
@@ -238,13 +243,24 @@ export default function LoadingListScreen({ onClose }) {
             <h1 className="truncate font-bold text-lg text-slate-800">{t('loadingList') || 'Loading List'}</h1>
           </div>
           <div className="flex items-center gap-2"><LanguageToggle />
-          <button className="px-4 py-1.5 bg-teal-700 text-white rounded-lg font-semibold text-sm" onClick={handleSaveList}>
+          <button className="px-4 py-1.5 bg-teal-700 text-white rounded-lg font-semibold text-sm" disabled={saving} onClick={handleSaveList}>
             {t('save') || 'Save'}
           </button></div>
         </div>
       </header>
 
       <main className="pt-20 px-4 max-w-xl mx-auto">
+        {error && <p role="alert" className="mb-4 rounded-xl border-2 border-red-300 bg-white p-4 text-red-800">{error}</p>}
+        <label className="mb-4 flex flex-col gap-2 font-semibold">{pick('Saved loading lists', 'సేవ్ చేసిన లోడింగ్ జాబితాలు')}
+          <select aria-label="Saved loading lists" className="min-h-12 rounded-lg border-2 border-gray-300 bg-white p-2" disabled={saving} value={activeListId || ''} onChange={event => {
+            if (!window.confirm(pick('Replace the current form with this loading list?', 'ప్రస్తుత వివరాలను మార్చాలా?'))) return;
+            const list = savedLists.find(item => item._id === event.target.value);
+            setActiveListId(list?._id || null); setLoadingListNumber(list?.loadingListNumber || '');
+            setSupervisor(list?.supervisor || ''); setBuyerDestination(list?.buyerDestination || '');
+            setStoneType(list?.stoneType || ''); setFinish(list?.finish || '');
+            setRequirements(list ? structuredClone(list.requirements) : []); setEditIndex(null); setActiveCustomIdx(null); setError('');
+          }}><option value="">{pick('New loading list', 'కొత్త లోడింగ్ జాబితా')}</option>{savedLists.map(list => <option key={list._id} value={list._id}>{list.loadingListNumber} · {list.buyerDestination}</option>)}</select>
+        </label>
         
         {/* Basic Details */}
         <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-4">
@@ -257,7 +273,7 @@ export default function LoadingListScreen({ onClose }) {
               <label className="block text-xs font-semibold text-slate-500 mb-1">{t('destination')}</label>
               <select className="w-full h-10 px-3 bg-slate-50 border border-slate-300 rounded-lg text-sm" value={buyerDestination} onChange={(e)=>setBuyerDestination(e.target.value)}>
                 <option value="">--</option>
-                {settings?.destinations?.map(d => <option key={d}>{d}</option>)}
+                {settings?.savedDestinations?.map(d => <option key={d}>{d}</option>)}
               </select>
             </div>
           </div>

@@ -163,7 +163,7 @@ export async function generateBuyerInvoice(dispatch, t) {
   doc.text(fmtCurrency(dispatch.summary.netBillableAmount), 195, currentY + 2, { align: 'right' });
 
   const safeSlipNumber = (dispatch.dispatchSlipNumber || 'Unknown').replace(/[^a-zA-Z0-9-]/g, '_');
-  const filename = `GraniteSync-Buyer-Invoice-${safeSlipNumber}.pdf`;
+  const filename = `StoneDesk-Buyer-Invoice-${safeSlipNumber}.pdf`;
 
   return { blob: doc.output('blob'), filename };
 }

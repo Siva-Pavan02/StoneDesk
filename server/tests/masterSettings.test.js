@@ -1,15 +1,14 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const mongoose = require('mongoose');
+const database = require('./database');
+const prisma = database.prisma;
 const http = require('http');
 const app = require('../server');
-const MasterSettings = require('../models/MasterSettings');
 
 test('MasterSettings API', async (t) => {
   // connect to db
-  await mongoose.connect('mongodb://localhost:27017/granitesync_test');
-  await MasterSettings.deleteMany({});
-  
+  await database.setup(t);
+
   const server = http.createServer(app);
   await new Promise(r => server.listen(0, r));
   const port = server.address().port;
@@ -114,8 +113,21 @@ test('MasterSettings API', async (t) => {
     assert.equal(status, 400);
   });
 
+  await t.test('Concurrent catalogue changes retain all entries and unique IDs', async () => {
+    const results = await Promise.all(['A', 'B', 'C'].map(stoneType => request('POST', '/stone-rates', { stoneType, finish: 'Honed', defaultRate: 10 })));
+    assert.ok(results.every(r => r.status === 200), JSON.stringify(results));
+    const { data } = await request('GET', '');
+    assert.deepEqual(data.stoneRates.map(r => r.stoneType).sort(), ['A', 'B', 'C']);
+    assert.equal(new Set(data.stoneRates.map(r => r._id)).size, 3);
+    assert.equal(data._id, data.id);
+    const duplicates = await Promise.all([1,2].map(() => request('POST', '/trucks', { truckNumber: 'AP01' })));
+    assert.deepEqual(duplicates.map(r => r.status).sort(), [200,409]);
+    const invalid = await request('PUT', '', { stoneRates: [{ _id:'same', stoneType:'X', finish:'Honed', defaultRate:1 }, { _id:'same', stoneType:'Y', finish:'Honed', defaultRate:2 }] });
+    assert.equal(invalid.status, 400);
+    assert.equal((await request('DELETE', '/stone-rates/missing')).status, 404);
+  });
   await t.test('Cleanup', async () => {
-    server.close();
-    await mongoose.disconnect();
+    await new Promise(resolve => server.close(resolve));
+
   });
 });

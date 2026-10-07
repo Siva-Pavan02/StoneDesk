@@ -1,4 +1,4 @@
-# GraniteSync design system
+# StoneDesk design system
 
 ## 1. Visual theme and atmosphere
 

@@ -1,6 +1,6 @@
 export const translations = {
   en: {
-    appName: "GraniteSync",
+    appName: "StoneDesk",
     dispatchTrackerForm: "Dispatch Tracker Form",
     newDispatchEntry: "New Dispatch Entry",
     history: "History",

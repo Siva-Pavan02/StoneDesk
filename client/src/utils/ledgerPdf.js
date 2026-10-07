@@ -16,7 +16,7 @@ function header(doc, dispatch, driver) {
   if (hasLogo) doc.addImage(business.logoDataUrl, 'PNG', 13, 11, 24, 24, undefined, 'FAST');
   const left = hasLogo ? 42 : 13, center = (left + 197) / 2;
   doc.setFont('times', 'italic').setFontSize(28).setTextColor(133, 42, 42);
-  const name = doc.splitTextToSize(business.businessName || 'GraniteSync', 197 - left);
+  const name = doc.splitTextToSize(business.businessName || 'StoneDesk', 197 - left);
   doc.text(name, center, 23, { align: 'center' });
   let y = 21 + name.length * 8;
   doc.setFont('helvetica', 'normal').setFontSize(9).setTextColor(...ink);
@@ -77,7 +77,7 @@ export function ledgerPdf(dispatch, driver = false) {
     willDrawPage: data => {
       if (data.pageNumber > 1) {
         doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(...ink);
-        doc.text(doc.splitTextToSize(dispatch.businessSnapshot?.businessName || 'GraniteSync', 184).slice(0, 1), 13, 12);
+        doc.text(doc.splitTextToSize(dispatch.businessSnapshot?.businessName || 'StoneDesk', 184).slice(0, 1), 13, 12);
         doc.setFont('helvetica', 'normal').setFontSize(8);
         doc.text(`${driver ? 'Driver slip' : 'Load bill'} continued · ${dispatch.logistics?.truckNumber || '-'}`, 13, 18);
       }
@@ -107,5 +107,5 @@ export function ledgerPdf(dispatch, driver = false) {
     doc.text(`${page} / ${pages}`, 197, 287, { align: 'right' });
   }
   const safeId = String(dispatch.dispatchSlipNumber || 'Unknown').replace(/[^a-zA-Z0-9-]/g, '_');
-  return { blob: doc.output('blob'), filename: `GraniteSync-${driver ? 'Driver-Slip' : 'Buyer-Invoice'}-${safeId}.pdf` };
+  return { blob: doc.output('blob'), filename: `StoneDesk-${driver ? 'Driver-Slip' : 'Buyer-Invoice'}-${safeId}.pdf` };
 }

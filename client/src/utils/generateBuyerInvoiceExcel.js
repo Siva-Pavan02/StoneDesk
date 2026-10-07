@@ -125,7 +125,7 @@ export function generateBuyerInvoiceExcel(dispatch, t) {
   ];
 
   const safeSlipNumber = (dispatch.dispatchSlipNumber || 'Unknown').replace(/[^a-zA-Z0-9-]/g, '_');
-  const filename = `GraniteSync-Buyer-Invoice-${safeSlipNumber}.xlsx`;
+  const filename = `StoneDesk-Buyer-Invoice-${safeSlipNumber}.xlsx`;
   
   // Write Excel file as ArrayBuffer for the browser
   const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });

@@ -1,20 +1,14 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const mongoose = require('mongoose');
+const database = require('./database');
+const prisma = database.prisma;
 const http = require('http');
 const app = require('../server');
-const Dispatch = require('../models/Dispatch');
-const MasterSettings = require('../models/MasterSettings');
 
 test('Dispatch API', async (t) => {
-  await mongoose.connect('mongodb://localhost:27017/granitesync_test');
-  await Dispatch.deleteMany({});
-  await MasterSettings.deleteMany({});
-  
-  await MasterSettings.create({
-    quarryId: 'unit_04',
-    defaultRoyaltyFee: 8500
-  });
+  await database.setup(t);
+
+  await prisma.masterSettings.create({ data: { quarryId: 'unit_04', defaultRoyaltyFee: 8500, stoneRates: [], savedTrucks: [], savedDestinations: [] } });
 
   const server = http.createServer(app);
   await new Promise(r => server.listen(0, r));
@@ -90,14 +84,14 @@ test('Dispatch API', async (t) => {
     const { status, data } = await request('POST', '/', validPayload);
     assert.equal(status, 200);
     assert.equal(data.status, 'Draft');
-    assert.equal(data.inventory[0].pieces[0].sqFt, 50); 
-    assert.equal(data.inventory[0].lineTotal, 5000); 
+    assert.equal(data.inventory[0].pieces[0].sqFt, 50);
+    assert.equal(data.inventory[0].lineTotal, 5000);
     assert.equal(data.summary.totalDispatchVolumeSqFt, 50);
     assert.equal(data.summary.baseMaterialTotal, 5000);
-    assert.equal(data.summary.loadingAndRoyaltyFees, 8500); 
-    assert.equal(data.summary.netBillableAmount, 13500); 
-    assert.ok(data.dispatchSlipNumber.startsWith('GS-')); 
-    
+    assert.equal(data.summary.loadingAndRoyaltyFees, 8500);
+    assert.equal(data.summary.netBillableAmount, 13500);
+    assert.ok(data.dispatchSlipNumber.startsWith('GS-'));
+
     dispatchId = data._id;
     slipNumber = data.dispatchSlipNumber;
   });
@@ -141,13 +135,13 @@ test('Dispatch API', async (t) => {
 
   await t.test('16. Reject updating Dispatched', async () => {
     const { status } = await request('PUT', `/${dispatchId}`, validPayload);
-    assert.equal(status, 400); 
+    assert.equal(status, 400);
   });
 
   await t.test('19. Reject Draft -> Delivered (via status endpoint)', async () => {
     const { data: newDraft } = await request('POST', '/', validPayload);
     const { status } = await request('PATCH', `/${newDraft._id}/status`, { status: 'Delivered' });
-    assert.equal(status, 400); 
+    assert.equal(status, 400);
   });
 
   await t.test('18. Dispatched -> Delivered', async () => {
@@ -162,18 +156,18 @@ test('Dispatch API', async (t) => {
   });
 
   await t.test('16 / 22. Historical Immutability Test', async () => {
-    await MasterSettings.updateOne({ quarryId: 'unit_04' }, { defaultRoyaltyFee: 15000 });
-    
+    await prisma.masterSettings.update({ where: { quarryId: 'unit_04' }, data: { defaultRoyaltyFee: 15000 } });
+
     const { status, data } = await request('GET', `/${dispatchId}`);
     assert.equal(status, 200);
-    
+
     assert.equal(data.summary.loadingAndRoyaltyFees, 8500, 'Royalty changed! Should be immutable.');
     assert.equal(data.inventory[0].ratePerSqFt, 100, 'Rate changed! Should be immutable.');
     assert.equal(data.summary.netBillableAmount, 18500);
   });
 
   await t.test('Cleanup', async () => {
-    server.close();
-    await mongoose.disconnect();
+    await new Promise(resolve => server.close(resolve));
+
   });
 });

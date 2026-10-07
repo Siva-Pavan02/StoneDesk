@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const mongoose = require('mongoose');
+const database = require('./database');
+const prisma = database.prisma;
 const http = require('node:http');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -9,16 +10,12 @@ const sharp = require('sharp');
 
 test('pilot setup, upload, draft retries, finalization and historical bills', async t => {
   process.env.NODE_ENV = 'test';
-  const uploadDir = await fs.mkdtemp(path.join(os.tmpdir(), 'granitesync-logos-'));
+  const uploadDir = await fs.mkdtemp(path.join(os.tmpdir(), 'stonedesk-logos-'));
   process.env.UPLOAD_DIR = uploadDir;
   const app = require('../server');
-  const Dispatch = require('../models/Dispatch');
-  const Settings = require('../models/MasterSettings');
-  await mongoose.connect('mongodb://127.0.0.1:27017/granitesync_pilot_test', { serverSelectionTimeoutMS: 5000 });
+  await database.setup(t);
   const server = http.createServer(app);
-  t.after(async () => { await new Promise(resolve => server.close(resolve)); await mongoose.connection.dropDatabase(); await mongoose.disconnect(); await fs.rm(uploadDir, { recursive: true, force: true }); });
-  await mongoose.connection.dropDatabase();
-  await Dispatch.init(); await Settings.init();
+  t.after(async () => { await new Promise(resolve => server.close(resolve));  await fs.rm(uploadDir, { recursive: true, force: true }); });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
   const cookie = await require('./authHelper').adminCookie(base);
@@ -46,7 +43,7 @@ test('pilot setup, upload, draft retries, finalization and historical bills', as
   assert.equal(created.data.summary.netBillableAmount, 6793.25);
   const repeated = await Promise.all([call('POST', '/api/dispatches', body), call('POST', '/api/dispatches', body)]);
   assert.ok(repeated.every(result => result.data._id === id));
-  assert.equal(await Dispatch.countDocuments(), 1);
+  assert.equal(await prisma.dispatch.count(), 1);
   assert.equal((await call('PUT', `/api/dispatches/${id}`, { ...body, loadingAndRoyaltyFees: -1 })).status, 400);
   assert.equal((await call('PUT', `/api/dispatches/${id}`, { ...body, partyName: '' })).status, 400);
   assert.equal((await call('PUT', `/api/dispatches/${id}`, { ...body, loadingAndRoyaltyFees: 100 })).data.summary.netBillableAmount, 6843.25);

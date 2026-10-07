@@ -31,7 +31,7 @@ test('Buyer Invoice Excel Generator', async (t) => {
   await t.test('1. Valid finalized Dispatch generates an Excel Blob', async () => {
     const res = generateBuyerInvoiceExcel(historicalDispatch);
     assert.ok(res.blob);
-    assert.equal(res.filename, 'GraniteSync-Buyer-Invoice-GS-EXCEL-999.xlsx');
+    assert.equal(res.filename, 'StoneDesk-Buyer-Invoice-GS-EXCEL-999.xlsx');
   });
 
   await t.test('Missing Dispatch is rejected', async () => {

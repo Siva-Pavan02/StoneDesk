@@ -4,7 +4,7 @@ import { money } from '../../utils/pilotDraft.js';
 import { Button, Card } from './Controls.jsx';
 import Icon from './Icon.jsx';
 
-export default function LoadHub({ loads, view, query, onOpen, onNew, onRefresh, loading, recovery, onContinue, onNavigate, updatedAt }) {
+export default function LoadHub({ loads, view, query, onOpen, onNew, onRefresh, onLoadMore, hasMore, loading, recovery, onContinue, onNavigate, updatedAt }) {
   const { pick } = useLanguage();
   const [filter, setFilter] = useState('all');
   const drafts = loads.filter(l => l.status === 'Draft');
@@ -29,13 +29,14 @@ export default function LoadHub({ loads, view, query, onOpen, onNew, onRefresh, 
     {view === 'monitor' && <p className="text-sm text-gray-700">{pick('Drafts with measurements are shown as Loaded. Finalize a bill to dispatch the load.', 'కొలతలు ఉన్న డ్రాఫ్ట్‌లు లోడ్ అయినవిగా కనిపిస్తాయి. డిస్పాచ్ కోసం బిల్లును ఖరారు చేయండి.')}</p>}
     {!filtered.length && <Card className="items-start gap-4 py-7"><Icon name={view === 'invoices' ? 'bill' : 'truck'} className="h-8 w-8 text-teal-800" /><h3 className="text-lg font-bold">{search ? pick('No matching loads', 'లోడ్లు కనబడలేదు') : view === 'invoices' ? pick('Your first bill starts with a load', 'మొదటి బిల్లు లోడ్‌తో ప్రారంభమవుతుంది') : pick('A fresh page for your yard', 'మీ యార్డ్ కోసం కొత్త పేజీ')}</h3><p className="text-gray-700">{search ? pick('Try a lorry number, party name or another bill ID.', 'లారీ నంబర్, పార్టీ పేరు లేదా బిల్లు ఐడీతో వెతకండి.') : pick('Add your measurements, review the totals and finalize when ready.', 'కొలతలు జోడించి, మొత్తాలు తనిఖీ చేసి బిల్లును ఖరారు చేయండి.')}</p>{!search && <Button en="Create a load" te="లోడ్ సృష్టించండి" onClick={onNew} />}</Card>}
     {(view === 'home' ? filtered.slice(0, 5) : filtered).map(item => {
+      const itemId = item._id || item.id;
       const state = item.status === 'Draft' ? 'Draft' : item.status === 'Delivered' ? 'Completed' : 'Dispatched';
-      return <Card key={item._id} className="gap-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="break-words text-lg font-bold">{item.logistics.truckNumber}</h3><p className="mt-1 break-words text-sm text-gray-700">{item.partyName || item.logistics.buyerDestination}</p></div><span className={`status-tag ${item.status === 'Draft' ? 'bg-gray-100' : 'bg-teal-50 text-teal-900'}`}>{pick(view === 'invoices' ? 'Billed' : state, view === 'invoices' ? 'బిల్లు సిద్ధం' : item.status === 'Draft' ? 'డ్రాఫ్ట్' : item.status === 'Delivered' ? 'పూర్తయింది' : 'పంపబడింది')}</span></div>
-        {view === 'monitor' && item.status === 'Draft' && item.inventory?.length > 0 && <p className="text-sm font-semibold text-teal-900">{pick('Loaded · ready for review', 'లోడ్ అయింది · తనిఖీ చేయండి')}</p>}
+      return <Card key={itemId} className="gap-3"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="break-words text-lg font-bold">{item.logistics.truckNumber}</h3><p className="mt-1 break-words text-sm text-gray-700">{item.partyName || item.logistics.buyerDestination}</p></div><span className={`status-tag ${item.status === 'Draft' ? 'bg-gray-100' : 'bg-teal-50 text-teal-900'}`}>{pick(view === 'invoices' ? 'Billed' : state, view === 'invoices' ? 'బిల్లు సిద్ధం' : item.status === 'Draft' ? 'డ్రాఫ్ట్' : item.status === 'Delivered' ? 'పూర్తయింది' : 'పంపబడింది')}</span></div>
         <div className="flex flex-wrap justify-between gap-2 border-t border-gray-200 pt-3 text-sm"><span>{new Date(item.date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })} · {item.summary.totalDispatchVolumeSqFt} {pick('sq ft', 'చ.అ.')}</span><strong className="tabular-nums">{money(item.summary.netBillableAmount)}</strong></div>
-        <Button className="w-full justify-between" en={item.status === 'Draft' ? 'Review draft' : view === 'monitor' ? 'Open dispatch' : 'View invoice'} te={item.status === 'Draft' ? 'డ్రాఫ్ట్ చూడండి' : 'బిల్లు చూడండి'} onClick={() => onOpen(item._id)}><Icon name="arrow" /></Button>
+        <Button className="w-full justify-between" en={item.status === 'Draft' ? 'Review draft' : view === 'monitor' ? 'Open dispatch' : 'View invoice'} te={item.status === 'Draft' ? 'డ్రాఫ్ట్ చూడండి' : 'బిల్లు చూడండి'} onClick={() => onOpen(itemId)}><Icon name="arrow" /></Button>
       </Card>;
     })}
+    {view !== 'home' && hasMore && <Button className="w-full" en="Load more" te="మరిన్ని చూడండి" onClick={onLoadMore} disabled={loading} />}
     {view === 'home' && loads.length > 5 && <Button className="w-full" en="View all loads" te="అన్ని లోడ్లు చూడండి" onClick={() => onNavigate('entries')} />}
     {updatedAt && <p className="text-xs text-gray-600">{pick('Updated', 'నవీకరించబడింది')} {new Date(updatedAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}{view === 'monitor' ? pick(' · refreshes every 30 seconds', ' · ప్రతి 30 సెకన్లకు నవీకరణ') : ''}</p>}
   </>;

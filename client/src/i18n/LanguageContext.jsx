@@ -6,7 +6,7 @@ const LanguageContext = createContext();
 export const LanguageProvider = ({ children }) => {
   const [language, setLanguage] = useState(() => {
     try {
-      const stored = localStorage.getItem('granitesync-language');
+      const stored = localStorage.getItem('stonedesk-language');
       if (stored === 'te' || stored === 'en') {
         return stored;
       }
@@ -19,7 +19,7 @@ export const LanguageProvider = ({ children }) => {
   useEffect(() => {
     document.documentElement.lang = language;
     try {
-      localStorage.setItem('granitesync-language', language);
+      localStorage.setItem('stonedesk-language', language);
     } catch (e) {
       // localStorage error fallback
     }

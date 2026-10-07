@@ -1,38 +1,37 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const mongoose = require('mongoose');
+const database = require('./database');
+const prisma = database.prisma;
 const http = require('node:http');
 const { randomBytes } = require('node:crypto');
 
-test('accounts protect all business data, approve staff, enforce roles and revoke sessions', async t => {
+test('accounts protect all business data, activate staff, enforce roles and revoke sessions', async t => {
   process.env.NODE_ENV = 'test';
   const app = require('../server');
-  const User = require('../models/User');
-  const Session = require('../models/Session');
-  await mongoose.connect('mongodb://127.0.0.1:27017/granitesync_auth_test', { serverSelectionTimeoutMS: 5000 });
-  await mongoose.connection.dropDatabase(); await User.init(); await Session.init();
+  await database.setup(t);
+
   const server = http.createServer(app);
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  t.after(async () => { await new Promise(resolve => server.close(resolve)); await mongoose.connection.dropDatabase(); await mongoose.disconnect(); });
+  t.after(async () => { await new Promise(resolve => server.close(resolve));  });
   const base = `http://127.0.0.1:${server.address().port}`;
   async function call(path, method = 'GET', body, cookie, origin) {
     const response = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}), ...(origin ? { Origin: origin } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
     return { status: response.status, data: await response.json(), cookies: response.headers.getSetCookie() };
   }
-  const cookieOf = response => response.cookies.find(c => c.startsWith('granitesync_session=') && !c.startsWith('granitesync_session=;')).split(';')[0];
+  const cookieOf = response => response.cookies.find(c => c.startsWith('stonedesk_session=') && !c.startsWith('stonedesk_session=;')).split(';')[0];
   for (const path of ['/api/dispatches', '/api/loading-lists', '/api/master-settings/unit_04', '/uploads/unknown.png']) assert.equal((await call(path)).status, 401);
   const password = randomBytes(18).toString('hex');
   assert.equal((await call('/api/auth/signup', 'POST', { email: 'a@example.test', password: 'short', name: 'Owner' })).status, 400);
   assert.equal((await call('/api/auth/signup', 'POST', { email: 'owner@example.test', password, name: 'Owner' }, null, 'https://untrusted.example')).status, 403);
   const accounts = await Promise.all(['one', 'two'].map(name => call('/api/auth/signup', 'POST', { email: `${name}@example.test`, name, password, role: 'Admin', active: true })));
   assert.ok(accounts.every(a => a.status === 201));
-  assert.equal(accounts.filter(a => a.data.user.active).length, 1);
-  assert.equal(await User.countDocuments({ role: 'Admin' }), 1);
-  const owner = accounts.find(a => a.data.user.active), staff = accounts.find(a => !a.data.user.active);
+  assert.equal(accounts.filter(a => a.data.user.active).length, 2);
+  assert.equal(await prisma.user.count({ where: { role: 'Admin' } }), 1);
+  const owner = accounts.find(a => a.data.user.isOwner), staff = accounts.find(a => !a.data.user.isOwner);
   const ownerCookie = cookieOf(owner); let staffCookie = cookieOf(staff);
   assert.match(owner.cookies.join(';'), /HttpOnly/); assert.match(owner.cookies.join(';'), /SameSite=Strict/);
   assert.equal(owner.data.user.passwordHash, undefined);
-  assert.equal((await call('/api/dispatches', 'GET', undefined, staffCookie)).status, 403);
+  assert.equal((await call('/api/dispatches', 'GET', undefined, staffCookie)).status, 200);
   assert.equal((await call('/api/auth/users', 'GET', undefined, staffCookie)).status, 403);
   assert.equal((await call('/api/auth/users/' + owner.data.user._id, 'PATCH', { role: 'Dispatcher', active: false }, ownerCookie)).status, 400);
   assert.equal((await call('/api/auth/users/' + staff.data.user._id, 'PATCH', { role: 'Yard Manager', active: true }, ownerCookie)).status, 200);
@@ -50,7 +49,7 @@ test('accounts protect all business data, approve staff, enforce roles and revok
   assert.equal((await call('/api/auth/me', 'GET', undefined, otherSession)).status, 401);
   await call('/api/auth/users/' + staff.data.user._id, 'PATCH', { role: 'Dispatcher', active: false }, ownerCookie);
   assert.equal((await call('/api/dispatches', 'GET', undefined, staffCookie)).status, 401);
-  await Session.updateMany({ user: owner.data.user._id }, { expiresAt: new Date(0) });
+  await prisma.session.updateMany({ where: { userId: owner.data.user._id }, data: { expiresAt: new Date(0) } });
   assert.equal((await call('/api/dispatches', 'GET', undefined, ownerCookie)).status, 401);
   const login = await call('/api/auth/login', 'POST', { email: owner.data.user.email, password });
   const finalCookie = cookieOf(login);

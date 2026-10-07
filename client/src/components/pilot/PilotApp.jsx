@@ -19,12 +19,23 @@ export default function PilotApp({ user, onLogout, onLanding, onOpenLoadingLists
   const [initialDraft, setInitialDraft] = useState(null), [query, setQuery] = useState('');
   const [error, setError] = useState(''), [historyError, setHistoryError] = useState('');
   const [busy, setBusy] = useState(true), [refreshing, setRefreshing] = useState(false), [updatedAt, setUpdatedAt] = useState(null);
+  const [nextCursor, setNextCursor] = useState(null);
   const admin = user.role === 'Admin', canFinalize = user.role !== 'Yard Manager';
   function navigate(next) { window.location.hash = next; setView(next); setError(''); window.scrollTo(0, 0); }
   async function refreshLoads() {
     setRefreshing(true);
-    try { setLoads(await request('/dispatches')); setHistoryError(''); setUpdatedAt(Date.now()); }
-    catch (err) { setHistoryError(err.message); } finally { setRefreshing(false); }
+    try {
+      const res = await request('/dispatches');
+      setLoads(res.data); setNextCursor(res.nextCursor); setHistoryError(''); setUpdatedAt(Date.now());
+    } catch (err) { setHistoryError(err.message); } finally { setRefreshing(false); }
+  }
+  async function loadMore() {
+    if (!nextCursor || refreshing) return;
+    setRefreshing(true);
+    try {
+      const res = await request(`/dispatches?cursor=${nextCursor}`);
+      setLoads(prev => [...prev, ...res.data]); setNextCursor(res.nextCursor);
+    } catch (err) { setHistoryError(err.message); } finally { setRefreshing(false); }
   }
   function load() {
     return request(settingsPath).then(data => { setSettings(data); return refreshLoads(); })
@@ -71,6 +82,6 @@ export default function PilotApp({ user, onLogout, onLanding, onOpenLoadingLists
   else if (current === 'load') content = <NewLoad key={initialDraft?.clientRequestId || 'recovery'} settings={settings} initialDraft={initialDraft} canFinalize={canFinalize} onBack={home} onSaved={saved} />;
   else if (current === 'bill') content = record && record._id === view.slice(5) ? <Suspense fallback={<p>{pick('Loading bill…', 'బిల్లు లోడ్ అవుతోంది…')}</p>}><BillView record={record} canFinalize={canFinalize} onChanged={saved} onBack={home} onResume={resume} /></Suspense> : <Button en="Back to dashboard" te="డ్యాష్‌బోర్డ్‌కు వెళ్ళండి" onClick={home} />;
   else if (current === 'settings') content = <AccountSettings user={user} navigate={navigate} onLogout={onLogout} onLoadingLists={onOpenLoadingLists} onLegacySettings={onOpenLegacySettings} onLanding={onLanding} />;
-  else content = <><ErrorMessage error={historyError} /><LoadHub key={current} loads={loads} view={current} query={query} onOpen={id => navigate(`bill/${id}`)} onNew={newLoad} onRefresh={refreshLoads} loading={refreshing} recovery={readDraft()} onContinue={() => { setInitialDraft(null); navigate('load'); }} onNavigate={navigate} updatedAt={updatedAt} /></>;
+  else content = <><ErrorMessage error={historyError} /><LoadHub key={current} loads={loads} view={current} query={query} onOpen={id => navigate(`bill/${id}`)} onNew={newLoad} onRefresh={refreshLoads} onLoadMore={loadMore} hasMore={!!nextCursor} loading={refreshing} recovery={readDraft()} onContinue={() => { setInitialDraft(null); navigate('load'); }} onNavigate={navigate} updatedAt={updatedAt} /></>;
   return <WorkspaceShell settings={settings} user={user} view={current} navigate={navigate} onNew={newLoad} onLogout={onLogout} query={query} setQuery={setQuery} attention={loads.filter(l => l.status === 'Draft').length}><ErrorMessage error={error} />{content}</WorkspaceShell>;
 }

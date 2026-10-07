@@ -105,7 +105,7 @@ export function generateDriverTransitSlip(dispatch, t) {
   doc.text(`${t('totalDispatchVolume')}: ${totalSqFt.toFixed(2)} ${t('sqFt')}`, 130, startY + 5);
 
   const safeSlipNumber = slipNumber.replace(/[^a-zA-Z0-9-]/g, '_');
-  const filename = `GraniteSync-Driver-Slip-${safeSlipNumber}.pdf`;
+  const filename = `StoneDesk-Driver-Slip-${safeSlipNumber}.pdf`;
 
   return { blob: doc.output('blob'), filename };
 }

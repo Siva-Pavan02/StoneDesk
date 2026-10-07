@@ -1,7 +1,7 @@
-# Product Requirements Document (PRD): GraniteSync
+# Product Requirements Document (PRD): StoneDesk
 
 ## 1. Product Overview
-GraniteSync modernizes B2B granite supply chain logistics. It provides a frictionless, mobile-optimized point-of-loading interface for quarry supervisors in Kadapa, India, to log outgoing inventory, calculate complex dimensional pricing, and share formatted invoices via WhatsApp.
+StoneDesk modernizes B2B granite supply chain logistics. It provides a frictionless, mobile-optimized point-of-loading interface for quarry supervisors in Kadapa, India, to log outgoing inventory, calculate complex dimensional pricing, and share formatted invoices via WhatsApp.
 
 ## 2. Target Audience & Environment
 * **Primary User:** Quarry Loading Supervisor.

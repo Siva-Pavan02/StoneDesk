@@ -1,6 +1,5 @@
 const { randomUUID } = require('node:crypto');
-const Dispatch = require('../models/Dispatch');
-const MasterSettings = require('../models/MasterSettings');
+const prisma = require('../utils/prisma');
 const calc = require('../utils/pilotCalculations');
 const { snapshot } = require('../utils/businessBranding');
 
@@ -17,89 +16,141 @@ function details(body) {
   const partyName = isPilot || body.partyName !== undefined ? calc.text(body.partyName, 'party name') : undefined;
   return { supervisor, logistics, date, partyName };
 }
+
 exports.createDraft = async (req, res, next) => {
   try {
     const clientRequestId = req.body.clientRequestId;
     if (clientRequestId !== undefined && (typeof clientRequestId !== 'string' || !/^[a-zA-Z0-9-]{8,80}$/.test(clientRequestId))) calc.bad('Invalid request ID');
-    if (clientRequestId) {
-      const existing = await Dispatch.findOne({ clientRequestId });
-      if (existing) return res.json(existing);
-    }
+    // Parallelize: check for existing dispatch + fetch settings simultaneously
+    const [existing, settings] = await Promise.all([
+      clientRequestId ? prisma.dispatch.findFirst({ where: { clientRequestId, organizationId: req.user.organizationId } }) : null,
+      prisma.masterSettings.findUnique({ where: { organizationId: req.user.organizationId } })
+    ]);
+    if (existing) return res.json(existing);
     const metadata = details(req.body);
     const inventory = calc.processInventory(req.body.inventory);
-    const settings = await MasterSettings.findOne({ quarryId: 'unit_04' });
-    if (inventory.some(g => g.measurementRows.length) && (!settings?.businessName || !settings.stoneRates.length)) calc.bad('Set up business and at least one product first');
+    if (inventory.some(g => g.measurementRows.length) && (!settings?.businessName || !settings.stoneRates || !settings.stoneRates.length)) calc.bad('Set up business and at least one product first');
     const fee = req.body.loadingAndRoyaltyFees ?? settings?.defaultRoyaltyFee ?? 0;
-    const dispatch = await Dispatch.create({ ...metadata, inventory,
-      ...(clientRequestId ? { clientRequestId } : {}),
-      dispatchSlipNumber: `GS-${randomUUID()}`,
-      summary: calc.totals(inventory, fee), status: 'Draft' });
+    const dispatch = await prisma.dispatch.create({
+      data: {
+        organizationId: req.user.organizationId,
+        ...metadata,
+        inventory,
+        ...(clientRequestId ? { clientRequestId } : {}),
+        dispatchSlipNumber: `GS-${randomUUID()}`,
+        summary: calc.totals(inventory, fee),
+        status: 'Draft'
+      }
+    });
     res.json(dispatch);
   } catch (err) {
-    if (err.code === 11000 && req.body.clientRequestId) {
+    if (err.code === 'P2002' && req.body.clientRequestId) {
       try {
-        const existing = await Dispatch.findOne({ clientRequestId: req.body.clientRequestId });
+        const existing = await prisma.dispatch.findFirst({ where: { clientRequestId: req.body.clientRequestId, organizationId: req.user.organizationId } });
         if (existing) return res.json(existing);
       } catch (lookupError) { return next(lookupError); }
     }
     next(err);
   }
 };
+
 exports.updateDraft = async (req, res, next) => {
   try {
-    const dispatch = await Dispatch.findById(req.params.id);
+    const dispatch = await prisma.dispatch.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
     if (!dispatch) return res.status(404).json({ error: 'Not found' });
     if (dispatch.status !== 'Draft') return res.status(400).json({ error: 'Only Draft can be modified' });
-    const merged = { ...dispatch.toObject(), ...req.body };
+    const merged = { ...dispatch, ...req.body };
+    if (dispatch.partyName === null && !Object.hasOwn(req.body, 'partyName')) delete merged.partyName;
     const metadata = details(merged);
     const inventory = calc.processInventory(merged.inventory);
     const fee = req.body.loadingAndRoyaltyFees ?? dispatch.summary.loadingAndRoyaltyFees;
-    const updated = await Dispatch.findOneAndUpdate({ _id: dispatch._id, status: 'Draft' },
-      { $set: { ...metadata, inventory, summary: calc.totals(inventory, fee) } }, { new: true, runValidators: true });
-    if (!updated) return res.status(409).json({ error: 'Load was already finalized' });
-    res.json(updated);
+
+    const updateResult = await prisma.dispatch.updateMany({
+      where: { id: dispatch.id, status: 'Draft', updatedAt: dispatch.updatedAt },
+      data: { ...metadata, inventory, summary: calc.totals(inventory, fee) }
+    });
+    if (updateResult.count === 0) return res.status(409).json({ error: 'Load changed. Refresh and try again.' });
+
+    res.json(await prisma.dispatch.findUnique({ where: { id: dispatch.id } }));
   } catch (err) { next(err); }
 };
+
 exports.finalizeDispatch = async (req, res, next) => {
   try {
-    const dispatch = await Dispatch.findById(req.params.id);
+    // Parallelize: fetch dispatch and settings simultaneously
+    const [dispatch, settings] = await Promise.all([
+      prisma.dispatch.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } }),
+      prisma.masterSettings.findUnique({ where: { organizationId: req.user.organizationId } })
+    ]);
     if (!dispatch) return res.status(404).json({ error: 'Not found' });
     if (dispatch.status !== 'Draft') return res.json(dispatch);
     const inventory = calc.processInventory(dispatch.inventory);
-    const settings = await MasterSettings.findOne({ quarryId: 'unit_04' });
     const summary = calc.totals(inventory, dispatch.summary.loadingAndRoyaltyFees);
     const businessSnapshot = await snapshot(settings);
-    const updated = await Dispatch.findOneAndUpdate({ _id: dispatch._id, status: 'Draft' },
-      { $set: { inventory, summary, businessSnapshot, status: 'Dispatched' } }, { new: true, runValidators: true });
-    res.json(updated || await Dispatch.findById(dispatch._id));
+
+    const updateResult = await prisma.dispatch.updateMany({
+      where: { id: dispatch.id, status: 'Draft', updatedAt: dispatch.updatedAt },
+      data: { inventory, summary, businessSnapshot, status: 'Dispatched' }
+    });
+
+    if (!updateResult.count) return res.status(409).json({ error: 'Load changed. Refresh and try again.' });
+    res.json(await prisma.dispatch.findUnique({ where: { id: dispatch.id } }));
   } catch (err) { next(err); }
 };
+
 exports.updateStatus = async (req, res, next) => {
   try {
     if (req.body.status !== 'Delivered') return res.status(400).json({ error: 'Invalid status transition' });
-    const dispatch = await Dispatch.findOneAndUpdate({ _id: req.params.id, status: 'Dispatched' }, { $set: { status: 'Delivered' } }, { new: true });
-    if (!dispatch) return res.status(400).json({ error: 'Invalid status transition' });
-    res.json(dispatch);
+    const updateResult = await prisma.dispatch.updateMany({
+      where: { id: req.params.id, status: 'Dispatched', organizationId: req.user.organizationId },
+      data: { status: 'Delivered' }
+    });
+    if (updateResult.count === 0) return res.status(400).json({ error: 'Invalid status transition' });
+    res.json(await prisma.dispatch.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } }));
   } catch (err) { next(err); }
 };
+
 exports.getById = async (req, res, next) => {
   try {
-    const dispatch = await Dispatch.findById(req.params.id);
+    const dispatch = await prisma.dispatch.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
     if (!dispatch) return res.status(404).json({ error: 'Not found' });
     res.json(dispatch);
   } catch (err) { next(err); }
 };
+
 exports.getBySlip = async (req, res, next) => {
   try {
-    const dispatch = await Dispatch.findOne({ dispatchSlipNumber: req.params.dispatchSlipNumber });
+    const dispatch = await prisma.dispatch.findFirst({ where: { dispatchSlipNumber: req.params.dispatchSlipNumber, organizationId: req.user.organizationId } });
     if (!dispatch) return res.status(404).json({ error: 'Not found' });
     res.json(dispatch);
   } catch (err) { next(err); }
 };
+
+const LIST_FIELDS = {
+  id: true, dispatchSlipNumber: true, date: true, supervisor: true,
+  partyName: true, logistics: true, status: true, summary: true,
+  createdAt: true, updatedAt: true
+};
+const MAX_LIST_LIMIT = 50;
+const DEFAULT_LIST_LIMIT = 20;
+
 exports.list = async (req, res, next) => {
   try {
-    const filter = {};
+    const filter = { organizationId: req.user.organizationId };
+    if (req.query.status && !['Draft', 'Dispatched', 'Delivered'].includes(req.query.status)) calc.bad('Invalid status');
     if (req.query.status) filter.status = req.query.status;
-    res.json(await Dispatch.find(filter).select('-businessSnapshot.logoDataUrl').sort({ createdAt: -1 }));
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || DEFAULT_LIST_LIMIT, 1), MAX_LIST_LIMIT);
+    const cursor = req.query.cursor;
+    const dispatches = await prisma.dispatch.findMany({
+      where: filter,
+      select: LIST_FIELDS,
+      orderBy: { createdAt: 'desc' },
+      take: limit + 1,
+      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {})
+    });
+    const hasMore = dispatches.length > limit;
+    if (hasMore) dispatches.pop();
+    const nextCursor = hasMore ? dispatches[dispatches.length - 1].id : null;
+    res.json({ data: dispatches, nextCursor });
   } catch (err) { next(err); }
 };

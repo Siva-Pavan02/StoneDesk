@@ -3,16 +3,16 @@ import * as XLSX from 'xlsx';
 import { assertBill, billRows, subtotals } from './billData.js';
 
 function filename(dispatch, kind, ext) {
-  return `GraniteSync-${kind}-${String(dispatch.dispatchSlipNumber || 'Unknown').replace(/[^a-zA-Z0-9-]/g, '_')}.${ext}`;
+  return `StoneDesk-${kind}-${String(dispatch.dispatchSlipNumber || 'Unknown').replace(/[^a-zA-Z0-9-]/g, '_')}.${ext}`;
 }
 export const buyerPdf = dispatch => ledgerPdf(dispatch);
 export const driverPdf = dispatch => ledgerPdf(dispatch, true);
 export function buyerExcel(dispatch) {
   assertBill(dispatch, 'Excel invoice');
-  const business = dispatch.businessSnapshot || { businessName: 'GraniteSync' };
+  const business = dispatch.businessSnapshot || { businessName: 'StoneDesk' };
   const rows = billRows(dispatch);
   const data = [
-    [business.businessName || 'GraniteSync'], [business.address || '', business.phone || ''], ['Buyer load bill'],
+    [business.businessName || 'StoneDesk'], [business.address || '', business.phone || ''], ['Buyer load bill'],
     ['Slip', dispatch.dispatchSlipNumber, 'Date', new Date(dispatch.date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })],
     ['Party', dispatch.partyName || '', 'Truck', dispatch.logistics?.truckNumber || ''],
     ['Destination', dispatch.logistics?.buyerDestination || '', 'Supervisor', dispatch.supervisor || ''], [],

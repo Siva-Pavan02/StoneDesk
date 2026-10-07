@@ -9,7 +9,7 @@ export function generateLoadingListExcel(listData) {
   // ----------------------------------------------------
   const ws1Data = [];
   
-  ws1Data.push(["GraniteSync - Supervisor Loading List"]);
+  ws1Data.push(["StoneDesk - Supervisor Loading List"]);
   ws1Data.push([]);
   ws1Data.push(["Loading List Number", listData.loadingListNumber || 'N/A']);
   ws1Data.push(["Date", listData.date || 'N/A']);

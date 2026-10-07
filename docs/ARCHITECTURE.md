@@ -2,7 +2,7 @@
 
 ## 1. Directory Structure
 ```text
-/granitesync
+/stonedesk
   /client                 # Vite + React + Tailwind v4
     /src
       /components         # Modular UI (LogisticsCard, RapidEntryRow)

@@ -17,8 +17,9 @@ test('fraction entry and grouping quantity rows', () => {
 });
 test('draft recovery tolerates corrupt and unavailable storage', () => {
   assert.equal(readDraft({ getItem: () => '{broken' }), null);
+  for (const rows of [[null], [{lengthFt:3}], [42]]) assert.equal(readDraft({ getItem: () => JSON.stringify({clientRequestId:'corrupt',rows}) }), null);
   assert.equal(readDraft({ getItem: () => { throw new Error('Unavailable'); } }), null);
-  assert.deepEqual(readDraft({ getItem: () => JSON.stringify({ clientRequestId: 'request-123', rows: [row], entry: { length: '4½' } }) }).entry, { length: '4½' });
+  assert.deepEqual(readDraft({ getItem: () => JSON.stringify({ clientRequestId: 'request-123', rows: [{ ...row, ratePerSqFt: 40.5 }], entry: { length: '4½' } }) }).entry, { length: '4½' });
 });
 test('Excel preserves numeric values and frozen business identity', async () => {
   const output = buyerExcel(record);

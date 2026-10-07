@@ -1,12 +1,12 @@
 export async function getMasterSettings(quarryId) {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
   const res = await fetch(`${baseUrl}/master-settings/${quarryId}`, { credentials: 'include' });
   if (!res.ok) throw new Error('Failed to fetch master settings');
   return res.json();
 }
 
 function getBaseUrl() {
-  return import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+  return import.meta.env.VITE_API_BASE_URL || '/api';
 }
 
 export async function addTruck(quarryId, truckNumber) {

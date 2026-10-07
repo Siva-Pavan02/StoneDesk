@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config();
+require('dotenv').config({ path: require('node:path').join(__dirname, '.env') });
 const connectDB = require('./config/db');
 
 const masterSettingsRoutes = require('./routes/masterSettingsRoutes');
@@ -10,6 +10,14 @@ const auth = require('./utils/auth');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const isProduction = process.env.NODE_ENV === 'production';
+
+app.disable('x-powered-by');
+
+if (isProduction) {
+  if (!process.env.MONGODB_URI) throw new Error('MONGODB_URI must be set in production');
+  if (!process.env.APP_ORIGIN) throw new Error('APP_ORIGIN must be set in production');
+}
 
 if (process.env.NODE_ENV !== 'test') {
   connectDB();
@@ -51,7 +59,8 @@ app.use((err, req, res, next) => {
 });
 
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, process.env.HOST || '127.0.0.1', () => {
+  const host = process.env.HOST || (isProduction ? '0.0.0.0' : '127.0.0.1');
+  app.listen(PORT, host, () => {
     console.log(`Server running on port ${PORT}`);
   });
 }

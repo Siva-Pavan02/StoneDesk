@@ -12,11 +12,7 @@ GraniteSync is a mobile-first B2B digital dispatch and ledger application design
 * MongoDB Atlas Cluster (Connection URI required)
 
 ## Environment Variables
-Create a `.env` file in the `server/` directory:
-```env
-PORT=5000
-MONGODB_URI=mongodb+srv://<username>:<password>@<cluster-url>/granitesync?appName=GraniteSync
-```
+Copy `server/.env.example` to `server/.env` and fill in the MongoDB URI and the public frontend origin. Never commit `.env` files or put secrets in client-side variables. The client uses `/api` by default; set `VITE_API_BASE_URL` at build time only when the API is hosted on a different origin. Vite embeds `VITE_*` values in the public bundle, so they must not contain credentials or secrets.
 
 ## Local Development Setup
 

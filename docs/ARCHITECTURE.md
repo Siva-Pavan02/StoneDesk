@@ -9,21 +9,22 @@
       /context            # MasterDataContext (Settings state)
   /server                 # Node.js + Express
     /config
-      db.js               # Mongoose connection logic
-    /models               # Database schemas
+      prisma.js               # Prisma connection logic
+    /prisma
+      schema.prisma           # Database schemas
     /routes               # API endpoints
 ```
 
-## 2. Database Schema (MongoDB / Mongoose)
+## 2. Database Schema (PostgreSQL / Prisma)
 
-### MasterSettings Collection
+### MasterSettings Table
 Maintains dynamic dropdowns and defaults.
 * `quarryId` (String, unique)
 * `savedTrucks` (Array of Strings)
 * `savedDestinations` (Array of Strings)
 * `stoneRates` (Array of Objects: `stoneType`, `finish`, `defaultRate`)
 
-### Dispatch Collection
+### Dispatch Table
 Maintains immutable financial records of every loaded truck.
 * `dispatchSlipNumber` (String, unique, indexed)
 * `date` (Date, indexed)

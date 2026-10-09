@@ -17,6 +17,7 @@ model User {
   organization   MasterSettings @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name           String    @db.VarChar(120)
   email          String    @unique @db.VarChar(254)
+  supabaseUserId String?   @unique @db.Uuid
   passwordHash   String
   passwordSalt   String
   role           Role      @default(Dispatcher)

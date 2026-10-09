@@ -1,0 +1,58 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const database = require('./database');
+const app = require('../server');
+
+test('Google identities require verification, explicit linking and tenant-safe onboarding', async t => {
+  await database.setup(t);
+  process.env.SUPABASE_URL = 'https://auth.example.test';
+  process.env.SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_test';
+  process.env.UPSTASH_REDIS_REST_URL = '';
+  process.env.UPSTASH_REDIS_REST_TOKEN = '';
+  const realFetch = global.fetch;
+  let provider = { id: 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa', email: 'owner@example.test', email_confirmed_at: new Date().toISOString(), identities: [] };
+  let reject = false;
+  global.fetch = async (url, options) => {
+    if (!String(url).startsWith(process.env.SUPABASE_URL)) return realFetch(url, options);
+    if (reject) return Response.json({}, { status: 401 });
+    return Response.json(String(url).includes('/token?') ? { access_token: 'test-google-access-token-long-enough' } : provider);
+  };
+  t.after(() => { global.fetch = realFetch; });
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const call = async (path, body) => {
+    const response = await realFetch(`http://127.0.0.1:${server.address().port}/api/auth${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    return { status: response.status, body: await response.json(), cookie: response.headers.get('set-cookie') };
+  };
+  const password = 'Disposable-test-password-2026';
+  const owner = await call('/signup', { email: provider.email, password, name: 'Owner', businessName: 'Test Yard', createOrganization: true });
+  assert.equal(owner.status, 201);
+  const exchange = () => call('/google/exchange', { code: 'test-code', verifier: 'v'.repeat(43), email: 'attacker@example.test', role: 'Admin' });
+  assert.equal((await exchange()).status, 401, 'unverified provider rejected');
+  provider.identities = [{ provider: 'google', identity_data: { email: provider.email, email_verified: true } }];
+  let result = await exchange();
+  assert.equal(result.body.needsLink, true);
+  assert.equal(result.cookie, null);
+  assert.equal((await call('/google/link', { googleAccessToken: result.body.accessToken, password: 'wrong' })).status, 401);
+  const linked = await call('/google/link', { googleAccessToken: result.body.accessToken, password });
+  assert.equal(linked.status, 200);
+  assert.match(linked.cookie, /HttpOnly/i);
+  result = await exchange();
+  assert.equal(result.body.user.id, owner.body.user.id);
+  assert.equal(result.body.accessToken, undefined);
+  await database.prisma.user.update({ where: { id: owner.body.user.id }, data: { active: false } });
+  assert.equal((await exchange()).status, 403);
+  await database.prisma.user.update({ where: { id: owner.body.user.id }, data: { active: true } });
+  provider = { ...provider, id: 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb', email: 'member@example.test', identities: [{ provider: 'google', identity_data: { email: 'member@example.test', email_verified: true } }] };
+  result = await exchange();
+  assert.equal(result.body.needsSignup, true);
+  const joined = await call('/signup', { googleAccessToken: result.body.accessToken, name: 'Member', organizationId: owner.body.organizationCode, email: 'forged@example.test', role: 'Admin' });
+  assert.equal(joined.status, 201);
+  assert.equal(joined.body.user.email, 'member@example.test');
+  assert.equal(joined.body.user.role, 'Dispatcher');
+  assert.equal(joined.body.user.organizationId, owner.body.user.organizationId);
+  reject = true;
+  assert.equal((await exchange()).status, 401);
+  assert.equal((await call('/google/exchange', { code: 'code', verifier: 'short' })).status, 400);
+});

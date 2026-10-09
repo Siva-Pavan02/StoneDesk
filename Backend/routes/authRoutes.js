@@ -8,6 +8,42 @@ const { organizationCode } = require('../utils/organizationCode');
 const { sendPasswordResetEmail } = require('../utils/email');
 const { auditLog } = require('../utils/auditLog');
 const router = express.Router();
+const googleAuth = require('../utils/googleAuth');
+
+router.get('/google/config', (req, res, next) => {
+  try { res.json({ url: googleAuth.configuration().url }); } catch (err) { next(err); }
+});
+router.post('/google/exchange', auth.authLimit, async (req, res, next) => {
+  try {
+    const identity = await googleAuth.exchange(req.body.code, req.body.verifier);
+    const user = await prisma.user.findUnique({ where: { supabaseUserId: identity.supabaseUserId } });
+    if (!user) {
+      const existing = await prisma.user.findUnique({ where: { email: identity.email } });
+      return res.json({ needsSignup: !existing, needsLink: Boolean(existing), accessToken: identity.accessToken, email: identity.email });
+    }
+    if (!user.active) return res.status(403).json({ error: 'Your account access has been paused. Contact your administrator.' });
+    await auth.startSession(req, res, user);
+    await auditLog('user.google_login', req, { userId: user.id });
+    res.json({ user: auth.publicUser(user) });
+  } catch (err) { next(err); }
+});
+router.post('/google/link', auth.authLimit, async (req, res, next) => {
+  try {
+    const identity = await googleAuth.verifiedGoogleUser(req.body.googleAccessToken);
+    const user = await prisma.user.findUnique({ where: { email: identity.email } });
+    const password = req.body.password;
+    if (typeof password !== 'string' || password.length > 128 || !await auth.verifyPassword(password, user)) return res.status(401).json({ error: 'Your StoneDesk password is incorrect.' });
+    if (!user.active) return res.status(403).json({ error: 'Your account access has been paused. Contact your administrator.' });
+    if (user.supabaseUserId && user.supabaseUserId !== identity.supabaseUserId) return res.status(409).json({ error: 'This account already has a different Google identity linked.' });
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: user.id }, data: { supabaseUserId: identity.supabaseUserId } }),
+      prisma.session.deleteMany({ where: { userId: user.id } })
+    ]);
+    await auth.startSession(req, res, user);
+    await auditLog('user.google_link', req, { userId: user.id });
+    res.json({ user: auth.publicUser(user) });
+  } catch (err) { next(err); }
+});
 
 
 const RESET_TOKEN_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
@@ -30,7 +66,10 @@ function hashToken(token) {
 }
 router.post('/signup', auth.authLimit, async (req, res, next) => {
   try {
-    const { email, password } = credentials(req.body);
+    const google = req.body.googleAccessToken ? await googleAuth.verifiedGoogleUser(req.body.googleAccessToken) : null;
+    const { email, password } = google
+      ? { email: google.email, password: randomBytes(48).toString('base64url') }
+      : credentials(req.body);
     const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
     const organizationId = typeof req.body.organizationId === 'string' ? req.body.organizationId.trim() : '';
     const createOrganization = req.body.createOrganization === true || req.body.createOrganization === 'true';
@@ -47,7 +86,7 @@ router.post('/signup', auth.authLimit, async (req, res, next) => {
 
     const passwordSalt = randomBytes(16).toString('hex');
     const passwordHash = await auth.passwordHash(password, passwordSalt);
-    const fields = { email, name, passwordSalt, passwordHash, active: true };
+    const fields = { email, name, passwordSalt, passwordHash, active: true, ...(google ? { supabaseUserId: google.supabaseUserId } : {}) };
     
     let user;
     if (createOrganization) {

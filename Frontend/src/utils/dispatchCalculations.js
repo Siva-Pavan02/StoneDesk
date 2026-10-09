@@ -1,17 +1,13 @@
 /**
  * dispatchCalculations.js
- * 
- * Rounding strategy: Standard half-up rounding to 2 decimal places
- * using Math.round(value * 100) / 100 to avoid floating point artifacts.
+ *
+ * Rounding strategy: shared half-up round2 from loadMath.js.
  */
-
-function round2(val) {
-  return Math.round(val * 100) / 100;
-}
+import { round2 } from './loadMath.js';
 
 function isValidDimension(val) {
   const n = Number(val);
-  return Number.isFinite(n) && n >= 0 && String(val).trim() !== '';
+  return Number.isFinite(n) && n > 0 && String(val).trim() !== '';
 }
 
 export function calculatePiece(lengthFt, widthFt) {

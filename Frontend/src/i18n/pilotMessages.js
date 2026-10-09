@@ -5,6 +5,7 @@ const messages = {
   'Enter a valid rate': 'సరైన ధరను నమోదు చేయండి',
   'Fill all load details before saving': 'సేవ్ చేయడానికి ముందు అన్ని లోడ్ వివరాలను నమోదు చేయండి',
   'Add at least one measurement row': 'కనీసం ఒక కొలత వరుసను జోడించండి',
+  'Enter a row number from 1 to 15': '1 నుండి 15 మధ్య వరుస సంఖ్య నమోదు చేయండి',
   'Enter valid loading/royalty charges': 'సరైన లోడింగ్ / రాయల్టీ ఛార్జీలను నమోదు చేయండి',
   'Add the measurement row you are entering before reviewing': 'తనిఖీ చేయడానికి ముందు నమోదు చేస్తున్న వరుసను జోడించండి',
   'Add the current measurement row before saving': 'సేవ్ చేయడానికి ముందు ప్రస్తుత వరుసను జోడించండి',

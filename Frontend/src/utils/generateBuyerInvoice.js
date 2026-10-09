@@ -2,6 +2,7 @@ import { jsPDF } from "jspdf";
 import { buyerPdf } from './pilotExports.js';
 import autoTable from "jspdf-autotable";
 import { decimalToFraction } from './fractionParser.js';
+import { round2 } from './loadMath.js';
 
 function arrayBufferToBase64(buffer) {
   let binary = '';
@@ -91,13 +92,14 @@ export async function generateBuyerInvoice(dispatch, t) {
   if (dispatch.inventory) {
     dispatch.inventory.forEach((group) => {
       const piecesCount = group.pieces.length;
-      let groupSqFt = 0;
+      let rawSqFt = 0;
       group.pieces.forEach(p => {
-        groupSqFt += p.sqFt !== undefined ? p.sqFt : (p.lengthFt * p.widthFt);
+        rawSqFt += p.lengthFt * p.widthFt;
       });
+      const groupSqFt = round2(rawSqFt);
       
       const rateVal = group.ratePerSqFt || 0;
-      const amountVal = group.lineTotal !== undefined ? group.lineTotal : (groupSqFt * rateVal);
+      const amountVal = group.lineTotal !== undefined ? group.lineTotal : round2(rawSqFt * rateVal);
       
       tableData.push([
         group.stoneType,

@@ -1,6 +1,7 @@
 import { ledgerPdf } from './ledgerPdf.js';
 import * as XLSX from 'xlsx';
-import { assertBill, billRows, subtotals } from './billData.js';
+import { assertBill, billRows, rowGroups, rowOverview } from './billData.js';
+import { round2 } from './loadMath.js';
 
 function filename(dispatch, kind, ext) {
   return `StoneDesk-${kind}-${String(dispatch.dispatchSlipNumber || 'Unknown').replace(/[^a-zA-Z0-9-]/g, '_')}.${ext}`;
@@ -10,30 +11,41 @@ export const driverPdf = dispatch => ledgerPdf(dispatch, true);
 export function buyerExcel(dispatch) {
   assertBill(dispatch, 'Excel invoice');
   const business = dispatch.businessSnapshot || { businessName: 'StoneDesk' };
-  const rows = billRows(dispatch);
+  const groups = rowGroups(billRows(dispatch)), overview = rowOverview(groups);
+  const whole = new Set(); // cells that hold counts rather than areas or amounts
   const data = [
-    [business.businessName || 'StoneDesk'], [business.address || '', business.phone || ''], ['Buyer load bill'],
-    ['Slip', dispatch.dispatchSlipNumber, 'Date', new Date(dispatch.date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })],
-    ['Party', dispatch.partyName || '', 'Truck', dispatch.logistics?.truckNumber || ''],
+    [business.businessName || 'StoneDesk'], [business.address || '', business.phone || ''], ['Buyer invoice'],
+    ['Invoice No.', dispatch.dispatchSlipNumber, 'Invoice Date', new Date(dispatch.date).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })],
+    ['Party Name', dispatch.partyName || '', 'Lorry No.', dispatch.logistics?.truckNumber || ''],
     ['Destination', dispatch.logistics?.buyerDestination || '', 'Supervisor', dispatch.supervisor || ''], [],
-    ['Product', 'Finish', 'Type', 'Length (ft)', 'Width (ft)', 'Quantity', 'Sq ft', 'Rate (INR)', 'Amount (INR)'],
-    ...rows.map(r => [r.stoneType, r.finish, r.category, r.lengthFt, r.widthFt, r.quantity, r.sqFt, r.ratePerSqFt, r.lineTotal ?? 'See subtotal']), []
+    ['Row', 'S.No.', 'Type', 'L (ft)', 'W (ft)', 'Qty', 'Area (sq ft)', 'Amount (INR)']
   ];
-  if (dispatch.inventory.some(g => g.measurementRows?.length)) {
-    data.push(['Product subtotals', 'Finish', 'Type', '', '', 'Quantity', 'Sq ft', 'Rate (INR)', 'Amount (INR)']);
-    for (const g of subtotals(rows)) data.push([g.stoneType, g.finish, g.category, '', '', g.quantity, g.sqFt, g.ratePerSqFt, g.lineTotal]);
-  } else {
-    for (const g of dispatch.inventory) data.push([g.stoneType, g.finish, 'Stored subtotal', '', '', g.pieces.length, g.totalSqFt ?? g.pieces.reduce((n, p) => n + p.sqFt, 0), g.ratePerSqFt, g.lineTotal]);
+  const add = (row, counts = []) => { counts.forEach(c => whole.add(`${data.length},${c}`)); data.push(row); };
+  for (const g of groups) {
+    for (const [type, lines, totals, label] of [['', g.regularLines, g.regular, 'Regular Subtotal'], ['Top', g.topLines, g.top, 'Top Subtotal']]) {
+      lines.forEach((l, i) => add([g.rowNo, i + 1, type, l.lengthFt, l.widthFt, l.quantity, l.sqFt, l.lineTotal || 0], [0, 1, 5]));
+      if (lines.length) add([g.rowNo, '', label, '', '', totals.quantity, totals.sqFt, totals.amount], [0, 5]);
+    }
+    add([g.rowNo, '', `Row ${g.rowNo} Total`, '', '', g.total.quantity, g.total.sqFt, g.total.amount], [0, 5]);
+    add([]);
   }
-  const s = dispatch.summary;
-  data.push([], ['Total pieces', s.totalPieces ?? rows.reduce((n, r) => n + r.quantity, 0)], ['Total square feet', s.totalDispatchVolumeSqFt],
-    ['Material amount', s.baseMaterialTotal], ['Loading / royalty', s.loadingAndRoyaltyFees], ['Net payable', s.netBillableAmount]);
+  add(['ORDER SUMMARY']);
+  add(['Row', 'Pieces', 'Area (sq ft)', 'Top (sq ft)', 'Total (sq ft)', 'Amount (INR)']);
+  for (const g of groups) add([`Row ${g.rowNo}`, g.total.quantity, g.regular.sqFt, g.top.sqFt, g.total.sqFt, g.total.amount], [1]);
+  add(['Total', overview.pieces, overview.regularSqFt, overview.topSqFt, overview.totalSqFt, overview.totalAmount], [1]);
+  const s = dispatch.summary, topAmount = round2(overview.topAmount);
+  add([]);
+  add(['PAYMENT SUMMARY']);
+  add(['Material Amount', round2(s.baseMaterialTotal - topAmount)]);
+  add(['Top Material Amount', topAmount]);
+  add(['Loading / Royalty', s.loadingAndRoyaltyFees]);
+  add(['Net payable', s.netBillableAmount]);
   const sheet = XLSX.utils.aoa_to_sheet(data);
-  sheet['!cols'] = [24, 18, 14, 12, 12, 10, 14, 16, 18].map(wch => ({ wch }));
+  sheet['!cols'] = [22, 14, 16, 12, 12, 10, 16, 16].map(wch => ({ wch }));
   const range = XLSX.utils.decode_range(sheet['!ref']);
-  for (let r = 8; r <= range.e.r; r++) for (let c = 0; c <= range.e.c; c++) {
+  for (let r = 7; r <= range.e.r; r++) for (let c = 0; c <= range.e.c; c++) {
     const cell = sheet[XLSX.utils.encode_cell({ r, c })];
-    if (cell?.t === 'n') cell.z = c === 5 ? '0' : '#,##0.00';
+    if (cell?.t === 'n') cell.z = whole.has(`${r},${c}`) ? '0' : '#,##0.00';
   }
   const book = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(book, sheet, 'Buyer Invoice');
   return { blob: new Blob([XLSX.write(book, { bookType: 'xlsx', type: 'array' })], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename: filename(dispatch, 'Buyer-Invoice', 'xlsx') };

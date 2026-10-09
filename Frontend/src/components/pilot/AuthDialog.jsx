@@ -27,9 +27,9 @@ export default function AuthDialog({ mode, onClose, onSignedIn, onMode }) {
     catch (err) { setError(err.message); } finally { setBusy(false); }
   }
   
-  return <dialog ref={dialog} className="app-dialog pilot" aria-labelledby="auth-title" onCancel={e => { if (busy) e.preventDefault(); else onClose(); }}>
-    <div className="p-6"><div className="flex items-center justify-between gap-3"><p className="eyebrow">STONEDESK</p><button type="button" className="text-button" disabled={busy} onClick={onClose}>{pick('Close', 'మూసివేయండి')}</button></div>
-      <h2 id="auth-title" className="mt-3 text-2xl font-bold">{signup ? pick('Set up your account', 'మీ ఖాతా సృష్టించండి') : pick('Welcome back', 'తిరిగి స్వాగతం')}</h2>
+  return <dialog ref={dialog} className="app-dialog pilot auth-screen" aria-labelledby="auth-title" onCancel={e => { if (busy) e.preventDefault(); else onClose(); }}>
+    <div className="p-6 text-sm"><div className="action-row flex items-center justify-between gap-3"><p className="eyebrow">STONEDESK</p><button type="button" className="text-button min-h-11 px-3" disabled={busy} onClick={onClose}>{pick('Close', 'మూసివేయండి')}</button></div>
+      <h2 id="auth-title" className="screen-heading mt-3 text-2xl font-semibold">{signup ? pick('Set up your account', 'మీ ఖాతా సృష్టించండి') : pick('Welcome back', 'తిరిగి స్వాగతం')}</h2>
       
       {signup && (
         <div className="mt-4 mb-2 grid gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
@@ -58,11 +58,11 @@ export default function AuthDialog({ mode, onClose, onSignedIn, onMode }) {
         {signup && (createOrganization ? <><Field name="businessName" en="Business name" te="వ్యాపారం పేరు" required maxLength={120} autoComplete="organization" /><p className="text-sm text-gray-600">{pick('We will create a short organization ID for your team to join.', 'మీ బృందం చేరడానికి చిన్న సంస్థ ఐడీని సృష్టిస్తాము.')}</p></> : <Field name="organizationId" en="Organization ID" te="సంస్థ ఐడీ" required maxLength={50} pattern="[a-zA-Z0-9-]+" autoCapitalize="characters" autoCorrect="off" spellCheck={false} placeholder="STONE-YARD-7K2M4N" title={pick('Enter the ID shared by your administrator', 'మీ అడ్మిన్ పంచుకున్న ఐడీని నమోదు చేయండి')} />)}
         <Field name="email" en="Email address" te="ఇమెయిల్ చిరునామా" type="email" autoComplete="username" required maxLength={254} />
         <Field name="password" en="Password" te="పాస్‌వర్డ్" type={showPassword ? 'text' : 'password'} autoComplete={signup ? 'new-password' : 'current-password'} minLength={12} maxLength={128} required />
-        <label className="flex min-h-12 items-center gap-3"><input type="checkbox" className="h-5 w-5 accent-teal-800" checked={showPassword} onChange={e => setShowPassword(e.target.checked)} />{pick('Show password', 'పాస్‌వర్డ్ చూపండి')}</label>
+        <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" className="h-5 w-5 accent-teal-800" checked={showPassword} onChange={e => setShowPassword(e.target.checked)} />{pick('Show password', 'పాస్‌వర్డ్ చూపండి')}</label>
         {signup && <p className="text-sm text-gray-700">{pick('Use at least 12 characters.', 'కనీసం 12 అక్షరాలు ఉపయోగించండి.')}</p>}
-        <Button primary type="submit" className="w-full" disabled={busy} en={busy ? 'Please wait…' : signup ? createOrganization ? 'Create organization' : 'Join organization' : 'Log in'} te={busy ? 'దయచేసి వేచి ఉండండి…' : signup ? createOrganization ? 'సంస్థ సృష్టించండి' : 'సంస్థలో చేరండి' : 'లాగిన్'} />
+        <div className="action-row"><Button primary type="submit" className="w-full" disabled={busy} en={busy ? 'Please wait…' : signup ? createOrganization ? 'Create organization' : 'Join organization' : 'Log in'} te={busy ? 'దయచేసి వేచి ఉండండి…' : signup ? createOrganization ? 'సంస్థ సృష్టించండి' : 'సంస్థలో చేరండి' : 'లాగిన్'} /></div>
       </form>
-      <button className="text-button mt-3 w-full underline underline-offset-4" disabled={busy} onClick={() => onMode(signup ? 'login' : 'signup')}>{signup ? pick('Already have an account? Log in', 'ఖాతా ఉందా? లాగిన్ అవ్వండి') : pick('New here? Create an account', 'కొత్తవారా? ఖాతా సృష్టించండి')}</button>
+      <button type="button" className="text-button mt-3 min-h-11 w-full text-sm underline underline-offset-4" disabled={busy} onClick={() => onMode(signup ? 'login' : 'signup')}>{signup ? pick('Already have an account? Log in', 'ఖాతా ఉందా? లాగిన్ అవ్వండి') : pick('New here? Create an account', 'కొత్తవారా? ఖాతా సృష్టించండి')}</button>
       <p className="mt-4 border-t border-gray-200 pt-4 text-sm leading-relaxed text-gray-600">{pick('Google and Phone OTP are not connected yet. Email delivery and password-reset emails are not configured.', 'Google మరియు ఫోన్ OTP ఇంకా అందుబాటులో లేవు. ఇమెయిల్ పంపడం మరియు పాస్‌వర్డ్ రీసెట్ ఇమెయిల్స్ ఇంకా అమర్చలేదు.')}</p>
     </div>
   </dialog>;

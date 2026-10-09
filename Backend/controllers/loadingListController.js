@@ -1,6 +1,7 @@
 const prisma = require('../utils/prisma');
 const { randomUUID } = require('node:crypto');
 const { text, number, bad } = require('../utils/pilotCalculations');
+const { round2 } = require('../utils/dispatchCalculations');
 function fields(body) {
   const data = {};
   for (const key of ['supervisor', 'buyerDestination', 'stoneType', 'finish']) data[key] = text(body[key], key);
@@ -18,7 +19,7 @@ function fields(body) {
       if (!piece || typeof piece !== "object") bad("Invalid piece");
       const lengthFt = number(piece.lengthFt, 'length'), widthFt = number(piece.widthFt, 'width');
       if (lengthFt <= 0 || widthFt <= 0) bad('Invalid dimensions');
-      return { lengthFt, widthFt, sqFt: number(lengthFt * widthFt, 'area'), lengthDisplay: String(lengthFt), widthDisplay: String(widthFt) };
+      return { lengthFt, widthFt, sqFt: round2(number(lengthFt * widthFt, 'area')), lengthDisplay: String(lengthFt), widthDisplay: String(widthFt) };
     });
     const loadedQuantity = row.loadedQuantity === undefined ? loadedPieces.length : number(row.loadedQuantity, 'loaded quantity');
     if (!Number.isSafeInteger(loadedQuantity)) bad('Invalid loaded quantity');

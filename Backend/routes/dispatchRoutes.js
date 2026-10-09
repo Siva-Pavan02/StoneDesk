@@ -5,6 +5,7 @@ const { allowRoles } = require('../utils/auth');
 
 router.post('/', controller.createDraft);
 router.get('/', controller.list);
+router.get('/analytics', controller.analytics);
 router.get('/:id', controller.getById);
 router.get('/slip/:dispatchSlipNumber', controller.getBySlip);
 router.put('/:id', controller.updateDraft);

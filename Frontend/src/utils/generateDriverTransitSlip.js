@@ -2,6 +2,7 @@ import { jsPDF } from "jspdf";
 import { driverPdf } from './pilotExports.js';
 import autoTable from "jspdf-autotable";
 import { decimalToFraction } from './fractionParser.js';
+import { fixed2, round2 } from './loadMath.js';
 
 export function generateDriverTransitSlip(dispatch, t) {
   if (!t || dispatch?.inventory?.some(g => g.measurementRows?.length)) return driverPdf(dispatch);
@@ -60,8 +61,9 @@ export function generateDriverTransitSlip(dispatch, t) {
     
     const tableData = group.pieces.map((p, i) => {
       totalPieces++;
-      const pSqFt = p.sqFt !== undefined ? p.sqFt : Number((p.lengthFt * p.widthFt).toFixed(2));
-      totalSqFt += pSqFt;
+      const area = p.lengthFt * p.widthFt;
+      const pSqFt = p.sqFt !== undefined ? p.sqFt : round2(area);
+      totalSqFt += area;
       return [
         (i + 1).toString(),
         p.lengthDisplay ? p.lengthDisplay : `${p.lengthFt}`,
@@ -102,7 +104,7 @@ export function generateDriverTransitSlip(dispatch, t) {
   doc.setFontSize(11);
   doc.setFont("helvetica", "bold");
   doc.text(`${t('total')}: ${totalPieces} ${t('pieces')}`, 15, startY + 5);
-  doc.text(`${t('totalDispatchVolume')}: ${totalSqFt.toFixed(2)} ${t('sqFt')}`, 130, startY + 5);
+  doc.text(`${t('totalDispatchVolume')}: ${fixed2(totalSqFt)} ${t('sqFt')}`, 130, startY + 5);
 
   const safeSlipNumber = slipNumber.replace(/[^a-zA-Z0-9-]/g, '_');
   const filename = `StoneDesk-Driver-Slip-${safeSlipNumber}.pdf`;

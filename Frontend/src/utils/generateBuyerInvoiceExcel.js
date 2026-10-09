@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import { buyerExcel } from './pilotExports.js';
+import { round2 } from './loadMath.js';
 
 export function generateBuyerInvoiceExcel(dispatch, t) {
   if (!t || dispatch?.inventory?.some(g => g.measurementRows?.length)) return buyerExcel(dispatch);
@@ -44,13 +45,14 @@ export function generateBuyerInvoiceExcel(dispatch, t) {
   if (dispatch.inventory) {
     dispatch.inventory.forEach(group => {
       const piecesCount = group.pieces.length;
-      let groupSqFt = 0;
+      let rawSqFt = 0;
       group.pieces.forEach(p => {
-        groupSqFt += p.sqFt !== undefined ? p.sqFt : (p.lengthFt * p.widthFt);
+        rawSqFt += p.lengthFt * p.widthFt;
       });
+      const groupSqFt = round2(rawSqFt);
       
       const rateVal = group.ratePerSqFt || 0;
-      const amountVal = group.lineTotal !== undefined ? group.lineTotal : (groupSqFt * rateVal);
+      const amountVal = group.lineTotal !== undefined ? group.lineTotal : round2(rawSqFt * rateVal);
       
       wsData.push([
         group.stoneType,

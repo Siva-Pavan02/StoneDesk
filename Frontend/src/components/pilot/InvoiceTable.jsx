@@ -1,27 +1,169 @@
-import { useState } from 'react';
-import { useLanguage } from '../../i18n/LanguageContext';
-import { billRows } from '../../utils/billData.js';
-import { money } from '../../utils/pilotDraft.js';
-import { Button } from './Controls.jsx';
+import { useState } from "react";
+import { useLanguage } from "../../i18n/LanguageContext";
+import { billRows, rowGroups } from "../../utils/billData.js";
+import { fixed2, round2 } from "../../utils/loadMath.js";
+import { Button } from "./Controls.jsx";
 
+const area = fixed2;
+const amount = (value) =>
+  round2(Number(value) || 0).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 export default function InvoiceTable({ record }) {
   const { pick } = useLanguage();
-  const [mode, setMode] = useState('summary'), [page, setPage] = useState(0);
-  const items = mode === 'summary' ? record.inventory.map((g, index) => {
-    const rows = billRows({ inventory: [g] });
-    return { ...g, batch: index + 1, quantity: rows.reduce((n, r) => n + r.quantity, 0), sqFt: g.totalSqFt ?? rows.reduce((n, r) => n + r.sqFt, 0) };
-  }) : record.inventory.flatMap((g, index) => billRows({ inventory: [g] }).map(r => ({ ...r, batch: index + 1 })));
-  const pageSize = mode === 'summary' ? 10 : 20, pages = Math.max(1, Math.ceil(items.length / pageSize));
+  const [page, setPage] = useState(0);
+  const groups = rowGroups(billRows(record));
+  const pageSize = 6,
+    pages = Math.max(1, Math.ceil(groups.length / pageSize));
   const current = Math.min(page, pages - 1);
-  return <section className="invoice-section">
-    <div className="invoice-section-heading"><div><h2 className="font-bold text-lg">{pick('Measurements & batches', 'కొలతలు మరియు బ్యాచ్‌లు')}</h2><p className="text-sm text-gray-600">{record.inventory.length} {pick('batches', 'బ్యాచ్‌లు')}</p></div><div className="flex flex-wrap gap-2">{[['summary', 'Batch summary', 'బ్యాచ్ సారాంశం'], ['details', 'Measurements', 'కొలతలు']].map(([value, en, te]) => <button key={value} type="button" aria-pressed={mode === value} className={`btn rounded-xl ${mode === value ? 'bg-teal-800 text-white' : 'bg-white border-gray-300'}`} onClick={() => { setMode(value); setPage(0); }}>{pick(en, te)}</button>)}</div></div>
-    <p className="text-xs text-gray-600 px-4 pb-2">{pick('Swipe the table sideways to see all columns on smaller screens.', 'చిన్న స్క్రీన్‌లో అన్ని కాలమ్‌ల కోసం పట్టికను పక్కకు స్వైప్ చేయండి.')}</p>
-    <div className="table-scroll" tabIndex={0} role="region" aria-label={pick('Invoice measurements', 'బిల్లు కొలతలు')}><table className="business-table">
-      <caption className="sr-only">{pick('Stored measurements and amounts', 'సేవ్ చేసిన కొలతలు మరియు మొత్తాలు')}</caption>
-      <thead><tr><th>{pick('Batch / material', 'బ్యాచ్ / రాయి')}</th>{mode === 'details' && <th>{pick('Size (ft)', 'సైజు (అడుగులు)')}</th>}<th className="numeric">{pick('Pieces', 'ముక్కలు')}</th><th className="numeric">{pick('Sq ft', 'చ.అ.')}</th><th className="numeric">{pick('Rate ₹', 'ధర ₹')}</th><th className="numeric">{pick('Amount ₹', 'మొత్తం ₹')}</th></tr></thead>
-      <tbody>{items.slice(current * pageSize, (current + 1) * pageSize).map((r, i) => <tr key={`${current}-${i}`}><th scope="row"><strong>{r.batch}. {r.stoneType}</strong><span className="block text-xs font-normal text-gray-600">{r.finish}{r.category ? ` · ${r.category}` : ''}</span></th>{mode === 'details' && <td>{r.lengthFt} × {r.widthFt}</td>}<td className="numeric">{r.quantity}</td><td className="numeric">{r.sqFt.toFixed(2)}</td><td className="numeric">{money(r.ratePerSqFt)}</td><td className="numeric font-semibold">{r.lineTotal == null ? pick('See batch', 'బ్యాచ్ చూడండి') : money(r.lineTotal)}</td></tr>)}</tbody>
-    </table></div>
-    {!items.length && <p className="p-4 text-gray-600">{pick('No measurement rows in this record.', 'ఈ రికార్డులో కొలతలు లేవు.')}</p>}
-    <div className="table-pagination"><span role="status" className="text-sm text-gray-600">{pick('Page', 'పేజీ')} {current + 1} / {pages} · {items.length} {pick('rows', 'వరుసలు')}</span><div className="flex gap-2"><Button en="Previous" te="మునుపటి" disabled={current === 0} onClick={() => setPage(current - 1)} /><Button en="Next" te="తర్వాత" disabled={current + 1 >= pages} onClick={() => setPage(current + 1)} /></div></div>
-  </section>;
+  const rowWord = pick("Row", "వరుస");
+  const regularWord = pick("Regular", "సాధారణ"),
+    topWord = pick("Top", "టాప్");
+  const sub = (key, label, totals) => (
+    <tr key={key} className="invoice-row-sub">
+      <th scope="row" colSpan={4}>
+        {label}
+      </th>
+      <td className="numeric">{totals.quantity}</td>
+      <td className="numeric">{area(totals.sqFt)}</td>
+      <td className="numeric">{amount(totals.amount)}</td>
+    </tr>
+  );
+  const lineRow = (l, no, top) => (
+    <tr key={`${top ? "t" : "r"}${no}`}>
+      <th scope="row">{no}</th>
+      <td className={top ? "invoice-type-top" : ""}>
+        {top ? topWord : <span className="sr-only">{regularWord}</span>}
+      </td>
+      <td className="numeric">{l.lengthFt}</td>
+      <td className="numeric">{l.widthFt}</td>
+      <td className="numeric">{l.quantity}</td>
+      <td className="numeric">{area(l.sqFt)}</td>
+      <td className="numeric">{amount(l.lineTotal)}</td>
+    </tr>
+  );
+  const rowTable = (g) => (
+    <div
+      className="table-scroll"
+      tabIndex={0}
+      role="region"
+      aria-label={`${rowWord} ${g.rowNo}`}
+    >
+      <table className="invoice-row-table">
+        <caption className="sr-only">
+          {rowWord} {g.rowNo}
+        </caption>
+        <colgroup>
+          <col className="invoice-col-no" />
+          <col className="invoice-col-type" />
+          <col className="invoice-col-dim" />
+          <col className="invoice-col-dim" />
+          <col className="invoice-col-qty" />
+          <col className="invoice-col-area" />
+          <col className="invoice-col-amount" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th scope="col">{pick("S.No.", "క్ర.సం.")}</th>
+            <th scope="col">{pick("Type", "రకం")}</th>
+            <th scope="col" className="numeric">
+              {pick("L (ft)", "పొడవు")}
+            </th>
+            <th scope="col" className="numeric">
+              {pick("W (ft)", "వెడల్పు")}
+            </th>
+            <th scope="col" className="numeric">
+              {pick("Qty", "సంఖ్య")}
+            </th>
+            <th scope="col" className="numeric">
+              {pick("Sq ft", "చ.అ.")}
+            </th>
+            <th scope="col" className="numeric">
+              {pick("Amount (₹)", "మొత్తం (₹)")}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {g.regularLines.map((l, i) => lineRow(l, i + 1, false))}
+          {g.regularLines.length > 0 &&
+            sub("rs", pick("Regular subtotal", "సాధారణ ఉప మొత్తం"), g.regular)}
+          {g.topLines.map((l, i) =>
+            lineRow(l, g.regularLines.length + i + 1, true),
+          )}
+          {g.topLines.length > 0 &&
+            sub("ts", pick("Top subtotal", "టాప్ ఉప మొత్తం"), g.top)}
+        </tbody>
+        <tfoot>
+          <tr className="invoice-row-total">
+            <th scope="row" colSpan={4}>
+              {rowWord} {g.rowNo} {pick("total", "మొత్తం")}
+            </th>
+            <td className="numeric">{g.total.quantity}</td>
+            <td className="numeric">{area(g.total.sqFt)}</td>
+            <td className="numeric">{amount(g.total.amount)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+  return (
+    <section className="invoice-section">
+      <div className="invoice-section-heading">
+        <div>
+          <h3>{pick("Rows", "వరుసలు")}</h3>
+          <p>
+            {groups.length}{" "}
+            {groups.length === 1 ? pick("row", "వరుస") : pick("rows", "వరుసలు")}
+          </p>
+        </div>
+      </div>
+      <div className="invoice-row-grid">
+        {groups.map((g, index) => {
+          const hidden =
+            index < current * pageSize || index >= (current + 1) * pageSize
+              ? "invoice-row-offpage"
+              : "";
+          return (
+            <div key={g.rowNo} className={`invoice-row-block ${hidden}`}>
+              <h4>
+                {rowWord} {g.rowNo}
+              </h4>
+              {rowTable(g)}
+            </div>
+          );
+        })}
+      </div>
+      {!groups.length && (
+        <p className="p-4 text-gray-600">
+          {pick(
+            "No measurement rows in this record.",
+            "ఈ రికార్డులో కొలతలు లేవు.",
+          )}
+        </p>
+      )}
+      {pages > 1 && (
+        <div className="table-pagination">
+          <span role="status" className="text-sm text-gray-600">
+            {pick("Page", "పేజీ")} {current + 1} / {pages} · {groups.length}{" "}
+            {pick("rows", "వరుసలు")}
+          </span>
+          <div className="flex gap-2">
+            <Button
+              en="Previous"
+              te="మునుపటి"
+              disabled={current === 0}
+              onClick={() => setPage(current - 1)}
+            />
+            <Button
+              en="Next"
+              te="తర్వాత"
+              disabled={current + 1 >= pages}
+              onClick={() => setPage(current + 1)}
+            />
+          </div>
+        </div>
+      )}
+    </section>
+  );
 }

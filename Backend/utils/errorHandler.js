@@ -9,6 +9,7 @@ module.exports = (err, req, res, next) => {
   if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Invalid JSON body' });
   if (err.status === 413) return res.status(413).json({ error: req.path.endsWith('/logo') ? 'Logo must be at most 2 MB' : 'Request body is too large' });
   if (err.status >= 400 && err.status < 500) return res.status(err.status).json({ error: err.message });
+  if (err.status === 503 && err.safeAuthError === true) return res.status(503).json({ error: err.message });
   if (err.code === 'P2002') return res.status(409).json({ error: 'Record already exists' });
   if (err.code === 'P2025') return res.status(404).json({ error: 'Not found' });
   if (err.code === 'P2034') return res.status(409).json({ error: 'Record changed. Please retry.' });

@@ -1,0 +1,112 @@
+/* Public marketing only. Import after workspace.css; never changes workspace controls.
+   Radius system: 28px outer bezel, 20px product surface, 12px small surfaces,
+   full-pill interactive controls. Layers: header 20, native dialogs top layer. */
+.marketing {
+  color-scheme: light;
+  font-family: 'Geist', 'Noto Telugu', ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+.marketing :where(button, a, [tabindex]):focus-visible { outline: 3px solid #22796f; outline-offset: 4px; }
+.marketing button { cursor: pointer; }
+.marketing button:disabled { cursor: default; opacity: .65; }
+.marketing .mk-section { padding-block: 32px; }
+.marketing .mk-hero-title { font-size: clamp(42px, 5.05vw, 72px); line-height: 1.1; }
+.marketing .mk-section-title { font-size: clamp(28px, 3.25vw, 42px); line-height: 1.2; }
+.marketing[lang='te'] .mk-hero-title { font-size: clamp(34px, 4.5vw, 60px); line-height: 1.45; letter-spacing: -.025em; }
+.marketing[lang='te'] .mk-section-title { line-height: 1.5; letter-spacing: -.02em; }
+.marketing .mk-nav { background: rgb(255 255 255 / .95); box-shadow: 0 3px 6px rgb(36 79 61 / .035), 0 10px 35px rgb(36 79 61 / .065), inset 0 0 0 1px #e3ebe5; }
+@supports (backdrop-filter: blur(12px)) {
+  .marketing .mk-nav { background: rgb(255 255 255 / .88); backdrop-filter: blur(12px); }
+}
+.marketing .mk-nav-links { margin-left: auto; }
+.marketing .mk-nav-link, .marketing .mk-login, .marketing .mk-motion-toggle, .marketing .mk-language button, .marketing .mk-secondary, .marketing .mk-preview-row { transition: background-color 220ms var(--ui-ease), color 220ms var(--ui-ease), border-color 220ms var(--ui-ease), transform 220ms var(--ui-ease); }
+.marketing .mk-nav-link:hover, .marketing .mk-login:hover, .marketing .mk-motion-toggle:hover:not(:disabled) { background: #eaf3ef; color: #17645d; }
+.marketing .mk-language button { color: #526661; }
+.marketing .mk-language button[aria-pressed='true'] { background: #e2f0e8; color: #17645d; }
+.marketing .mk-language button:hover { background: #edf6f1; }
+.marketing .mk-primary { min-height: 54px; color: white; background: #17645d; border: 1px solid #17645d; box-shadow: 0 3px 4px rgb(18 83 66 / .08); white-space: nowrap; transition: background-color 220ms var(--ui-ease); }
+.marketing .mk-primary:hover { background: #104f49; }
+.marketing .mk-primary:active { background: #0d4540; }
+.marketing .mk-cta-disc { color: #17645d; background: #f1f8f4; transition: transform 300ms var(--ui-ease); }
+.marketing .mk-primary:hover .mk-cta-disc { transform: translateX(2px) translateY(-1px); }
+.marketing .mk-primary-compact { min-height: 44px; gap: 12px; padding-left: 18px; padding-right: 5px; font-size: 12px; }
+.marketing .mk-primary-compact .mk-cta-disc { width: 32px; height: 32px; }
+.marketing .mk-secondary:hover:not(:disabled) { background: #edf6f1; border-color: #9cbfb0; }
+.marketing .mk-secondary:active:not(:disabled) { transform: translateY(1px); }
+.marketing .mk-text-link:hover { text-decoration: underline; text-underline-offset: 5px; }
+.marketing .mk-double-bezel { background: #e8f1eb; box-shadow: 0 18px 45px -20px rgb(27 75 51 / .22), inset 0 1px 0 rgb(255 255 255 / .9); }
+.marketing .mk-hero-product { isolation: isolate; }
+.marketing .mk-hero-product::before { content: ''; position: absolute; inset: -22px -12px; z-index: -1; border: 1px solid #e5eee9; border-radius: 40px; background: #eff6f2; transform: rotate(-2deg); pointer-events: none; }
+.marketing .mk-product-window { box-shadow: 0 2px 6px rgb(29 72 50 / .035); }
+.marketing .mk-showcase-panel { min-height: 384px; }
+.marketing .mk-showcase-tabs button { color: #526661; transition: background-color 220ms var(--ui-ease), color 220ms var(--ui-ease); }
+.marketing .mk-showcase-tabs button:hover { background: #eaf3ee; }
+.marketing .mk-showcase-tabs button[aria-selected='true'] { background: white; color: #17645d; box-shadow: 0 1px 4px rgb(34 66 47 / .09), inset 0 0 0 1px #dce8e0; }
+.marketing .mk-preview-row:hover { background: #f5f9f6; }
+.marketing .mk-status { display: inline-flex; flex-shrink: 0; align-items: center; border-radius: 999px; padding: 5px 9px; background: #e3edfb; color: #1c4a8a; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.marketing .mk-status-neutral { background: #fdf1d6; color: #7a4a00; }
+.marketing .mk-dispatch-path li:not(:last-child)::after { content: ''; position: absolute; left: 13px; top: 28px; width: 1px; height: calc(100% - 8px); background: #d5e3dc; }
+.marketing .mk-sample-table { min-width: 320px; }
+.marketing .mk-invoice-table { min-width: 380px; font-size: 12px; }
+.marketing .mk-sample-table :where(th, td) { padding: 12px 10px; text-align: left; border-bottom: 1px solid #e4ece7; }
+.marketing .mk-sample-table thead th { font-size: 11px; font-weight: 500; white-space: nowrap; }
+.marketing .mk-sample-table tfoot :where(th, td) { border-bottom: 0; font-weight: 600; }
+.marketing .mk-sample-table .mk-numeric { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.marketing .mk-bill-bezel { background: #eaf3ed; box-shadow: 0 18px 48px -25px rgb(27 75 51 / .18); }
+.marketing .mk-invoice { box-shadow: 0 2px 8px rgb(26 69 46 / .04); }
+.marketing .mk-dialog { width: min(560px, calc(100% - 24px)); max-height: calc(100dvh - 32px); margin: auto; padding: 0; border: 1px solid #d7e4dd; border-radius: 24px; color: #203d36; background: #fff; overflow-y: auto; overscroll-behavior: contain; box-shadow: 0 24px 70px rgb(24 60 47 / .18); }
+.marketing .mk-bill-dialog { width: min(700px, calc(100% - 24px)); }
+.marketing .mk-dialog::backdrop { background: rgb(20 43 35 / .42); }
+.marketing .mk-skip-link { position: fixed; left: 16px; top: -100px; z-index: 30; border-radius: 12px; border: 2px solid #17645d; padding: 12px 18px; color: #17645d; background: white; }
+.marketing .mk-skip-link:focus { top: 16px; }
+@media (min-width: 768px) {
+  .marketing .mk-section { padding-block: 96px; }
+  .marketing .mk-workflow-step { border-top: 1px solid #dce6e1; padding-top: 24px; }
+}
+@media (min-width: 1024px) {
+  .marketing .mk-hero-title { font-size: clamp(56px, 5.05vw, 72px); }
+  .marketing[lang='te'] .mk-hero-title { font-size: clamp(46px, 4.5vw, 60px); }
+}
+@media (min-width: 1024px) and (max-width: 1199px) {
+  .marketing .mk-nav { column-gap: 12px; }
+  .marketing .mk-nav-link { padding-inline: 8px; }
+  .marketing .mk-nav-links { gap: 4px; }
+  .marketing .mk-primary-compact { gap: 8px; }
+}
+@media (max-width: 1023px) {
+  .marketing .mk-nav { column-gap: 8px; }
+  .marketing .mk-nav-link { padding-inline: 7px; font-size: 12px; }
+  .marketing .mk-nav-actions { gap: 5px; }
+  .marketing .mk-hero-product { width: 100%; max-width: 660px; justify-self: center; }
+}
+@media (max-width: 639px) {
+  .marketing .mk-nav-actions { display: contents; }
+  .marketing .mk-language { margin-left: auto; }
+  .marketing .mk-nav-links { order: 3; flex: 1; gap: 0; margin-left: 0; }
+  .marketing .mk-nav-links a { min-height: 36px; font-size: 12px; }
+  .marketing .mk-nav-cta { order: 3; }
+  .marketing .mk-primary-compact { min-height: 40px; padding-left: 13px; gap: 8px; font-size: 11px; }
+  .marketing .mk-primary-compact .mk-cta-disc { width: 28px; height: 28px; }
+  .marketing .mk-brand { display: none; }
+  .marketing .mk-hero { padding-top: 40px; }
+  .marketing .mk-hero-product::before { inset: -10px -5px; border-radius: 34px; transform: rotate(-1deg); }
+  .marketing .mk-invoice-table :where(th, td) { padding-inline: 8px; }
+  .marketing .mk-showcase-panel { min-height: 420px; }
+}
+@media (max-width: 359px) {
+  .marketing .mk-nav { padding-inline: 10px; column-gap: 4px; }
+  .marketing .mk-login { padding-inline: 7px; font-size: 12px; }
+  .marketing .mk-language button { min-width: 34px; }
+  .marketing .mk-hero-title { font-size: 39px; }
+  .marketing .mk-primary { gap: 10px; padding-left: 18px; font-size: 12px; }
+  .marketing .mk-showcase-tabs button { font-size: 10px; }
+  .marketing .mk-nav-links a { padding-inline: 5px; font-size: 11px; }
+  .marketing .mk-primary-compact { padding-left: 10px; gap: 6px; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .marketing .mk-nav { background: white; backdrop-filter: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .marketing *, .marketing *::before, .marketing *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}

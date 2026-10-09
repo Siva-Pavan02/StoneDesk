@@ -4,7 +4,7 @@
 - [x] Initialize Node/Express backend.
 - [x] Initialize Vite/React frontend.
 - [x] Configure Tailwind CSS v4.
-- [x] Connect MongoDB Atlas cluster.
+- [x] Connect Supabase PostgreSQL database.
 
 ## Phase 2: Backend API & Database
 - [ ] Implement `MasterSettings.js` schema.

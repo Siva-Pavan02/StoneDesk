@@ -102,6 +102,8 @@ export function decimalToFraction(val) {
     if (diff < 1e-6) break;
   }
 
+  // Only show a fraction when it equals the value; otherwise show the decimal unchanged.
+  if (bestDiff >= 1e-6) return String(Number(n.toPrecision(12)));
   if (bestNum === 0) return whole.toString();
   if (bestNum === bestDen) return (whole + 1).toString();
 

@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import { decimalToFraction } from './fractionParser';
+import { excess, pending } from './loadingListTotals';
 
 export function generateLoadingListExcel(listData) {
   const wb = XLSX.utils.book_new();
@@ -23,7 +24,7 @@ export function generateLoadingListExcel(listData) {
   ws1Data.push([]);
   
   ws1Data.push(["Requirement Summary"]);
-  ws1Data.push(["#", "Length", "Width", "Required", "Loaded", "Balance"]);
+  ws1Data.push(["#", "Length", "Width", "Required", "Loaded", "Balance", "Excess"]);
   
   listData.requirements.forEach((req, idx) => {
     ws1Data.push([
@@ -32,7 +33,8 @@ export function generateLoadingListExcel(listData) {
       req.widthDisplay || decimalToFraction(req.widthFt),
       req.requiredQuantity,
       req.loadedQuantity,
-      req.balance
+      pending(req),
+      excess(req)
     ]);
   });
   

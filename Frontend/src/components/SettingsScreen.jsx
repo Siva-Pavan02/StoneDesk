@@ -12,15 +12,20 @@ import {
 } from '../lib/api';
 import { useLanguage } from '../i18n/LanguageContext';
 import { motion } from 'motion/react';
+import { Button, Card, Field } from './pilot/Controls.jsx';
 
-export default function SettingsScreen({ user, onClose }) {
-  const { t } = useLanguage();
+export default function SettingsScreen({ user, onClose, embedded = false, referenceOnly = false }) {
+  const { t, pick } = useLanguage();
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('trucks'); // trucks, destinations, rates, royalty
 
   const quarryId = user?.organizationId || 'unit_04';
+  const referencesOnly = embedded || referenceOnly;
+  const tabs = referencesOnly ? ['trucks', 'destinations'] : ['trucks', 'destinations', 'rates', 'royalty'];
+  const visibleTab = tabs.includes(activeTab) ? activeTab : 'trucks';
+  const Content = embedded ? 'div' : 'main';
 
   useEffect(() => {
     loadSettings();
@@ -176,8 +181,11 @@ export default function SettingsScreen({ user, onClose }) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="fixed top-0 inset-x-0 z-50 bg-white border-b border-slate-200 shadow-sm pt-safe">
+    <div className={embedded ? 'pilot workspace-utility-screen settings-screen space-y-4' : 'pilot min-h-screen bg-gray-50 flex flex-col'}>
+      {embedded ? <header className="screen-heading flex flex-wrap items-center gap-3">
+        <Button en="Back" te="వెనక్కి" onClick={onClose} />
+        <h1 className="text-lg font-semibold">{pick('Trucks & destinations', 'లారీలు మరియు గమ్యస్థానాలు')}</h1>
+      </header> : <header className="fixed top-0 inset-x-0 z-50 bg-white border-b border-slate-200 shadow-sm pt-safe">
         <div className="max-w-xl mx-auto w-full px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <button aria-label="Go back" className="w-9 h-9 -ml-1.5 flex items-center justify-center rounded-full text-slate-700 hover:text-teal-700 hover:bg-slate-100 transition-colors" onClick={onClose} type="button">
@@ -187,26 +195,28 @@ export default function SettingsScreen({ user, onClose }) {
           </div>
 
         </div>
-      </header>
+      </header>}
 
-      <main className="flex-1 flex flex-col w-full max-w-xl mx-auto px-4 pt-20 pb-10">
+      <Content className={embedded ? 'space-y-4' : 'flex-1 flex flex-col w-full max-w-xl mx-auto px-4 pt-20 pb-10'}>
         {loading ? (
           <div className="p-8 text-center text-slate-500">{t('loading')}</div>
         ) : error ? (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 flex flex-col items-center">
+          <div role="alert" className="p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 flex flex-col items-center">
             <p className="mb-4">{error}</p>
-            <button onClick={loadSettings} className="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold">{t('retry')}</button>
+            <Button onClick={loadSettings} en={t('retry')} te={t('retry')} />
           </div>
         ) : settings ? (
           <>
-            <div className="flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide relative" style={{ WebkitTapHighlightColor: 'transparent' }}>
-              {['trucks', 'destinations', 'rates', 'royalty'].map((tab) => (
+            <div aria-label={t('settings')} className={embedded ? 'action-row flex flex-wrap gap-2' : 'flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide relative'}>
+              {tabs.map((tab) => embedded ? <Button key={tab} en={t(tab)} te={t(tab)} primary={visibleTab === tab} aria-pressed={visibleTab === tab} onClick={() => setActiveTab(tab)} /> : (
                 <button
                   key={tab}
+                  type="button"
+                  aria-pressed={visibleTab === tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`relative px-4 py-2 rounded-full font-bold whitespace-nowrap transition-colors ${activeTab === tab ? 'text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}
+                  className={`relative px-4 py-2 rounded-full font-bold whitespace-nowrap transition-colors ${visibleTab === tab ? 'text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}
                 >
-                  {activeTab === tab && (
+                  {visibleTab === tab && (
                     <motion.div
                       layoutId="settings-tab"
                       className="absolute inset-0 bg-teal-700 rounded-full shadow-sm"
@@ -218,61 +228,59 @@ export default function SettingsScreen({ user, onClose }) {
               ))}
             </div>
 
-            {activeTab === 'trucks' && (
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-                <h2 className="font-bold text-slate-800 mb-4 flex flex-col">
+            {visibleTab === 'trucks' && (
+              <Card>
+                <h2 className="section-heading font-semibold text-slate-800 mb-4">
                   <span>{t('trucks')}</span>
                 </h2>
-                <div className="flex gap-2 mb-4">
-                  <input
+                <div className="action-row grid gap-3 mb-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                  <Field en={t('truckNumber')} te={t('truckNumber')}
                     type="text"
                     value={newTruck}
                     onChange={(e) => setNewTruck(e.target.value)}
                     placeholder="e.g. TN-01-AB-1234"
-                    className="flex-1 h-12 px-3 border border-slate-300 rounded-lg focus:border-teal-700 focus:ring-1 focus:ring-teal-700 outline-none"
                   />
-                  <button onClick={handleAddTruck} disabled={isAddingTruck} className="px-4 bg-teal-700 text-white rounded-lg font-bold disabled:opacity-50">{t('addNew')}</button>
+                  <Button primary en={t('addNew')} te={t('addNew')} onClick={handleAddTruck} disabled={isAddingTruck} />
                 </div>
                 <div className="space-y-2">
                   {settings.savedTrucks.length === 0 ? <p className="text-slate-500 text-sm">Empty.</p> : null}
                   {settings.savedTrucks.map(truck => (
                     <div key={truck} className="flex justify-between items-center p-3 border border-slate-100 bg-slate-50 rounded-lg">
-                      <span className="font-semibold text-slate-800">{truck}</span>
-                      <button onClick={() => handleRemoveTruck(truck)} className="text-red-500 p-1 hover:bg-red-50 rounded"><span className="material-symbols-outlined text-[20px]">delete</span></button>
+                      <span className="min-w-0 break-words text-slate-800">{truck}</span>
+                      <Button en={t('delete')} te={t('delete')} aria-label={`${t('delete')} ${truck}`} onClick={() => handleRemoveTruck(truck)} />
                     </div>
                   ))}
                 </div>
-              </div>
+              </Card>
             )}
 
-            {activeTab === 'destinations' && (
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-                <h2 className="font-bold text-slate-800 mb-4 flex flex-col">
+            {visibleTab === 'destinations' && (
+              <Card>
+                <h2 className="section-heading font-semibold text-slate-800 mb-4">
                   <span>{t('destinations')}</span>
                 </h2>
-                <div className="flex gap-2 mb-4">
-                  <input
+                <div className="action-row grid gap-3 mb-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                  <Field en={t('destination')} te={t('destination')}
                     type="text"
                     value={newDestination}
                     onChange={(e) => setNewDestination(e.target.value)}
                     placeholder="e.g. Chennai Port"
-                    className="flex-1 h-12 px-3 border border-slate-300 rounded-lg focus:border-teal-700 focus:ring-1 focus:ring-teal-700 outline-none"
                   />
-                  <button onClick={handleAddDestination} disabled={isAddingDest} className="px-4 bg-teal-700 text-white rounded-lg font-bold disabled:opacity-50">{t('addNew')}</button>
+                  <Button primary en={t('addNew')} te={t('addNew')} onClick={handleAddDestination} disabled={isAddingDest} />
                 </div>
                 <div className="space-y-2">
                   {settings.savedDestinations.length === 0 ? <p className="text-slate-500 text-sm">Empty.</p> : null}
                   {settings.savedDestinations.map(dest => (
                     <div key={dest} className="flex justify-between items-center p-3 border border-slate-100 bg-slate-50 rounded-lg">
-                      <span className="font-semibold text-slate-800">{dest}</span>
-                      <button onClick={() => handleRemoveDestination(dest)} className="text-red-500 p-1 hover:bg-red-50 rounded"><span className="material-symbols-outlined text-[20px]">delete</span></button>
+                      <span className="min-w-0 break-words text-slate-800">{dest}</span>
+                      <Button en={t('delete')} te={t('delete')} aria-label={`${t('delete')} ${dest}`} onClick={() => handleRemoveDestination(dest)} />
                     </div>
                   ))}
                 </div>
-              </div>
+              </Card>
             )}
 
-            {activeTab === 'rates' && (
+            {!referencesOnly && visibleTab === 'rates' && (
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
                 <h2 className="font-bold text-slate-800 mb-4 flex flex-col">
                   <span>{t('stoneRates')} ({t('rate')} / {t('sqFt')})</span>
@@ -317,7 +325,7 @@ export default function SettingsScreen({ user, onClose }) {
               </div>
             )}
 
-            {activeTab === 'royalty' && (
+            {!referencesOnly && visibleTab === 'royalty' && (
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
                 <h2 className="font-bold text-slate-800 mb-4 flex flex-col">
                   <span>{t('royaltyLoading')}</span>
@@ -339,7 +347,7 @@ export default function SettingsScreen({ user, onClose }) {
             )}
           </>
         ) : null}
-      </main>
+      </Content>
     </div>
   );
 }

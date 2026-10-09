@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { decimalToFraction } from './fractionParser';
+import { excess, loadingTotals, pending } from './loadingListTotals';
 
 export async function generateLoadingListPdf(listData) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -49,12 +50,12 @@ export async function generateLoadingListPdf(listData) {
 
   const reqTableBody = listData.requirements.map(r => {
     const size = `${r.lengthDisplay || decimalToFraction(r.lengthFt)} × ${r.widthDisplay || decimalToFraction(r.widthFt)}`;
-    return [size, r.requiredQuantity, r.loadedQuantity, r.balance];
+    return [size, r.requiredQuantity, r.loadedQuantity, pending(r), excess(r)];
   });
 
   autoTable(doc, {
     startY: y,
-    head: [['Size', 'Required', 'Loaded', 'Balance']],
+    head: [['Size', 'Required', 'Loaded', 'Balance', 'Excess']],
     body: reqTableBody,
     theme: 'grid',
     styles: { font: font, fontSize: 10, cellPadding: 2 },
@@ -98,10 +99,7 @@ export async function generateLoadingListPdf(listData) {
   doc.text("TOTALS", 14, y);
   y += 6;
 
-  const totalReq = listData.requirements.reduce((sum, r) => sum + r.requiredQuantity, 0);
-  const totalLoad = listData.requirements.reduce((sum, r) => sum + r.loadedQuantity, 0);
-  const totalBal = listData.requirements.reduce((sum, r) => sum + (r.balance > 0 ? r.balance : 0), 0);
-  const totalExc = listData.requirements.reduce((sum, r) => sum + (r.balance < 0 ? Math.abs(r.balance) : 0), 0);
+  const { required: totalReq, loaded: totalLoad, pending: totalBal, excess: totalExc } = loadingTotals(listData.requirements);
 
   doc.setFont(font, 'normal');
   doc.setFontSize(10);

@@ -17,7 +17,7 @@ test('quantity, fractions, TOP, charges, and static persisted totals', async () 
   assert.equal(persisted.inventory[0].measurementRows[0].quantity, 19);
 });
 test('invalid dimensions, quantity, rate, fees and overflow are rejected', () => {
-  for (const changes of [{ lengthFt: 0 }, { widthFt: -1 }, { lengthFt: Infinity }, { quantity: 0 }, { quantity: 1.5 }, { quantity: '19' }, { category: 'Other' }]) {
+  for (const changes of [{ lengthFt: 0 }, { widthFt: -1 }, { lengthFt: Infinity }, { quantity: 0 }, { quantity: 1.5 }, { quantity: '19' }, { category: 'Other' }, { rowNo: 0 }, { rowNo: 16 }, { rowNo: 1.5 }]) {
     assert.throws(() => processInventory([{ ...group, measurementRows: [{ ...group.measurementRows[0], ...changes }] }]), e => e.status === 400);
   }
   for (const ratePerSqFt of [-1, NaN, Infinity, '40']) assert.throws(() => processInventory([{ ...group, ratePerSqFt }]), e => e.status === 400);

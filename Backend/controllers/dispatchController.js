@@ -2,6 +2,9 @@ const { randomUUID } = require('node:crypto');
 const prisma = require('../utils/prisma');
 const calc = require('../utils/pilotCalculations');
 const { snapshot } = require('../utils/businessBranding');
+const { buildAnalytics, windows } = require('../utils/dispatchAnalytics');
+
+const ANALYTICS_RECORD_CAP = 20000;
 
 function details(body) {
   const supervisor = calc.text(body.supervisor, 'supervisor');
@@ -123,6 +126,21 @@ exports.getBySlip = async (req, res, next) => {
     const dispatch = await prisma.dispatch.findFirst({ where: { dispatchSlipNumber: req.params.dispatchSlipNumber, organizationId: req.user.organizationId } });
     if (!dispatch) return res.status(404).json({ error: 'Not found' });
     res.json(dispatch);
+  } catch (err) { next(err); }
+};
+
+exports.analytics = async (req, res, next) => {
+  try {
+    const now = new Date();
+    const range = windows(now);
+    const records = await prisma.dispatch.findMany({
+      where: { organizationId: req.user.organizationId, date: { gte: range.start, lt: range.end } },
+      select: { date: true, status: true, summary: true, logistics: true },
+      orderBy: { date: 'desc' },
+      take: ANALYTICS_RECORD_CAP + 1
+    });
+    if (records.length > ANALYTICS_RECORD_CAP) calc.bad('Too many records to analyse');
+    res.json(buildAnalytics(records, now));
   } catch (err) { next(err); }
 };
 

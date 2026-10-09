@@ -6,9 +6,13 @@ import { parseFraction, decimalToFraction } from '../utils/fractionParser';
 import FractionChips from './dispatch/FractionChips';
 import { generateLoadingListPdf } from '../utils/generateLoadingListPdf';
 import { generateLoadingListExcel } from '../utils/generateLoadingListExcel';
+import { loadingTotals } from '../utils/loadingListTotals';
+import { round2 } from '../utils/loadMath';
+import { Button, Card, Field } from './pilot/Controls.jsx';
 
-export default function LoadingListScreen({ onClose }) {
+export default function LoadingListScreen({ onClose, embedded = false, organizationId = 'unit_04' }) {
   const { t, pick } = useLanguage();
+  const Content = embedded ? 'div' : 'main';
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const savingLock = useRef(false);
@@ -44,7 +48,7 @@ export default function LoadingListScreen({ onClose }) {
 
   const loadData = async () => {
     try {
-      const ms = await getMasterSettings('unit_04');
+      const ms = await getMasterSettings(organizationId);
       setSettings(ms);
       const lists = await fetchLoadingLists();
       setSavedLists(lists);
@@ -134,7 +138,7 @@ export default function LoadingListScreen({ onClose }) {
       widthDisplay: pWid.display,
       lengthFt: pLen.numeric,
       widthFt: pWid.numeric,
-      sqFt: pLen.numeric * pWid.numeric
+      sqFt: round2(pLen.numeric * pWid.numeric)
     };
 
     req.loadedPieces.push(newPiece);
@@ -226,17 +230,20 @@ export default function LoadingListScreen({ onClose }) {
     generateLoadingListExcel(listData);
   };
 
-  const totalRequired = requirements.reduce((sum, r) => sum + r.requiredQuantity, 0);
-  const totalLoaded = requirements.reduce((sum, r) => sum + r.loadedQuantity, 0);
-  const totalBalance = requirements.reduce((sum, r) => sum + r.balance, 0);
+  const { required: totalRequired, loaded: totalLoaded, pending: totalPending, excess: totalExcess } = loadingTotals(requirements);
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-24">
+    <div className={embedded ? 'pilot workspace-utility-screen settings-screen space-y-4' : 'pilot min-h-screen bg-slate-50 pb-24'}>
       {/* Header */}
-      <header className="fixed top-0 inset-x-0 z-50 bg-white border-b border-slate-200 shadow-sm pt-safe">
+      {embedded ? (
+        <header className="screen-heading flex flex-wrap items-center gap-3">
+          <Button en="Back" te="వెనక్కి" onClick={onClose} />
+          <h1 className="text-lg font-semibold">{t('loadingList') || 'Loading List'}</h1>
+        </header>
+      ) : <header className="fixed top-0 inset-x-0 z-50 bg-white border-b border-slate-200 shadow-sm pt-safe">
         <div className="max-w-xl mx-auto w-full px-4 h-14 flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
-            <button className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-slate-100" onClick={onClose}>
+            <button type="button" aria-label={pick('Go back', 'వెనక్కి వెళ్ళండి')} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-slate-100" onClick={onClose}>
               <span className="material-symbols-outlined">arrow_back</span>
             </button>
             <h1 className="truncate font-bold text-lg text-slate-800">{t('loadingList') || 'Loading List'}</h1>
@@ -246,12 +253,12 @@ export default function LoadingListScreen({ onClose }) {
             {t('save') || 'Save'}
           </button></div>
         </div>
-      </header>
+      </header>}
 
-      <main className="pt-20 px-4 max-w-xl mx-auto">
+      <Content className={embedded ? 'space-y-4' : 'pt-20 px-4 max-w-xl mx-auto space-y-4'}>
         {error && <p role="alert" className="mb-4 rounded-xl border-2 border-red-300 bg-white p-4 text-red-800">{error}</p>}
-        <label className="mb-4 flex flex-col gap-2 font-semibold">{pick('Saved loading lists', 'సేవ్ చేసిన లోడింగ్ జాబితాలు')}
-          <select aria-label="Saved loading lists" className="min-h-12 rounded-lg border-2 border-gray-300 bg-white p-2" disabled={saving} value={activeListId || ''} onChange={event => {
+        <Field en="Saved loading lists" te="సేవ్ చేసిన లోడింగ్ జాబితాలు">
+          <select className="input rounded-xl" disabled={saving} value={activeListId || ''} onChange={event => {
             if (!window.confirm(pick('Replace the current form with this loading list?', 'ప్రస్తుత వివరాలను మార్చాలా?'))) return;
             const list = savedLists.find(item => item.id === event.target.value);
             setActiveListId(list?.id || null); setLoadingListNumber(list?.loadingListNumber || '');
@@ -259,104 +266,90 @@ export default function LoadingListScreen({ onClose }) {
             setStoneType(list?.stoneType || ''); setFinish(list?.finish || '');
             setRequirements(list ? structuredClone(list.requirements) : []); setEditIndex(null); setActiveCustomIdx(null); setError('');
           }}><option value="">{pick('New loading list', 'కొత్త లోడింగ్ జాబితా')}</option>{savedLists.map(list => <option key={list.id} value={list.id}>{list.loadingListNumber} · {list.buyerDestination}</option>)}</select>
-        </label>
+        </Field>
         
         {/* Basic Details */}
-        <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-4">
-          <div className="grid grid-cols-2 gap-3 mb-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">{t('supervisor')}</label>
-              <input type="text" className="w-full h-10 px-3 bg-slate-50 border border-slate-300 rounded-lg text-sm" value={supervisor} onChange={(e)=>setSupervisor(e.target.value)} />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">{t('destination')}</label>
-              <select className="w-full h-10 px-3 bg-slate-50 border border-slate-300 rounded-lg text-sm" value={buyerDestination} onChange={(e)=>setBuyerDestination(e.target.value)}>
+        <Card className="gap-4">
+          <h2 className="section-heading text-sm font-semibold">{pick('Loading list details', 'లోడింగ్ జాబితా వివరాలు')}</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field en={t('supervisor')} te={t('supervisor')} type="text" value={supervisor} onChange={(e)=>setSupervisor(e.target.value)} />
+            <Field en={t('destination')} te={t('destination')}>
+              <select className="input rounded-xl" value={buyerDestination} onChange={(e)=>setBuyerDestination(e.target.value)}>
                 <option value="">--</option>
                 {settings?.savedDestinations?.map(d => <option key={d}>{d}</option>)}
               </select>
-            </div>
+            </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">{t('stoneType')}</label>
-              <select className="w-full h-10 px-3 bg-slate-50 border border-slate-300 rounded-lg text-sm" value={stoneType} onChange={(e)=>setStoneType(e.target.value)}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field en={t('stoneType')} te={t('stoneType')}>
+              <select className="input rounded-xl" value={stoneType} onChange={(e)=>setStoneType(e.target.value)}>
                 <option value="">--</option>
                 {[...new Set(settings?.stoneRates?.map(sr => sr.stoneType))].map(st => <option key={st}>{st}</option>)}
               </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">{t('finish')}</label>
-              <select className="w-full h-10 px-3 bg-slate-50 border border-slate-300 rounded-lg text-sm" value={finish} onChange={(e)=>setFinish(e.target.value)}>
+            </Field>
+            <Field en={t('finish')} te={t('finish')}>
+              <select className="input rounded-xl" value={finish} onChange={(e)=>setFinish(e.target.value)}>
                 <option value="">--</option>
                 {[...new Set(settings?.stoneRates?.filter(sr => sr.stoneType === stoneType).map(sr => sr.finish))].map(f => <option key={f}>{f}</option>)}
               </select>
-            </div>
+            </Field>
           </div>
-        </section>
+        </Card>
 
         {/* Add Requirement */}
-        <section className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-4">
+        <Card>
           <div className="flex justify-between items-center mb-3">
-            <h2 className="text-sm font-bold text-slate-800">{editIndex !== null ? (t('editRequirement') || 'Edit Requirement') : (t('addRequirement') || 'Add Requirement')}</h2>
-            {editIndex !== null && <button onClick={handleCancelEdit} className="text-xs text-slate-500 underline">Cancel</button>}
+            <h2 className="section-heading text-sm font-semibold text-slate-800">{editIndex !== null ? (t('editRequirement') || 'Edit Requirement') : (t('addRequirement') || 'Add Requirement')}</h2>
+            {editIndex !== null && <Button onClick={handleCancelEdit} en={t('cancel')} te={t('cancel')} />}
           </div>
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">{t('length')}</label>
-              <input type="text" placeholder="e.g. 4 1/2" className="w-full h-12 px-3 bg-slate-50 border border-slate-300 rounded-lg text-center font-bold text-lg" value={reqLen} onChange={(e)=>setReqLen(e.target.value)} />
+              <Field en={t('length')} te={t('length')} type="text" placeholder="e.g. 4 1/2" value={reqLen} onChange={(e)=>setReqLen(e.target.value)} />
               <FractionChips value={reqLen} setValue={setReqLen} />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">{t('width')}</label>
-              <input type="text" placeholder="e.g. 2" className="w-full h-12 px-3 bg-slate-50 border border-slate-300 rounded-lg text-center font-bold text-lg" value={reqWid} onChange={(e)=>setReqWid(e.target.value)} />
+              <Field en={t('width')} te={t('width')} type="text" placeholder="e.g. 2" value={reqWid} onChange={(e)=>setReqWid(e.target.value)} />
               <FractionChips value={reqWid} setValue={setReqWid} />
             </div>
           </div>
           <div className="mb-4">
-            <label className="block text-xs font-semibold text-slate-500 mb-1">{t('pieces')}</label>
-            <input type="number" placeholder="Qty" className="w-full h-12 px-3 bg-slate-50 border border-slate-300 rounded-lg text-center font-bold text-lg" value={reqQty} onChange={(e)=>setReqQty(e.target.value)} />
+            <Field en={t('pieces')} te={t('pieces')} type="number" placeholder={t('pieces')} value={reqQty} onChange={(e)=>setReqQty(e.target.value)} />
           </div>
-          <button className="w-full h-12 bg-teal-50 text-teal-700 font-bold rounded-lg border border-teal-200 flex items-center justify-center gap-2" onClick={handleAddRequirement}>
-            <span className="material-symbols-outlined">{editIndex !== null ? 'check' : 'add'}</span> {editIndex !== null ? (t('updateRequirement') || 'Update Requirement') : (t('addRequirement') || 'Add Requirement')}
-          </button>
-        </section>
+          <Button className="w-full" onClick={handleAddRequirement} en={editIndex !== null ? t('updateRequirement') : t('addRequirement')} te={editIndex !== null ? t('updateRequirement') : t('addRequirement')} />
+        </Card>
 
         {/* Requirements List */}
         <section className="mb-4">
           <div className="flex justify-between items-center mb-3">
-            <h2 className="text-sm font-bold text-slate-800">{t('requirements') || 'Requirements'}</h2>
-            <span className="text-xs bg-slate-200 px-2 py-1 rounded-full font-bold">{requirements.length} lines</span>
+            <h2 className="section-heading text-sm font-semibold text-slate-800">{t('requirements') || 'Requirements'}</h2>
+            <span className="text-xs text-gray-600">{requirements.length} {pick('lines', 'వరుసలు')}</span>
           </div>
           
           <div className="space-y-3">
             {requirements.map((req, idx) => (
-              <div key={idx} className={`bg-white border ${editIndex === idx ? 'border-teal-400 ring-2 ring-teal-100' : 'border-slate-200'} rounded-xl p-4 shadow-sm relative overflow-hidden`}>
-                <div className="absolute top-2 right-2 flex gap-1">
-                  <button onClick={() => handleEditRequirement(idx)} className="text-slate-400 hover:text-teal-600 p-1">
-                    <span className="material-symbols-outlined text-lg">edit</span>
-                  </button>
-                  <button onClick={() => handleRemoveRequirement(idx)} className="text-slate-400 hover:text-red-500 p-1">
-                    <span className="material-symbols-outlined text-lg">close</span>
-                  </button>
+              <Card key={idx} className={editIndex === idx ? 'ring-2 ring-teal-100' : ''}>
+                <div className="action-row flex flex-wrap justify-end gap-2 mb-3">
+                  <Button onClick={() => handleEditRequirement(idx)} en="Edit" te="మార్చండి" />
+                  <Button onClick={() => handleRemoveRequirement(idx)} en={t('delete')} te={t('delete')} />
                 </div>
                 
                 <div className="flex items-center gap-2 mb-3">
-                  <div className="text-2xl font-black text-slate-800">{req.lengthDisplay || decimalToFraction(req.lengthFt)} <span className="text-slate-400 text-lg">×</span> {req.widthDisplay || decimalToFraction(req.widthFt)}</div>
-                  {req.balance === 0 && <span className="ml-auto bg-green-100 text-green-800 text-xs font-bold px-2 py-1 rounded">Complete</span>}
-                  {req.balance < 0 && <span className="ml-auto bg-orange-100 text-orange-800 text-xs font-bold px-2 py-1 rounded">{Math.abs(req.balance)} Excess</span>}
+                  <div className="text-lg font-semibold text-slate-800">{req.lengthDisplay || decimalToFraction(req.lengthFt)} <span className="text-slate-400">×</span> {req.widthDisplay || decimalToFraction(req.widthFt)}</div>
+                  {req.balance === 0 && <span className="ml-auto bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded">{pick('Complete', 'పూర్తయింది')}</span>}
+                  {req.balance < 0 && <span className="ml-auto bg-orange-100 text-orange-800 text-xs font-medium px-2 py-1 rounded">{Math.abs(req.balance)} {pick('Excess', 'అదనపు')}</span>}
                 </div>
 
                 <div className="grid grid-cols-3 gap-2 mb-4 bg-slate-50 p-2 rounded-lg">
                   <div className="text-center">
-                    <div className="text-[10px] uppercase font-bold text-slate-400">Required</div>
+                    <div className="text-xs text-gray-600">{pick('Required', 'అవసరం')}</div>
                     <div className="text-lg font-bold text-slate-700">{req.requiredQuantity}</div>
                   </div>
                   <div className="text-center border-l border-r border-slate-200">
-                    <div className="text-[10px] uppercase font-bold text-teal-600">Loaded</div>
+                    <div className="text-xs text-gray-600">{pick('Loaded', 'లోడ్ చేసినవి')}</div>
                     <div className="text-lg font-bold text-teal-700">{req.loadedQuantity}</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-[10px] uppercase font-bold text-slate-400">Balance</div>
+                    <div className="text-xs text-gray-600">{pick('Balance', 'మిగిలినవి')}</div>
                     <div className={`text-lg font-bold ${req.balance < 0 ? 'text-orange-600' : 'text-slate-700'}`}>{req.balance > 0 ? req.balance : 0}</div>
                   </div>
                 </div>
@@ -365,77 +358,80 @@ export default function LoadingListScreen({ onClose }) {
                   {activeCustomIdx === idx ? (
                     <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
                       <div className="flex justify-between items-center mb-2">
-                        <span className="text-xs font-bold text-slate-500 uppercase">Custom Piece Size</span>
+                        <span className="text-sm font-medium text-slate-700">{pick('Custom piece size', 'కస్టమ్ ముక్క సైజు')}</span>
                       </div>
                       <div className="grid grid-cols-2 gap-2 mb-3">
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-500 mb-1">Length</label>
-                          <input type="text" className="w-full h-10 px-2 bg-white border border-slate-300 rounded text-center font-bold" value={customLen} onChange={e=>setCustomLen(e.target.value)} />
+                          <Field en={t('length')} te={t('length')} type="text" value={customLen} onChange={e=>setCustomLen(e.target.value)} />
                           <div className="mt-1"><FractionChips value={customLen} setValue={setCustomLen}/></div>
                         </div>
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-500 mb-1">Width</label>
-                          <input type="text" className="w-full h-10 px-2 bg-white border border-slate-300 rounded text-center font-bold" value={customWid} onChange={e=>setCustomWid(e.target.value)} />
+                          <Field en={t('width')} te={t('width')} type="text" value={customWid} onChange={e=>setCustomWid(e.target.value)} />
                           <div className="mt-1"><FractionChips value={customWid} setValue={setCustomWid}/></div>
                         </div>
                       </div>
-                      <div className="flex gap-2">
-                        <button className="flex-1 h-10 bg-white border border-slate-300 text-slate-600 font-bold rounded-lg" onClick={()=>setActiveCustomIdx(null)}>Cancel</button>
-                        <button className="flex-[2] h-10 bg-teal-700 text-white font-bold rounded-lg" onClick={()=>handleCustomLoad(idx)}>Load Custom</button>
+                      <div className="action-row flex flex-wrap gap-2">
+                        <Button onClick={()=>setActiveCustomIdx(null)} en={t('cancel')} te={t('cancel')} />
+                        <Button primary onClick={()=>handleCustomLoad(idx)} en="Load custom" te="కస్టమ్ ముక్క లోడ్ చేయండి" />
                       </div>
                     </div>
                   ) : (
-                    <div className="flex gap-2">
-                      <button className="h-12 w-12 bg-slate-100 text-slate-700 font-bold rounded-lg border border-slate-200 flex items-center justify-center disabled:opacity-50" onClick={() => handleRemovePiece(idx)} disabled={req.loadedQuantity === 0}>
-                        <span className="material-symbols-outlined">remove</span>
-                      </button>
-                      <button className="flex-[2] h-12 bg-teal-700 text-white font-bold rounded-lg shadow-sm flex items-center justify-center active:bg-teal-800" onClick={() => handleLoadPiece(idx)}>
-                        <span className="material-symbols-outlined mr-1">add</span> Load Piece
-                      </button>
-                      <button className="h-12 px-3 bg-slate-100 text-slate-700 font-bold rounded-lg border border-slate-200 flex items-center justify-center" onClick={() => handleOpenCustom(idx)}>
-                        Custom
-                      </button>
+                    <div className="action-row flex flex-wrap gap-2">
+                      <Button en="−" te="−" aria-label={pick('Remove last loaded piece', 'చివరిగా లోడ్ చేసిన ముక్క తొలగించండి')} onClick={() => handleRemovePiece(idx)} disabled={req.loadedQuantity === 0} />
+                      <Button primary className="flex-1" en="Load piece" te="ముక్క లోడ్ చేయండి" onClick={() => handleLoadPiece(idx)} />
+                      <Button en="Custom" te="కస్టమ్" onClick={() => handleOpenCustom(idx)} />
                     </div>
                   )}
                 </div>
-              </div>
+              </Card>
             ))}
           </div>
         </section>
 
         {/* Summary Footer */}
         {requirements.length > 0 && (
-          <section className="bg-slate-800 text-white p-4 rounded-xl shadow-lg mb-8">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Loading Summary</h3>
+          <Card>
+            <h2 className="section-heading text-sm font-semibold text-slate-800 mb-3">{pick('Loading summary', 'లోడింగ్ సారాంశం')}</h2>
             <div className="flex justify-between items-end">
               <div>
-                <div className="text-sm text-slate-300">Total Required</div>
-                <div className="text-2xl font-bold">{totalRequired} pcs</div>
+                <div className="text-sm text-gray-600">{pick('Total required', 'మొత్తం అవసరం')}</div>
+                <div className="text-xl font-semibold tabular-nums">{totalRequired} {t('pieces')}</div>
               </div>
               <div className="text-right">
-                <div className="text-sm text-teal-400">Total Loaded</div>
-                <div className="text-3xl font-black text-teal-400">{totalLoaded} pcs</div>
+                <div className="text-sm text-gray-600">{pick('Total loaded', 'మొత్తం లోడ్ చేసినవి')}</div>
+                <div className="text-xl font-semibold tabular-nums">{totalLoaded} {t('pieces')}</div>
               </div>
             </div>
-            {totalBalance > 0 && (
-              <div className="mt-3 pt-3 border-t border-slate-700 text-sm font-medium text-slate-300 flex justify-between">
-                <span>Remaining:</span>
-                <span className="text-white font-bold">{totalBalance} pcs</span>
+            {totalPending > 0 && (
+              <div className="mt-3 pt-3 border-t border-gray-200 text-sm text-gray-600 flex justify-between">
+                <span>{pick('Remaining', 'మిగిలినవి')}:</span>
+                <span className="font-semibold text-gray-900 tabular-nums">{totalPending} {t('pieces')}</span>
+              </div>
+            )}
+            {totalExcess > 0 && (
+              <div className="mt-3 pt-3 border-t border-gray-200 text-sm text-gray-600 flex justify-between">
+                <span>{pick('Excess', 'అదనపు')}:</span>
+                <span className="font-semibold text-orange-700 tabular-nums">{totalExcess} {t('pieces')}</span>
               </div>
             )}
             
-            <div className="mt-4 flex gap-2">
-              <button className="flex-1 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-semibold flex items-center justify-center gap-1 transition-colors" onClick={handleGeneratePdf}>
-                 <span className="material-symbols-outlined text-[18px]">picture_as_pdf</span> PDF
-              </button>
-              <button className="flex-1 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm font-semibold flex items-center justify-center gap-1 transition-colors" onClick={handleGenerateExcel}>
-                 <span className="material-symbols-outlined text-[18px]">table_chart</span> Excel
-              </button>
-            </div>
-          </section>
+          </Card>
         )}
 
-      </main>
+        {(embedded || requirements.length > 0) && <Card className="gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="section-heading text-sm font-semibold">{pick('Document actions', 'పత్రం చర్యలు')}</h2>
+            {loadingListNumber && <span className="text-sm text-gray-600 break-all">{loadingListNumber}</span>}
+          </div>
+          <div className="action-row flex flex-wrap gap-2">
+            {embedded && <Button primary en={saving ? pick('Saving…', 'సేవ్ అవుతోంది…') : t('save')} te={saving ? pick('Saving…', 'సేవ్ అవుతోంది…') : t('save')} disabled={saving} onClick={handleSaveList} />}
+            {requirements.length > 0 && <>
+              <Button en="Download PDF" te="PDF డౌన్‌లోడ్" onClick={handleGeneratePdf} />
+              <Button en="Download Excel" te="Excel డౌన్‌లోడ్" onClick={handleGenerateExcel} />
+            </>}
+          </div>
+        </Card>}
+      </Content>
     </div>
   );
 }

@@ -35,7 +35,8 @@ export default function DashboardAnalytics({ analytics, onRetry }) {
   const empty = !current.finalizedLoads;
   const deltaLabel = delta === null
     ? current.billed ? pick('No billing in the earlier 30 days', 'ముందటి 30 రోజుల్లో బిల్లులు లేవు') : ''
-    : `${delta > 0 ? '+' : ''}${delta}% ${pick('vs earlier 30 days', 'ముందటి 30 రోజులతో పోల్చితే')}`;
+    : pick('vs earlier 30 days', 'ముందటి 30 రోజులతో పోల్చితే');
+  const deltaPercent = delta === null ? '' : `${delta > 0 ? '+' : ''}${delta}%`;
   const chartLabel = pick(`Daily billed amount for the last 30 days. Total ${money(current.billed)} across ${current.finalizedLoads} loads.`, `గత 30 రోజుల రోజువారీ బిల్లు మొత్తం. ${current.finalizedLoads} లోడ్లకు మొత్తం ${money(current.billed)}.`);
 
   return <section className="dashboard-analytics" aria-labelledby="analytics-heading" aria-busy={loading}>
@@ -43,7 +44,7 @@ export default function DashboardAnalytics({ analytics, onRetry }) {
     {error && <div className="analytics-state analytics-state-inline" role="alert"><p>{pick('Showing earlier figures. Refresh failed.', 'పాత వివరాలు చూపిస్తున్నాం. రిఫ్రెష్ విఫలమైంది.')}</p><button type="button" className="text-button text-sm" onClick={onRetry}>{pick('Try again', 'మళ్ళీ ప్రయత్నించండి')}</button></div>}
     {empty ? <div className="analytics-state"><p>{pick('No dispatched or delivered loads in the last 30 days yet. Totals appear here once a bill is finalized.', 'గత 30 రోజుల్లో డిస్పాచ్ లేదా డెలివరీ అయిన లోడ్లు లేవు. బిల్లు ఖరారు చేయగానే మొత్తాలు ఇక్కడ కనిపిస్తాయి.')}</p></div> : <>
       <dl className="analytics-stats">
-        <div className="analytics-stat analytics-stat-lead"><dt>{pick('Billed', 'బిల్లు మొత్తం')}</dt><dd>{money(current.billed)}</dd>{deltaLabel && <span className={`analytics-delta ${delta > 0 ? 'is-up' : delta < 0 ? 'is-down' : ''}`}>{deltaLabel}</span>}</div>
+        <div className="analytics-stat analytics-stat-lead"><dt>{pick('Billed', 'బిల్లు మొత్తం')}</dt><dd>{money(current.billed)}</dd>{deltaLabel && <span className="analytics-delta">{deltaPercent && <span className={`analytics-delta-chip ${delta > 0 ? 'is-up' : delta < 0 ? 'is-down' : ''}`}>{deltaPercent}</span>} {deltaLabel}</span>}</div>
         <div className="analytics-stat"><dt>{pick('Finalized loads', 'ఖరారైన లోడ్లు')}</dt><dd>{count(current.finalizedLoads)}</dd><span className="analytics-delta">{pick(`${count(previous.finalizedLoads)} earlier`, `ముందు ${count(previous.finalizedLoads)}`)}</span></div>
         <div className="analytics-stat"><dt>{pick('Area dispatched', 'డిస్పాచ్ చేసిన విస్తీర్ణం')}</dt><dd>{count(current.areaSqFt)}<small> {pick('sq ft', 'చ.అ.')}</small></dd></div>
         <div className="analytics-stat"><dt>{pick('Pieces', 'ముక్కలు')}</dt><dd>{count(current.pieces)}</dd></div>

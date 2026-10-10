@@ -1,4 +1,5 @@
 import { useId, useRef, useState } from 'react';
+
 import { useLanguage } from '../../i18n/LanguageContext';
 import { money } from '../../utils/pilotDraft.js';
 import Icon from './Icon.jsx';
@@ -30,15 +31,15 @@ function MeasurementTable({ invoice = false }) {
     <table className={`mk-sample-table w-full border-collapse text-sm ${invoice ? 'mk-invoice-table' : ''}`}>
       <caption className="sr-only">{pick('Sample stone · Polished · ₹64 per square foot', 'నమూనా రాయి · పాలిష్ · చదరపు అడుగుకు ₹64')}</caption>
       <thead><tr className="bg-[#f2f6f4] text-[#526661]">
-        <th scope="col">{pick('Size (ft)', 'సైజు (అడుగులు)')}</th>
         <th scope="col">{pick('Type', 'రకం')}</th>
+        <th scope="col">{pick('Size (ft)', 'సైజు (అడుగులు)')}</th>
         <th scope="col" className="mk-numeric">{pick('Qty', 'ముక్కలు')}</th>
         <th scope="col" className="mk-numeric">{pick('Sq ft', 'చ.అ.')}</th>
         {invoice && <th scope="col" className="mk-numeric">{pick('Amount', 'మొత్తం')}</th>}
       </tr></thead>
       <tbody>{sampleRows.map((row, index) => <tr key={row.category}>
+        <td className="mk-type">{row.category === 'TOP' ? pick('TOP', 'టాప్') : null}</td>
         <th scope="row" className="whitespace-nowrap font-medium">{index === 0 ? '3½ × 2' : '3 × 1½'}</th>
-        <td>{row.category === 'TOP' ? pick('TOP', 'టాప్') : pick('Regular', 'సాధారణ')}</td>
         <td className="mk-numeric">{row.quantity}</td><td className="mk-numeric">{row.sqFt}</td>
         {invoice && <td className="mk-numeric">{money(row.lineTotal)}</td>}
       </tr>)}</tbody>
@@ -51,44 +52,6 @@ export function SampleInvoice({ compact = false }) {
   return <InvoiceDocument record={SAMPLE_DISPATCH} compact={compact} sample>
     <MeasurementTable invoice />
   </InvoiceDocument>;
-}
-
-export function SampleDownload({ className = '' }) {
-  const { pick } = useLanguage();
-  const [status, setStatus] = useState('idle');
-  const downloading = useRef(false);
-  const statusId = useId();
-
-  async function download() {
-    if (downloading.current) return;
-    downloading.current = true; setStatus('loading');
-    let url;
-    let link;
-    try {
-      const { buyerPdf } = await import('../../utils/pilotExports.js');
-      const file = buyerPdf(SAMPLE_DISPATCH);
-      url = URL.createObjectURL(file.blob);
-      link = document.createElement('a');
-      link.href = url; link.download = file.filename;
-      document.body.appendChild(link); link.click();
-      setStatus('success');
-    } catch { setStatus('error'); }
-    finally {
-      link?.remove();
-      // Keep the object URL alive long enough for the browser's download handoff.
-      if (url) window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      downloading.current = false;
-    }
-  }
-
-  return <div className={className}>
-    <button type="button" disabled={status === 'loading'} aria-describedby={statusId} onClick={download} className="mk-secondary inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-[#cadbd5] bg-white px-5 text-sm font-semibold text-[#17645d]">
-      <Icon name="bill" className="h-4 w-4" />{status === 'loading' ? pick('Preparing PDF…', 'PDF సిద్ధం అవుతోంది…') : pick('Download sample PDF', 'నమూనా PDF డౌన్‌లోడ్')}
-    </button>
-    <p id={statusId} role={status === 'error' ? 'alert' : 'status'} className={`mt-2 text-xs leading-relaxed ${status === 'error' ? 'text-[#9b3030]' : 'text-[#526661]'}`}>
-      {status === 'error' ? pick('The PDF could not be created. Please try again.', 'PDF సృష్టించలేకపోయాము. మళ్ళీ ప్రయత్నించండి.') : status === 'success' ? pick('Sample PDF created. Check your browser downloads.', 'నమూనా PDF సిద్ధమైంది. బ్రౌజర్ డౌన్‌లోడ్‌లను చూడండి.') : pick('English PDF · generated locally · no account needed', 'ఇంగ్లీష్ PDF · ఈ పరికరంలో సృష్టించబడుతుంది · ఖాతా అవసరం లేదు')}
-    </p>
-  </div>;
 }
 
 function Overview({ onSelect }) {
@@ -117,9 +80,9 @@ function Measurements() {
   const { pick } = useLanguage();
   return <div className="space-y-5 p-4 sm:p-5">
     <div><h3 className="text-lg font-semibold tracking-tight">{pick('Fractions in. Clear totals out.', 'భిన్నాలతో కొలతలు. స్పష్టమైన మొత్తాలు.')}</h3><p className="mt-1 text-xs leading-relaxed text-[#526661]">{pick('Feet, quantities and numbered rows with Top pieces.', 'అడుగులు, ముక్కలు, టాప్ ముక్కలతో వరుస సంఖ్యలు.')}</p></div>
-    <div className="rounded-xl border border-[#d9e8e1] bg-[#edf6f2] p-4"><p className="text-xs text-[#355f55]">{pick('Sample calculation', 'నమూనా లెక్క')}</p><p className="mt-2 text-xl font-semibold tracking-tight">3½ × 2 × 30 <span className="text-[#526661]">=</span> 210 <span className="text-sm font-medium">{pick('sq ft', 'చ.అ.')}</span></p></div>
+    <div className="rounded-xl border border-[#d9e8e1] bg-[#edf6f2] p-4"><p className="text-xs text-[#355f55]">{pick('Sample calculation', 'నమూనా లెక్క')}</p><p className="mk-calc mt-2 text-xl font-semibold tracking-tight">3½ × 2 × 30 <span className="text-[#526661]">=</span> 210 <span className="text-sm font-medium">{pick('sq ft', 'చ.అ.')}</span></p></div>
     <MeasurementTable />
-    <div className="flex flex-wrap items-baseline justify-between gap-3"><span className="text-sm text-[#526661]">{pick('Total measured area', 'మొత్తం కొలిచిన విస్తీర్ణం')}</span><strong className="text-3xl font-semibold tracking-tight text-[#17645d] tabular-nums">268.5 <small className="text-sm font-medium">{pick('sq ft', 'చ.అ.')}</small></strong></div>
+    <div className="flex flex-wrap items-baseline justify-between gap-3"><span className="text-sm text-[#526661]">{pick('Total measured area', 'మొత్తం కొలిచిన విస్తీర్ణం')}</span><strong className="mk-measure-total text-3xl font-semibold tracking-tight text-[#17645d] tabular-nums">268.5 <small className="text-sm font-medium">{pick('sq ft', 'చ.అ.')}</small></strong></div>
     <p className="text-xs leading-relaxed text-[#526661]">{pick('Enter 3½, 3 1/2 or 3.5 in the workspace. Review every row before finalizing.', 'వర్క్‌స్పేస్‌లో 3½, 3 1/2 లేదా 3.5 నమోదు చేయండి. ఖరారు చేసే ముందు ప్రతి వరుస తనిఖీ చేయండి.')}</p>
   </div>;
 }
@@ -155,9 +118,9 @@ export default function ProductShowcase({ initialTab = 'overview', animateStatus
   return <div className={`mk-double-bezel min-w-0 rounded-[28px] border border-[#cfdfd8] p-2 sm:p-2.5 ${className}`}>
     <div className="mk-product-window overflow-hidden rounded-[20px] border border-[#d9e4df] bg-white">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e0eae7] px-4 py-3 sm:px-5"><span className="flex items-center gap-2 text-sm font-semibold"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#17645d] text-white" aria-hidden="true"><Icon name="loads" className="h-4 w-4" /></span>StoneDesk</span><SampleLabel /></div>
-      <div className="mk-showcase-tabs grid grid-cols-4 gap-1 border-b border-[#e0eae7] bg-[#fafcfb] p-2" role="tablist" aria-label={pick('Explore the sample workspace', 'నమూనా వర్క్‌స్పేస్ చూడండి')}>
-        {screens.map(([key, en, te], index) => <button type="button" key={key} ref={node => { tabs.current[index] = node; }} id={`${id}-tab-${key}`} role="tab" aria-selected={active === key} aria-controls={`${id}-panel`} tabIndex={active === key ? 0 : -1} onClick={() => setActive(key)} onKeyDown={event => keyboard(event, index)} className="min-h-11 min-w-0 rounded-lg px-1 text-xs font-medium sm:px-2">{pick(en, te)}</button>)}
-      </div>
+      <div className="border-b border-[#e0eae7] px-3 py-3 sm:px-4"><div className="mk-showcase-tabs grid grid-cols-4" role="tablist" aria-label={pick('Explore the sample workspace', 'నమూనా వర్క్‌స్పేస్ చూడండి')}>
+        {screens.map(([key, en, te], index) => <button type="button" key={key} ref={node => { tabs.current[index] = node; }} id={`${id}-tab-${key}`} role="tab" aria-selected={active === key} aria-controls={`${id}-panel`} tabIndex={active === key ? 0 : -1} onClick={() => setActive(key)} onKeyDown={event => keyboard(event, index)} className="min-w-0 px-1 sm:px-2">{pick(en, te)}</button>)}
+      </div></div>
       <div id={`${id}-panel`} role="tabpanel" tabIndex={0} aria-labelledby={`${id}-tab-${active}`} className="mk-showcase-panel min-w-0">
         {active === 'overview' && <Overview onSelect={key => { setActive(key); tabs.current[screens.findIndex(screen => screen[0] === key)]?.focus(); }} />}
         {active === 'measure' && <Measurements />}

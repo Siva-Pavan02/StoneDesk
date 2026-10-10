@@ -126,9 +126,10 @@ const publicUser = (u) => ({
   id: u.id,
   name: u.name,
   email: u.email,
-  role: u.role,
+  role: u.role === "YardManager" ? "Yard Manager" : u.role,
   active: u.active,
   organizationId: u.organizationId,
+  isOwner: u.role === "Admin",
   createdAt: u.createdAt,
 });
 
@@ -285,6 +286,26 @@ api.post(
     )
       fail(400, "Enter your current password");
     res.json({ ok: true });
+  }),
+);
+api.delete(
+  "/auth/account",
+  requireSession,
+  wrap((req, res) => {
+    const user = currentUser();
+    const confirm =
+      typeof req.body.confirm === "string"
+        ? req.body.confirm.trim().toLowerCase()
+        : "";
+    if (confirm !== user.email.toLowerCase())
+      fail(400, "Type your email exactly to confirm deletion");
+    const deleteBusiness = user.role === "Admin";
+    // The mock holds one organization; deleting the business restores the seed data.
+    if (deleteBusiness) Object.assign(db, seed());
+    else db.users = db.users.filter((u) => u.id !== user.id);
+    session = null;
+    save();
+    res.json({ ok: true, deletedBusiness: deleteBusiness });
   }),
 );
 api.get("/auth/users", requireSession, requireAdmin, (req, res) =>

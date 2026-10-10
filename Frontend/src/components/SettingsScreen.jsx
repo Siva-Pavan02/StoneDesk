@@ -13,6 +13,59 @@ import {
 import { useLanguage } from '../i18n/LanguageContext';
 import { motion } from 'motion/react';
 import { Button, Card, Field } from './pilot/Controls.jsx';
+import Icon from './pilot/Icon.jsx';
+
+const compactPlate = value => value.toUpperCase().replace(/[\s.-]/g, '');
+// Indian registration: TN 01 AB 1234, or Bharat series 22 BH 1234 AA. Returns formatted plate or null.
+function formatTruckNumber(value) {
+  const plate = compactPlate(value);
+  const standard = /^([A-Z]{2})(\d{1,2})([A-Z]{0,3})(\d{4})$/.exec(plate);
+  if (standard) return [standard[1], standard[2].padStart(2, '0'), standard[3], standard[4]].filter(Boolean).join(' ');
+  const bharat = /^(\d{2})BH(\d{4})([A-Z]{1,2})$/.exec(plate);
+  return bharat ? `${bharat[1]} BH ${bharat[2]} ${bharat[3]}` : null;
+}
+
+function truckError(value, items, pick) {
+  if (!value.trim()) return '';
+  if (!formatTruckNumber(value)) return pick('Use a valid number, like TN 01 AB 1234.', 'సరైన నంబర్ వాడండి, ఉదా: TN 01 AB 1234.');
+  if (items.some(item => compactPlate(item) === compactPlate(formatTruckNumber(value)))) return pick('This truck is already saved.', 'ఈ లారీ ఇప్పటికే సేవ్ అయింది.');
+  return '';
+}
+
+function ReferenceList({ kind, items, value, onValue, onAdd, adding, onRemove }) {
+  const { t, pick } = useLanguage();
+  const truck = kind === 'trucks';
+  const [touched, setTouched] = useState(false);
+  const error = truck ? truckError(value, items, pick) : '';
+  const showError = Boolean(error) && touched;
+  const errorId = `${kind}-add-error`;
+  return <Card className="references-card">
+    <div className="references-card-head">
+      <h2>{t(kind)}</h2>
+      <span>{items.length} {pick('saved', 'సేవ్ అయ్యాయి')}</span>
+    </div>
+    <form className="references-add" noValidate onSubmit={e => { e.preventDefault(); setTouched(true); if (!error) { onAdd(truck ? formatTruckNumber(value) : value.trim()); setTouched(false); } }}>
+      <Field en={t(truck ? 'truckNumber' : 'destination')} te={t(truck ? 'truckNumber' : 'destination')}>
+        <input className="input" type="text" autoComplete="off" value={value} maxLength={truck ? 16 : undefined}
+          autoCapitalize={truck ? 'characters' : undefined} spellCheck={truck ? false : undefined}
+          aria-invalid={showError || undefined} aria-describedby={showError ? errorId : undefined}
+          onBlur={() => value.trim() && setTouched(true)}
+          onChange={e => onValue(truck ? e.target.value.toUpperCase() : e.target.value)} placeholder={truck ? 'TN 01 AB 1234' : 'Chennai Port'} />
+      </Field>
+      {showError && <p id={errorId} role="alert" className="references-error">{error}</p>}
+      <Button type="submit" primary en={t('addNew')} te={t('addNew')} disabled={adding || !value.trim() || showError} />
+    </form>
+    {items.length === 0 ? <div className="references-empty">
+      <p className="references-empty-title">{truck ? pick('No trucks saved yet', 'ఇంకా లారీలు సేవ్ చేయలేదు') : pick('No destinations saved yet', 'ఇంకా గమ్యస్థానాలు సేవ్ చేయలేదు')}</p>
+      <p>{truck ? pick('Add a truck number above. It will be suggested when you fill in a new load.', 'పైన లారీ నంబర్ జోడించండి. కొత్త లోడ్ నింపేటప్పుడు సూచనగా వస్తుంది.') : pick('Add a destination above. It will be suggested when you fill in a new load.', 'పైన గమ్యం జోడించండి. కొత్త లోడ్ నింపేటప్పుడు సూచనగా వస్తుంది.')}</p>
+    </div> : <ul className="references-list">
+      {items.map(item => <li key={item}>
+        <span className={truck ? 'references-plate' : undefined}>{item}</span>
+        <button type="button" className="references-remove" aria-label={`${t('delete')} ${item}`} onClick={() => onRemove(item)}>{t('delete')}</button>
+      </li>)}
+    </ul>}
+  </Card>;
+}
 
 export default function SettingsScreen({ user, onClose, embedded = false, referenceOnly = false }) {
   const { t, pick } = useLanguage();
@@ -46,11 +99,11 @@ export default function SettingsScreen({ user, onClose, embedded = false, refere
 
   const [newTruck, setNewTruck] = useState('');
   const [isAddingTruck, setIsAddingTruck] = useState(false);
-  const handleAddTruck = async () => {
-    if (!newTruck.trim()) return;
+  const handleAddTruck = async (truckNumber) => {
+    if (!truckNumber) return;
     try {
       setIsAddingTruck(true);
-      const updated = await addTruck(quarryId, newTruck.trim());
+      const updated = await addTruck(quarryId, truckNumber);
       setSettings(updated);
       setNewTruck('');
     } catch (err) {
@@ -182,9 +235,10 @@ export default function SettingsScreen({ user, onClose, embedded = false, refere
 
   return (
     <div className={embedded ? 'pilot workspace-utility-screen settings-screen space-y-4' : 'pilot min-h-screen bg-gray-50 flex flex-col'}>
-      {embedded ? <header className="screen-heading flex flex-wrap items-center gap-3">
-        <Button en="Back" te="వెనక్కి" onClick={onClose} />
-        <h1 className="text-lg font-semibold">{pick('Trucks & destinations', 'లారీలు మరియు గమ్యస్థానాలు')}</h1>
+      {embedded ? <header className="references-heading">
+        {onClose && <button type="button" className="references-back" onClick={onClose}><Icon name="prev" className="h-4 w-4" />{pick('Back', 'వెనక్కి')}</button>}
+        <h1>{pick('Trucks & destinations', 'లారీలు మరియు గమ్యస్థానాలు')}</h1>
+        <p>{pick('Saved here once, suggested every time you fill in a new load.', 'ఇక్కడ ఒకసారి సేవ్ చేస్తే, కొత్త లోడ్ నింపిన ప్రతిసారి సూచనగా వస్తుంది.')}</p>
       </header> : <header className="fixed top-0 inset-x-0 z-50 bg-white border-b border-slate-200 shadow-sm pt-safe">
         <div className="max-w-xl mx-auto w-full px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -207,8 +261,8 @@ export default function SettingsScreen({ user, onClose, embedded = false, refere
           </div>
         ) : settings ? (
           <>
-            <div aria-label={t('settings')} className={embedded ? 'action-row flex flex-wrap gap-2' : 'flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide relative'}>
-              {tabs.map((tab) => embedded ? <Button key={tab} en={t(tab)} te={t(tab)} primary={visibleTab === tab} aria-pressed={visibleTab === tab} onClick={() => setActiveTab(tab)} /> : (
+            <div role={embedded ? 'group' : undefined} aria-label={embedded ? pick('Saved lists', 'సేవ్ చేసిన జాబితాలు') : t('settings')} className={embedded ? 'settings-language-options references-switch' : 'flex gap-2 mb-6 overflow-x-auto pb-2 scrollbar-hide relative'}>
+              {tabs.map((tab) => embedded ? <button type="button" key={tab} aria-pressed={visibleTab === tab} onClick={() => setActiveTab(tab)}>{t(tab)}<span className="references-count" aria-hidden="true">{(tab === 'trucks' ? settings.savedTrucks : settings.savedDestinations).length}</span></button> : (
                 <button
                   key={tab}
                   type="button"
@@ -228,57 +282,9 @@ export default function SettingsScreen({ user, onClose, embedded = false, refere
               ))}
             </div>
 
-            {visibleTab === 'trucks' && (
-              <Card>
-                <h2 className="section-heading font-semibold text-slate-800 mb-4">
-                  <span>{t('trucks')}</span>
-                </h2>
-                <div className="action-row grid gap-3 mb-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-                  <Field en={t('truckNumber')} te={t('truckNumber')}
-                    type="text"
-                    value={newTruck}
-                    onChange={(e) => setNewTruck(e.target.value)}
-                    placeholder="e.g. TN-01-AB-1234"
-                  />
-                  <Button primary en={t('addNew')} te={t('addNew')} onClick={handleAddTruck} disabled={isAddingTruck} />
-                </div>
-                <div className="space-y-2">
-                  {settings.savedTrucks.length === 0 ? <p className="text-slate-500 text-sm">Empty.</p> : null}
-                  {settings.savedTrucks.map(truck => (
-                    <div key={truck} className="flex justify-between items-center p-3 border border-slate-100 bg-slate-50 rounded-lg">
-                      <span className="min-w-0 break-words text-slate-800">{truck}</span>
-                      <Button en={t('delete')} te={t('delete')} aria-label={`${t('delete')} ${truck}`} onClick={() => handleRemoveTruck(truck)} />
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )}
+            {visibleTab === 'trucks' && <ReferenceList kind="trucks" items={settings.savedTrucks} value={newTruck} onValue={setNewTruck} onAdd={handleAddTruck} adding={isAddingTruck} onRemove={handleRemoveTruck} />}
 
-            {visibleTab === 'destinations' && (
-              <Card>
-                <h2 className="section-heading font-semibold text-slate-800 mb-4">
-                  <span>{t('destinations')}</span>
-                </h2>
-                <div className="action-row grid gap-3 mb-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-                  <Field en={t('destination')} te={t('destination')}
-                    type="text"
-                    value={newDestination}
-                    onChange={(e) => setNewDestination(e.target.value)}
-                    placeholder="e.g. Chennai Port"
-                  />
-                  <Button primary en={t('addNew')} te={t('addNew')} onClick={handleAddDestination} disabled={isAddingDest} />
-                </div>
-                <div className="space-y-2">
-                  {settings.savedDestinations.length === 0 ? <p className="text-slate-500 text-sm">Empty.</p> : null}
-                  {settings.savedDestinations.map(dest => (
-                    <div key={dest} className="flex justify-between items-center p-3 border border-slate-100 bg-slate-50 rounded-lg">
-                      <span className="min-w-0 break-words text-slate-800">{dest}</span>
-                      <Button en={t('delete')} te={t('delete')} aria-label={`${t('delete')} ${dest}`} onClick={() => handleRemoveDestination(dest)} />
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )}
+            {visibleTab === 'destinations' && <ReferenceList kind="destinations" items={settings.savedDestinations} value={newDestination} onValue={setNewDestination} onAdd={handleAddDestination} adding={isAddingDest} onRemove={handleRemoveDestination} />}
 
             {!referencesOnly && visibleTab === 'rates' && (
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">

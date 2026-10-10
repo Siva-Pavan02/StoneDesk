@@ -10,7 +10,28 @@
 .marketing :where(button, a, [tabindex]):focus-visible { outline: 3px solid #22796f; outline-offset: 4px; }
 .marketing button { cursor: pointer; }
 .marketing button:disabled { cursor: default; opacity: .65; }
-.marketing .mk-section { padding-block: 32px; }
+.marketing .mk-section { padding-block: 64px; }
+.marketing .mk-scrub { color: #203d36; font-size: clamp(22px, 2.6vw, 32px); line-height: 1.35; }
+.marketing[lang='te'] .mk-scrub { line-height: 1.6; letter-spacing: 0; }
+.marketing .mk-scrub-word { transition: opacity 120ms linear; }
+.marketing .mk-bento-card { position: relative; display: flex; flex-direction: column; min-width: 0; padding: 28px; border: 1px solid #dce6e1; border-radius: 22px; background: #fff; overflow: hidden; transition: border-color 300ms var(--ui-ease), transform 500ms var(--ui-ease); }
+.marketing .mk-bento-card:hover { border-color: #b9d3c7; transform: translateY(-2px); }
+.marketing .mk-bento-lead { background: radial-gradient(120% 80% at 100% 0%, #e2f0e9 0%, #fff 60%); }
+.marketing .mk-bento-icon { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 12px; background: #e5f1eb; color: #17645d; }
+.marketing .mk-bento-sheet { margin-top: auto; padding-top: 32px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.marketing .mk-bento-sheet-row { display: grid; grid-template-columns: 1fr 56px 64px; padding: 10px 14px; border-top: 1px solid #e5ece8; color: #526661; }
+.marketing .mk-bento-sheet-row span + span { text-align: right; }
+.marketing .mk-bento-sheet-total { border-radius: 10px; background: #f1f6f3; color: #203d36; font-weight: 600; }
+.marketing .mk-steps { position: relative; }
+.marketing .mk-workflow-step { position: relative; padding: 0 0 32px 28px; border-left: 1px solid #cfe0d8; }
+.marketing .mk-workflow-step:last-child { padding-bottom: 0; }
+.marketing .mk-step-dot { position: absolute; left: -6px; top: 6px; width: 11px; height: 11px; border: 2px solid #17645d; border-radius: 999px; background: #f7fbfa; }
+.marketing .mk-cta-band { margin-block: 32px 64px; padding: 48px 28px; border-radius: 28px; background: radial-gradient(90% 120% at 0% 0%, #22786f 0%, #17645d 45%, #0f4741 100%); color: #fff; }
+.marketing .mk-cta-title { font-size: clamp(30px, 4.4vw, 56px); line-height: 1.1; }
+.marketing[lang='te'] .mk-cta-title { line-height: 1.45; letter-spacing: -.02em; }
+.marketing .mk-cta-band .mk-primary { color: #17645d; background: #fff; border-color: #fff; }
+.marketing .mk-cta-band .mk-primary:hover { background: #e9f3ee; }
+.marketing .mk-cta-band .mk-cta-disc { color: #fff; background: #17645d; }
 .marketing .mk-hero-title { font-size: clamp(42px, 5.05vw, 72px); line-height: 1.1; }
 .marketing .mk-section-title { font-size: clamp(28px, 3.25vw, 42px); line-height: 1.2; }
 .marketing[lang='te'] .mk-hero-title { font-size: clamp(34px, 4.5vw, 60px); line-height: 1.45; letter-spacing: -.025em; }
@@ -20,18 +41,19 @@
   .marketing .mk-nav { background: rgb(255 255 255 / .88); backdrop-filter: blur(12px); }
 }
 .marketing .mk-nav-links { margin-left: auto; }
-.marketing .mk-nav-link, .marketing .mk-login, .marketing .mk-motion-toggle, .marketing .mk-language button, .marketing .mk-secondary, .marketing .mk-preview-row { transition: background-color 220ms var(--ui-ease), color 220ms var(--ui-ease), border-color 220ms var(--ui-ease), transform 220ms var(--ui-ease); }
-.marketing .mk-nav-link:hover, .marketing .mk-login:hover, .marketing .mk-motion-toggle:hover:not(:disabled) { background: #eaf3ef; color: #17645d; }
-.marketing .mk-language button { color: #526661; }
-.marketing .mk-language button[aria-pressed='true'] { background: #e2f0e8; color: #17645d; }
-.marketing .mk-language button:hover { background: #edf6f1; }
+.marketing .mk-nav-link, .marketing .mk-login, .marketing .mk-secondary, .marketing .mk-preview-row { transition: background-color 220ms var(--ui-ease), color 220ms var(--ui-ease), border-color 220ms var(--ui-ease), transform 220ms var(--ui-ease); }
+.marketing .mk-nav-link:hover, .marketing .mk-login:hover { background: #eaf3ef; color: #17645d; }
 .marketing .mk-primary { min-height: 54px; color: white; background: #17645d; border: 1px solid #17645d; box-shadow: 0 3px 4px rgb(18 83 66 / .08); white-space: nowrap; transition: background-color 220ms var(--ui-ease); }
 .marketing .mk-primary:hover { background: #104f49; }
 .marketing .mk-primary:active { background: #0d4540; }
 .marketing .mk-cta-disc { color: #17645d; background: #f1f8f4; transition: transform 300ms var(--ui-ease); }
 .marketing .mk-primary:hover .mk-cta-disc { transform: translateX(2px) translateY(-1px); }
-.marketing .mk-primary-compact { min-height: 44px; gap: 12px; padding-left: 18px; padding-right: 5px; font-size: 12px; }
-.marketing .mk-primary-compact .mk-cta-disc { width: 32px; height: 32px; }
+.marketing .mk-primary-compact { min-height: 44px; gap: 10px; padding: 0 6px 0 20px; border-radius: 999px; box-shadow: 0 1px 2px rgb(18 83 66 / .18), inset 0 1px 0 rgb(255 255 255 / .14); font-size: 13px; letter-spacing: .005em; }
+.marketing .mk-primary-compact .mk-cta-arrow { box-sizing: content-box; padding: 6px; border-radius: 999px; background: rgb(255 255 255 / .16); transition: transform 220ms var(--ui-ease), background-color 220ms var(--ui-ease); }
+.marketing .mk-primary-compact:hover .mk-cta-arrow { transform: translateX(2px); background: rgb(255 255 255 / .26); }
+.marketing .mk-nav-actions { padding-left: 4px; }
+.marketing .mk-login { padding-inline: 18px; border: 1px solid #d5e3dc; background: #fff; color: #31504a; letter-spacing: .005em; }
+.marketing .mk-login:hover { border-color: #b7d2c7; }
 .marketing .mk-secondary:hover:not(:disabled) { background: #edf6f1; border-color: #9cbfb0; }
 .marketing .mk-secondary:active:not(:disabled) { transform: translateY(1px); }
 .marketing .mk-text-link:hover { text-decoration: underline; text-underline-offset: 5px; }
@@ -40,9 +62,11 @@
 .marketing .mk-hero-product::before { content: ''; position: absolute; inset: -22px -12px; z-index: -1; border: 1px solid #e5eee9; border-radius: 40px; background: #eff6f2; transform: rotate(-2deg); pointer-events: none; }
 .marketing .mk-product-window { box-shadow: 0 2px 6px rgb(29 72 50 / .035); }
 .marketing .mk-showcase-panel { min-height: 384px; }
-.marketing .mk-showcase-tabs button { color: #526661; transition: background-color 220ms var(--ui-ease), color 220ms var(--ui-ease); }
-.marketing .mk-showcase-tabs button:hover { background: #eaf3ee; }
-.marketing .mk-showcase-tabs button[aria-selected='true'] { background: white; color: #17645d; box-shadow: 0 1px 4px rgb(34 66 47 / .09), inset 0 0 0 1px #dce8e0; }
+.marketing .mk-showcase-tabs { gap: 3px; padding: 4px; border-radius: 10px; background: #f0f4f1; }
+.marketing .mk-showcase-tabs button { min-height: 40px; border-radius: 8px; color: #526661; font-size: 12px; font-weight: 500; transition: background-color 220ms var(--ui-ease), color 220ms var(--ui-ease), transform 220ms var(--ui-ease); }
+.marketing .mk-showcase-tabs button:hover { color: #17645d; }
+.marketing .mk-showcase-tabs button:active { transform: scale(.98); }
+.marketing .mk-showcase-tabs button[aria-selected='true'] { background: white; color: #17645d; box-shadow: 0 1px 3px rgb(32 61 54 / .07); }
 .marketing .mk-preview-row:hover { background: #f5f9f6; }
 .marketing .mk-status { display: inline-flex; flex-shrink: 0; align-items: center; border-radius: 999px; padding: 5px 9px; background: #e3edfb; color: #1c4a8a; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .marketing .mk-status-neutral { background: #fdf1d6; color: #7a4a00; }
@@ -53,16 +77,43 @@
 .marketing .mk-sample-table thead th { font-size: 11px; font-weight: 500; white-space: nowrap; }
 .marketing .mk-sample-table tfoot :where(th, td) { border-bottom: 0; font-weight: 600; }
 .marketing .mk-sample-table .mk-numeric { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.marketing .mk-sample-table .mk-type { color: #17645d; font-size: 11px; font-weight: 600; letter-spacing: .04em; }
 .marketing .mk-bill-bezel { background: #eaf3ed; box-shadow: 0 18px 48px -25px rgb(27 75 51 / .18); }
 .marketing .mk-invoice { box-shadow: 0 2px 8px rgb(26 69 46 / .04); }
+.marketing .mk-essentials { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 20px 0; list-style: none; border-block: 1px solid #dce6e1; color: #526661; font-size: 14px; }
+.marketing .mk-essentials li { display: flex; align-items: center; justify-content: center; gap: 10px; min-width: 0; text-align: left; }
+.marketing .mk-essentials li:first-child { justify-content: flex-start; }
+.marketing .mk-essentials li:last-child { justify-content: flex-end; }
+.marketing .mk-essential-icon { display: grid; flex-shrink: 0; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: #e6f1ec; color: #17645d; }
+@media (max-width: 639px) {
+  .marketing .mk-essentials { gap: 8px; padding: 16px 0; font-size: 12px; line-height: 1.35; }
+  .marketing .mk-essentials li, .marketing .mk-essentials li:first-child, .marketing .mk-essentials li:last-child { flex-direction: column; justify-content: flex-start; gap: 8px; text-align: center; }
+}
+.marketing .mk-bill-card { display: grid; gap: 20px; padding: 24px; border-radius: 20px; background: #fff; box-shadow: 0 2px 8px rgb(26 69 46 / .04); }
+.marketing .mk-bill-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.marketing .mk-bill-card-kind { color: #526661; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.marketing .mk-bill-card-no { margin-top: 4px; font-size: 20px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.marketing .mk-bill-card-lines { margin: 0; }
+.marketing .mk-bill-card-lines > div { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid #edf2ef; font-size: 14px; }
+.marketing .mk-bill-card-lines dt { min-width: 0; color: #526661; }
+.marketing .mk-bill-card-lines dd { margin: 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.marketing .mk-bill-card-total { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border-radius: 14px; background: #eff6f2; }
+.marketing .mk-bill-card-total span { color: #2b4f46; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.marketing .mk-bill-card-total strong { color: #17645d; font-size: clamp(22px, 5vw, 28px); font-weight: 600; letter-spacing: -.03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.marketing .mk-bill-card-files { display: flex; flex-wrap: wrap; gap: 8px; }
+.marketing .mk-bill-card-files span { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid #dce6e1; border-radius: 999px; color: #2b4f46; font-size: 12px; font-weight: 500; }
+@media (max-width: 639px) { .marketing .mk-bill-card { gap: 16px; padding: 18px; border-radius: 18px; } .marketing .mk-bill-card-lines > div { font-size: 13px; } .marketing .mk-bill-card-total { padding: 14px; } .marketing .mk-bill-card-total span { font-size: 11px; letter-spacing: .05em; white-space: nowrap; } .marketing .mk-bill-card-total strong { font-size: 20px; } }
 .marketing .mk-dialog { width: min(560px, calc(100% - 24px)); max-height: calc(100dvh - 32px); margin: auto; padding: 0; border: 1px solid #d7e4dd; border-radius: 24px; color: #203d36; background: #fff; overflow-y: auto; overscroll-behavior: contain; box-shadow: 0 24px 70px rgb(24 60 47 / .18); }
 .marketing .mk-bill-dialog { width: min(700px, calc(100% - 24px)); }
 .marketing .mk-dialog::backdrop { background: rgb(20 43 35 / .42); }
 .marketing .mk-skip-link { position: fixed; left: 16px; top: -100px; z-index: 30; border-radius: 12px; border: 2px solid #17645d; padding: 12px 18px; color: #17645d; background: white; }
 .marketing .mk-skip-link:focus { top: 16px; }
 @media (min-width: 768px) {
-  .marketing .mk-section { padding-block: 96px; }
-  .marketing .mk-workflow-step { border-top: 1px solid #dce6e1; padding-top: 24px; }
+  .marketing .mk-section { padding-block: 128px; }
+  .marketing .mk-workflow-step { padding: 32px 0 0; border-left: 0; border-top: 1px solid #cfe0d8; }
+  .marketing .mk-step-dot { left: 0; top: -6px; }
+  .marketing .mk-bento-card { padding: 36px; }
+  .marketing .mk-cta-band { margin-block: 48px 96px; padding: 72px 64px; }
 }
 @media (min-width: 1024px) {
   .marketing .mk-hero-title { font-size: clamp(56px, 5.05vw, 72px); }
@@ -72,7 +123,6 @@
   .marketing .mk-nav { column-gap: 12px; }
   .marketing .mk-nav-link { padding-inline: 8px; }
   .marketing .mk-nav-links { gap: 4px; }
-  .marketing .mk-primary-compact { gap: 8px; }
 }
 @media (max-width: 1023px) {
   .marketing .mk-nav { column-gap: 8px; }
@@ -82,27 +132,38 @@
 }
 @media (max-width: 639px) {
   .marketing .mk-nav-actions { display: contents; }
-  .marketing .mk-language { margin-left: auto; }
-  .marketing .mk-nav-links { order: 3; flex: 1; gap: 0; margin-left: 0; }
+  .marketing .mk-login { margin-left: auto; padding-inline: 12px; border-color: transparent; background: transparent; }
+  .marketing .mk-nav::after { content: ''; order: 2; flex-basis: 100%; height: 0; }
+  .marketing .mk-nav-links { order: 3; flex: 1 1 auto; gap: 0; margin-left: -3px; white-space: nowrap; }
   .marketing .mk-nav-links a { min-height: 36px; font-size: 12px; }
   .marketing .mk-nav-cta { order: 3; }
-  .marketing .mk-primary-compact { min-height: 40px; padding-left: 13px; gap: 8px; font-size: 11px; }
-  .marketing .mk-primary-compact .mk-cta-disc { width: 28px; height: 28px; }
-  .marketing .mk-brand { display: none; }
+  .marketing .mk-primary-compact { min-height: 40px; padding: 0 5px 0 14px; gap: 8px; font-size: 12px; }
+  .marketing .mk-primary-compact .mk-cta-arrow { padding: 4px; }
   .marketing .mk-hero { padding-top: 40px; }
   .marketing .mk-hero-product::before { inset: -10px -5px; border-radius: 34px; transform: rotate(-1deg); }
-  .marketing .mk-invoice-table :where(th, td) { padding-inline: 8px; }
+  .marketing .mk-invoice-table :where(th, td) { padding-inline: 6px; }
+  .marketing .mk-invoice-table { min-width: 0; font-size: 11.5px; }
+  .marketing .mk-invoice-table thead th { font-size: 10px; }
+  .marketing .mk-invoice .invoice-summary-table :where(th, td) { padding-inline: 4px; }
+  .marketing .mk-invoice .invoice-summary-table thead th { font-size: 9.5px; line-height: 1.3; }
   .marketing .mk-showcase-panel { min-height: 420px; }
+  .marketing .mk-sample-table { min-width: 0; font-size: 13px; }
+  .marketing .mk-sample-table :where(th, td) { padding: 10px 6px; }
+  .marketing .mk-sample-table :where(th, td):first-child { padding-left: 2px; }
+  .marketing .mk-sample-table :where(th, td):last-child { padding-right: 2px; }
+  .marketing .mk-sample-table thead th { font-size: 10.5px; }
+  .marketing .mk-sample-table .mk-type { font-size: 10px; }
+  .marketing .mk-calc { font-size: 18px; }
+  .marketing .mk-measure-total { font-size: 26px; }
 }
 @media (max-width: 359px) {
   .marketing .mk-nav { padding-inline: 10px; column-gap: 4px; }
   .marketing .mk-login { padding-inline: 7px; font-size: 12px; }
-  .marketing .mk-language button { min-width: 34px; }
   .marketing .mk-hero-title { font-size: 39px; }
   .marketing .mk-primary { gap: 10px; padding-left: 18px; font-size: 12px; }
   .marketing .mk-showcase-tabs button { font-size: 10px; }
   .marketing .mk-nav-links a { padding-inline: 5px; font-size: 11px; }
-  .marketing .mk-primary-compact { padding-left: 10px; gap: 6px; }
+  .marketing .mk-primary-compact { padding: 0 4px 0 11px; gap: 5px; }
 }
 @media (prefers-reduced-transparency: reduce) {
   .marketing .mk-nav { background: white; backdrop-filter: none; }

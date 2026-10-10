@@ -1,6 +1,6 @@
-import { ArrowRightIcon, BellIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, Cross2Icon, DashboardIcon, FileTextIcon, HamburgerMenuIcon, HomeIcon, LockClosedIcon, MagnifyingGlassIcon, MixerHorizontalIcon, PersonIcon, PlusIcon, ReaderIcon, UpdateIcon } from '@radix-ui/react-icons';
+import { ArrowLeftIcon, ArrowRightIcon, BellIcon, CalendarIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, Cross2Icon, DashboardIcon, ExitIcon, FileTextIcon, HamburgerMenuIcon, HomeIcon, LayersIcon, LockClosedIcon, MagnifyingGlassIcon, MixerHorizontalIcon, PersonIcon, PlusIcon, ReaderIcon, SewingPinIcon, UpdateIcon } from '@radix-ui/react-icons';
 
-const icons = { menu: HamburgerMenuIcon, close: Cross2Icon, home: HomeIcon, loads: ReaderIcon, truck: DashboardIcon, bill: FileTextIcon, settings: MixerHorizontalIcon, search: MagnifyingGlassIcon, plus: PlusIcon, arrow: ArrowRightIcon, prev: ChevronLeftIcon, next: ChevronRightIcon, check: CheckIcon, user: PersonIcon, bell: BellIcon, lock: LockClosedIcon, refresh: UpdateIcon };
+const icons = { menu: HamburgerMenuIcon, close: Cross2Icon, home: HomeIcon, loads: ReaderIcon, truck: DashboardIcon, bill: FileTextIcon, settings: MixerHorizontalIcon, search: MagnifyingGlassIcon, plus: PlusIcon, arrow: ArrowRightIcon, back: ArrowLeftIcon, prev: ChevronLeftIcon, next: ChevronRightIcon, check: CheckIcon, calendar: CalendarIcon, user: PersonIcon, bell: BellIcon, lock: LockClosedIcon, refresh: UpdateIcon, logout: ExitIcon, products: LayersIcon, places: SewingPinIcon };
 export default function Icon({ name, className = '' }) {
   const Glyph = icons[name] || ReaderIcon;
   return <Glyph className={`h-5 w-5 shrink-0 ${className}`} aria-hidden="true" focusable="false" />;

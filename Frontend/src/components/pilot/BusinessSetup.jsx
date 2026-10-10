@@ -45,7 +45,7 @@ try {
       } catch (err) { setError(err.message); } finally { setBusy(false); }
   }
   return <form onSubmit={save} className="setup-form business-setup space-y-5 text-sm">
-    {onBack && <div className="action-row flex"><Button en="Back" te="వెనక్కి" disabled={busy} onClick={onBack} /></div>}
+    {onBack && <button type="button" className="text-button inline-flex items-center gap-1.5" disabled={busy} onClick={onBack}><Icon name="back" className="h-4 w-4" />{pick('Back', 'వెనక్కి')}</button>}
     <div className="setup-heading screen-heading"><p className="eyebrow mb-2">{pick('BUSINESS SETUP', 'వ్యాపార నమోదు')} · {step + 1} / 3</p><h1 ref={stepTitle} tabIndex={-1} className="text-2xl font-semibold">{pick('Your business', 'మీ వ్యాపార వివరాలు')}</h1><p className="mt-3 text-sm text-gray-600">{pick('Set up once. Your name and logo appear on every new bill.', 'ఒకసారి నమోదు చేయండి. ప్రతి కొత్త బిల్లులో మీ పేరు మరియు లోగో కనిపిస్తాయి.')}</p></div>
     <ErrorMessage error={error} />
     <ol className="setup-progress" aria-label={pick('Setup progress', 'నమోదు పురోగతి')}>{[['Business', 'వ్యాపారం'], ['Contact', 'సంప్రదింపు'], ['Defaults', 'డిఫాల్ట్‌లు']].map(([en, te], index) => <li key={en} aria-current={step === index ? 'step' : undefined} data-complete={index < step}><span className="step-number" aria-hidden="true">{index < step ? <Icon name="check" /> : index + 1}</span><span>{pick(en, te)}{index < step && <span className="sr-only"> {pick('completed', 'పూర్తయింది')}</span>}</span></li>)}</ol>
@@ -61,9 +61,11 @@ try {
     <Card className="gap-3">
       <Label en="Business logo (optional)" te="వ్యాపార లోగో" />
       <label className="logo-picker"><input ref={logoInput} aria-label={pick('Upload business logo', 'వ్యాపార లోగో జోడించండి')} type="file" accept="image/png,image/jpeg" onChange={chooseLogo} />
-        {(preview || (settings.logoPath && !removeLogo)) ? <img src={preview || logoUrl(settings.logoPath)} alt={pick('Business logo preview', 'వ్యాపార లోగో ప్రివ్యూ')} className="h-20 w-20 object-contain" /> : <span className="logo-placeholder"><Icon name="plus" /></span>}
-        <strong>{pick(file || (settings.logoPath && !removeLogo) ? 'Change logo' : 'Choose a logo', file || (settings.logoPath && !removeLogo) ? 'లోగో మార్చండి' : 'లోగో ఎంచుకోండి')}</strong>
-        <span className="text-sm text-gray-600">{pick('JPEG or PNG · up to 2 MB', 'JPEG లేదా PNG · గరిష్ఠంగా 2 MB')}</span>
+        {(preview || (settings.logoPath && !removeLogo)) ? <img src={preview || logoUrl(settings.logoPath)} alt={pick('Business logo preview', 'వ్యాపార లోగో ప్రివ్యూ')} className="logo-preview" /> : <span className="logo-placeholder"><Icon name="plus" /></span>}
+        <span className="logo-picker-text">
+          <strong>{pick(file || (settings.logoPath && !removeLogo) ? 'Change logo' : 'Choose a logo', file || (settings.logoPath && !removeLogo) ? 'లోగో మార్చండి' : 'లోగో ఎంచుకోండి')}</strong>
+          <span>{pick('JPEG or PNG · up to 2 MB', 'JPEG లేదా PNG · గరిష్ఠంగా 2 MB')}</span>
+        </span>
       </label>
       {file && <p className="text-xs text-gray-600 break-all" role="status">{file.name}</p>}
       {(file || settings.logoPath) && <Button en={removeLogo ? 'Keep logo' : 'Remove logo'} te={removeLogo ? 'లోగో ఉంచండి' : 'లోగో తొలగించండి'} onClick={() => { setRemoveLogo(!removeLogo); setFile(null); setPreview(''); if (logoInput.current) logoInput.current.value = ''; }} />}

@@ -17,24 +17,24 @@ export default function InvoiceDocument({ record, compact = false, sample = fals
         <InvoiceLogo src={business.logoDataUrl} businessName={business.businessName} />
         <div className="invoice-business-details">
           <h2 className="invoice-business-name">{business.businessName || 'StoneDesk'}</h2>
-          {business.address && <p className="invoice-contact">{business.address}</p>}
-          {business.phone && <p className="invoice-contact">{business.phone}</p>}
+          {(business.address || business.phone) && <p className="invoice-contact">{business.address && <span>{business.address}</span>}{business.address && business.phone && <span className="invoice-contact-sep" aria-hidden="true">  ·  </span>}{business.phone && <span className="whitespace-nowrap">{business.phone}</span>}</p>}
         </div>
       </div>
       <div className="invoice-reference">
-        <p className="invoice-document-kind">{finalized ? pick('Buyer invoice', 'కొనుగోలుదారు బిల్లు') : pick('Draft invoice', 'డ్రాఫ్ట్ బిల్లు')}</p>
-        {sample ? <span className="invoice-sample-tag">{pick('SAMPLE DATA', 'నమూనా సమాచారం')}</span> : <span className={`status-tag status-${record.status.toLowerCase()}`}>{status}</span>}
+        <div className="invoice-reference-kind">
+          <p className="invoice-document-kind">{finalized ? pick('Buyer invoice', 'కొనుగోలుదారు బిల్లు') : pick('Draft invoice', 'డ్రాఫ్ట్ బిల్లు')}</p>
+          {sample ? <span className="invoice-sample-tag">{pick('SAMPLE DATA', 'నమూనా సమాచారం')}</span> : <span className={`status-tag status-${record.status.toLowerCase()}`}>{status}</span>}
+        </div>
+        <p className="invoice-number"><span className="sr-only">{pick('Invoice no.', 'బిల్లు నం.')} </span>{record.dispatchSlipNumber || pick('Not assigned', 'కేటాయించలేదు')}</p>
+        <p className="invoice-date"><span className="sr-only">{pick('Invoice date', 'బిల్లు తేదీ')} </span>{date}</p>
       </div>
+      <dl className="invoice-metadata">
+        <div><dt>{pick('Party', 'పార్టీ')}</dt><dd>{record.partyName || pick('Not recorded', 'నమోదు చేయలేదు')}</dd></div>
+        <div><dt>{pick('Lorry no.', 'లారీ నం.')}</dt><dd className="invoice-metadata-plate">{record.logistics?.truckNumber || '—'}</dd></div>
+        <div><dt>{pick('Destination', 'గమ్యస్థానం')}</dt><dd>{record.logistics?.buyerDestination || '—'}</dd></div>
+        <div><dt>{pick('Supervisor', 'సూపర్‌వైజర్')}</dt><dd>{record.supervisor || '—'}</dd></div>
+      </dl>
     </header>
-
-    <dl className="invoice-metadata">
-      <div><dt>{pick('Party name', 'పార్టీ పేరు')}</dt><dd>{record.partyName || pick('Not recorded', 'నమోదు చేయలేదు')}</dd></div>
-      <div><dt>{pick('Lorry no.', 'లారీ నం.')}</dt><dd>{record.logistics?.truckNumber || '—'}</dd></div>
-      <div><dt>{pick('Destination', 'గమ్యస్థానం')}</dt><dd>{record.logistics?.buyerDestination || '—'}</dd></div>
-      <div><dt>{pick('Invoice no.', 'బిల్లు నం.')}</dt><dd className="invoice-number">{record.dispatchSlipNumber || pick('Not assigned', 'కేటాయించలేదు')}</dd></div>
-      <div><dt>{pick('Invoice date', 'బిల్లు తేదీ')}</dt><dd>{date}</dd></div>
-      <div><dt>{pick('Supervisor', 'సూపర్‌వైజర్')}</dt><dd>{record.supervisor || '—'}</dd></div>
-    </dl>
 
     {children || <InvoiceTable record={record} />}
     <LoadSummary variant="invoice" showGroups={false} rows={billRows(record)} summary={record.summary} />

@@ -1,16 +1,41 @@
+# Dependencies and builds
 **/node_modules/
-/server/node_modules/
 **/dist/
+**/coverage/
+*.tsbuildinfo
+
+# Environment (keep examples)
 **/.env
 **/.env.*
 !**/.env.example
+!**/.env.test.example
+
+# Runtime data
 **/uploads/
+Backend/mock/mock-data.json
 *.log
+npm-debug.log*
 output/
 tmp/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Tooling output
 /graphify-out/
-# Unwanted skills and agent files
+.playwright-cli/
+test-results/
+playwright-report/
+
+# Local agent skills and files
 .agents/
+.claude/
 skills-lock.json
 AGENTS.md
 PILOT.md
@@ -23,8 +48,3 @@ apply*.js
 convert.js
 split.js
 testFraction.js
-
-!**/.env.test.example
-.playwright-cli/
-
-Backend/mock/mock-data.json

@@ -45,7 +45,12 @@ apiRouter.use('/loading-lists', auth.requireSession, auth.requireActive, loading
 
 app.use('/api', apiRouter);
 
-app.use('/uploads', auth.requireSession, auth.requireActive, require('./utils/requireOrganizationLogo'), express.static(require('./utils/businessBranding').uploadDir, {
+app.use('/uploads', auth.requireSession, auth.requireActive, require('./utils/requireOrganizationLogo'), async (req, res, next) => {
+  const storage = require('./utils/logoStorage');
+  if (!storage.cloudEnabled()) return next();
+  if (!['GET', 'HEAD'].includes(req.method)) return res.sendStatus(405);
+  try { res.type('png').send(await storage.readLogo(req.path.slice(1))); } catch (error) { next(error); }
+}, express.static(require('./utils/businessBranding').uploadDir, {
   maxAge: 0, setHeaders: res => { res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('Cache-Control', 'private, no-store'); }
 }));
 

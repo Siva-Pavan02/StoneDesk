@@ -3,6 +3,8 @@
 const logFailure = err => console.error(JSON.stringify({
   event: 'request_failed',
   code: /^P\d{4}$/.test(err.code || '') ? err.code : err.name === 'PrismaClientValidationError' ? 'PRISMA_VALIDATION' : 'UNEXPECTED',
+  message: err.message,
+  stack: err.stack,
 }));
 module.exports = (err, req, res, next) => {
   if (res.headersSent) return next(err);

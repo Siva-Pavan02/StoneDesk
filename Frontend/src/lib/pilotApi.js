@@ -8,7 +8,10 @@ export async function request(path, { method = 'GET', body, file } = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     method,
     credentials: 'include',
-    headers: file ? { 'Content-Type': file.type } : body ? { 'Content-Type': 'application/json' } : undefined,
+    headers: {
+      Accept: 'application/json',
+      ...(file ? { 'Content-Type': file.type } : body ? { 'Content-Type': 'application/json' } : {})
+    },
     body: file || (body ? JSON.stringify(body) : undefined)
   });
   const data = await response.json().catch(() => null);

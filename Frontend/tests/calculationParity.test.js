@@ -66,7 +66,7 @@ test('property: preview, server and bill totals agree for random loads', () => {
   const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const dim = () => rand() < 0.5 ? Math.ceil(rand() * 40) / 4 : Math.ceil(rand() * 10000) / 1000;
   for (let i = 0; i < 1000; i++) {
-    const rows = Array.from({ length: 1 + Math.floor(rand() * 12) }, () => draftRow(`S${Math.floor(rand() * 3)}`, Math.round(rand() * 10000) / 100, dim(), dim(), 1 + Math.floor(rand() * 40), rand() < 0.3 ? 'TOP' : 'Regular', 1 + Math.floor(rand() * 15)));
+    const rows = Array.from({ length: 1 + Math.floor(rand() * 12) }, () => draftRow(`S${Math.floor(rand() * 3)}`, Math.round(rand() * 10000) / 100, dim(), dim(), 1 + Math.floor(rand() * 40), rand() < 0.3 ? 'TOP' : 'Regular', 1 + Math.floor(rand() * 20)));
     const fee = Math.round(rand() * 500000) / 100;
     const record = serverRecord(rows, fee), preview = summarize(rows, fee);
     assert.deepEqual(preview, record.summary);

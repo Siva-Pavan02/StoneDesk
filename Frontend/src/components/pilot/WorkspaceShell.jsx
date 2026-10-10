@@ -1,20 +1,55 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useLanguage } from "../../i18n/LanguageContext";
 import { logoUrl } from "../../lib/pilotApi.js";
 import Icon from "./Icon.jsx";
 
-const navigation = [
+const allNavigation = [
   ["home", "home", "Dashboard", "డ్యాష్‌బోర్డ్"],
   ["entries", "loads", "Loading entries", "లోడ్ వివరాలు"],
-  ["monitor", "truck", "Monitor & dispatch", "లోడ్ మానిటర్"],
-  ["invoices", "bill", "Invoices", "బిల్లులు"],
+  ["products", "products", "Products & rates", "రకాలు మరియు ధరలు", true],
+  ["references", "places", "Trucks & places", "లారీలు మరియు ప్రదేశాలు", true],
   ["settings", "settings", "Settings", "సెట్టింగ్స్"],
 ];
+
+function LanguageSwitch({ className }) {
+  const { pick, language, setLanguage } = useLanguage();
+  const labelId = useId();
+  return (
+    <div className={`language-row ${className}`}>
+      <span id={labelId} className="language-row-label">
+        {pick("Language", "భాష")}
+      </span>
+      <div
+        className="language-switch"
+        role="group"
+        aria-labelledby={labelId}
+      >
+        {[
+          ["en", "EN", "English"],
+          ["te", "తె", "తెలుగు"],
+        ].map(([value, short, name]) => (
+          <button
+            type="button"
+            key={value}
+            lang={value}
+            aria-label={name}
+            aria-pressed={language === value}
+            onClick={() => setLanguage(value)}
+          >
+            {short}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function WorkspaceShell({
   settings,
   user,
   view,
   navigate,
+  onLogout,
   onNew,
   query,
   setQuery,
@@ -42,11 +77,15 @@ export default function WorkspaceShell({
     .map((part) => part[0])
     .join("")
     .toUpperCase();
-  const navigationView = ["profile", "products", "references"].includes(view)
-    ? "settings"
-    : view === "requirements"
-      ? "entries"
-      : view;
+  const navigation = allNavigation.filter(
+    ([, , , , adminOnly]) => !adminOnly || user.role === "Admin",
+  );
+  const navigationView =
+    view === "profile"
+      ? "settings"
+      : view === "requirements"
+        ? "entries"
+        : view;
   function openDrawer() {
     drawer.current.showModal();
     setDrawerOpen(true);
@@ -58,6 +97,10 @@ export default function WorkspaceShell({
   function go(viewName) {
     closeDrawer();
     navigate(viewName);
+  }
+  function logout() {
+    closeDrawer();
+    onLogout();
   }
   return (
     <div className="pilot workspace min-h-dvh bg-gray-50 text-gray-900">
@@ -92,21 +135,22 @@ export default function WorkspaceShell({
         <nav aria-label={pick("Desktop navigation", "డెస్క్‌టాప్ నావిగేషన్")}>
           {navigation.map(([key, icon, en, te]) => (
             <button
-              key={key}
-              className="sidebar-link"
-              aria-current={navigationView === key ? "page" : undefined}
-              onClick={() => navigate(key)}
-            >
-              <Icon name={icon} />
-              <span>{pick(en, te)}</span>
-            </button>
+                key={key}
+                className="sidebar-link"
+                aria-current={navigationView === key ? "page" : undefined}
+                onClick={() => navigate(key)}
+              >
+                <Icon name={icon} />
+                <span>{pick(en, te)}</span>
+              </button>
           ))}
         </nav>
+        <LanguageSwitch className="sidebar-language" />
         <div className="sidebar-account flex items-center gap-3 px-3">
           <span className="account-monogram" aria-hidden="true">
             {initials}
           </span>
-          <span className="min-w-0">
+          <span className="min-w-0 flex-1">
             <strong className="block truncate font-medium">{user.name}</strong>
             <span className="block text-xs text-gray-600">
               {pick(
@@ -119,6 +163,15 @@ export default function WorkspaceShell({
               )}
             </span>
           </span>
+          <button
+            type="button"
+            className="icon-button sidebar-logout"
+            aria-label={pick("Log out", "లాగ్ అవుట్")}
+            title={pick("Log out", "లాగ్ అవుట్")}
+            onClick={onLogout}
+          >
+            <Icon name="logout" />
+          </button>
         </div>
       </aside>
       <header className="workspace-header">
@@ -189,7 +242,14 @@ export default function WorkspaceShell({
               type="search"
               className="input"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                if (
+                  e.target.value.trim() &&
+                  !["home", "entries", "monitor", "invoices"].includes(view)
+                )
+                  navigate("entries");
+              }}
               placeholder={pick(
                 "Lorry, party or bill ID",
                 "లారీ, పార్టీ లేదా బిల్లు",
@@ -257,13 +317,16 @@ export default function WorkspaceShell({
         aria-labelledby="nav-title"
         onClose={() => setDrawerOpen(false)}
         onCancel={() => setDrawerOpen(false)}
+        onClick={(event) => {
+          if (event.target === event.currentTarget) closeDrawer();
+        }}
       >
-        <div className="flex min-h-full flex-col p-5">
-          <div className="flex items-center gap-3 border-b border-gray-200 pb-5">
+        <div className="nav-drawer-inner">
+          <div className="nav-drawer-head">
             {settings?.logoPath ? (
               <img
                 src={logoUrl(settings.logoPath)}
-                className="h-12 w-12 object-contain"
+                className="h-10 w-10 object-contain"
                 alt=""
               />
             ) : (
@@ -271,7 +334,7 @@ export default function WorkspaceShell({
                 <Icon name="loads" />
               </span>
             )}
-            <strong id="nav-title" className="min-w-0 flex-1 break-words">
+            <strong id="nav-title" className="nav-drawer-title">
               {settings?.businessName || "StoneDesk"}
             </strong>
             <button
@@ -286,8 +349,11 @@ export default function WorkspaceShell({
               </span>
             </button>
           </div>
+          <p className="nav-drawer-label" aria-hidden="true">
+            {pick("Menu", "మెనూ")}
+          </p>
           <nav
-            className="space-y-2 py-5"
+            className="nav-drawer-nav"
             aria-label={pick("Main navigation", "ప్రధాన నావిగేషన్")}
           >
             {navigation.map(([key, icon, en, te]) => (
@@ -295,32 +361,43 @@ export default function WorkspaceShell({
                 key={key}
                 aria-current={navigationView === key ? "page" : undefined}
                 onClick={() => go(key)}
-                className={`sidebar-link ${navigationView === key ? "bg-teal-50 text-teal-900" : ""}`}
+                className="sidebar-link"
               >
                 <Icon name={icon} />
                 {pick(en, te)}
               </button>
             ))}
           </nav>
-          <div className="mt-auto border-t border-gray-200 pt-5 flex items-center gap-3">
-            <span className="account-monogram" aria-hidden="true">
-              {initials}
-            </span>
-            <span className="min-w-0">
-              <strong className="block truncate font-medium">
-                {user.name}
-              </strong>
-              <span className="text-sm text-gray-600">
-                {pick(
-                  user.role,
-                  user.role === "Admin"
-                    ? "అడ్మిన్"
-                    : user.role === "Yard Manager"
-                      ? "యార్డ్ మేనేజర్"
-                      : "డిస్పాచర్",
-                )}
+          <LanguageSwitch className="nav-drawer-language" />
+          <div className="nav-drawer-footer">
+            <div className="nav-drawer-account">
+              <span className="account-monogram" aria-hidden="true">
+                {initials}
               </span>
-            </span>
+              <span className="min-w-0">
+                <strong className="block truncate font-medium">
+                  {user.name}
+                </strong>
+                <span className="block text-xs text-gray-600">
+                  {pick(
+                    user.role,
+                    user.role === "Admin"
+                      ? "అడ్మిన్"
+                      : user.role === "Yard Manager"
+                        ? "యార్డ్ మేనేజర్"
+                        : "డిస్పాచర్",
+                  )}
+                </span>
+              </span>
+            </div>
+            <button
+              type="button"
+              className="nav-drawer-logout"
+              onClick={logout}
+            >
+              <Icon name="logout" />
+              {pick("Log out", "లాగ్ అవుట్")}
+            </button>
           </div>
         </div>
       </dialog>

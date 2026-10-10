@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLanguage } from "../../i18n/LanguageContext";
 import { billRows, rowGroups } from "../../utils/billData.js";
 import { fixed2, round2 } from "../../utils/loadMath.js";
+import { decimalToFraction } from "../../utils/fractionParser.js";
 import { Button } from "./Controls.jsx";
 
 const area = fixed2;
@@ -22,7 +23,7 @@ export default function InvoiceTable({ record }) {
     topWord = pick("Top", "టాప్");
   const sub = (key, label, totals) => (
     <tr key={key} className="invoice-row-sub">
-      <th scope="row" colSpan={4}>
+      <th scope="row" colSpan={3}>
         {label}
       </th>
       <td className="numeric">{totals.quantity}</td>
@@ -32,12 +33,11 @@ export default function InvoiceTable({ record }) {
   );
   const lineRow = (l, no, top) => (
     <tr key={`${top ? "t" : "r"}${no}`}>
-      <th scope="row">{no}</th>
-      <td className={top ? "invoice-type-top" : ""}>
+      <th scope="row" className={top ? "invoice-type-top" : ""}>
         {top ? topWord : <span className="sr-only">{regularWord}</span>}
-      </td>
-      <td className="numeric">{l.lengthFt}</td>
-      <td className="numeric">{l.widthFt}</td>
+      </th>
+      <td className="numeric">{decimalToFraction(l.lengthFt)}</td>
+      <td className="numeric">{decimalToFraction(l.widthFt)}</td>
       <td className="numeric">{l.quantity}</td>
       <td className="numeric">{area(l.sqFt)}</td>
       <td className="numeric">{amount(l.lineTotal)}</td>
@@ -55,7 +55,6 @@ export default function InvoiceTable({ record }) {
           {rowWord} {g.rowNo}
         </caption>
         <colgroup>
-          <col className="invoice-col-no" />
           <col className="invoice-col-type" />
           <col className="invoice-col-dim" />
           <col className="invoice-col-dim" />
@@ -65,7 +64,6 @@ export default function InvoiceTable({ record }) {
         </colgroup>
         <thead>
           <tr>
-            <th scope="col">{pick("S.No.", "క్ర.సం.")}</th>
             <th scope="col">{pick("Type", "రకం")}</th>
             <th scope="col" className="numeric">
               {pick("L (ft)", "పొడవు")}
@@ -96,8 +94,8 @@ export default function InvoiceTable({ record }) {
         </tbody>
         <tfoot>
           <tr className="invoice-row-total">
-            <th scope="row" colSpan={4}>
-              {rowWord} {g.rowNo} {pick("total", "మొత్తం")}
+            <th scope="row" colSpan={3}>
+              {pick("Total", "మొత్తం")}
             </th>
             <td className="numeric">{g.total.quantity}</td>
             <td className="numeric">{area(g.total.sqFt)}</td>
@@ -126,9 +124,7 @@ export default function InvoiceTable({ record }) {
               : "";
           return (
             <div key={g.rowNo} className={`invoice-row-block ${hidden}`}>
-              <h4>
-                {rowWord} {g.rowNo}
-              </h4>
+              <h4>{g.rowNo}</h4>
               {rowTable(g)}
             </div>
           );

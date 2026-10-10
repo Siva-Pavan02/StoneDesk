@@ -6,25 +6,25 @@ A practical yard ledger, made clear enough to read outdoors. Restrained density 
 
 ## 2. Color palette and roles
 
-| Token | Value | Purpose |
-| --- | --- | --- |
-| Yard canvas | `#F9FAFB` | Gray-50 page background |
-| Paper | `#FFFFFF` | Cards, dialogs, inputs and navigation |
-| Ink | `#111827` | Primary labels, figures, body text |
-| Secondary ink | `#374151` | Explanations and metadata |
-| Quiet ink | `#4B5563` | Secondary metadata, never disabled-looking primary text |
-| Input boundary | `#D1D5DB` | 2px input borders |
-| Structural line | `#E5E7EB` | 1px dividers |
-| Yard green | `#115E59` | One brand accent: primary actions and active navigation |
-| Focus green | `#0F766E` | 3px focus outline with 2px offset |
-| Soft green | `#F0FDFA` | Supporting active backgrounds with dark text |
-| Error ink | `#991B1B` | Error text only, paired with text explanation |
+Tokens live in `Frontend/src/index.css` (`:root`) and are used under the `.pilot` scope.
+
+| Token | CSS variable | Value | Purpose |
+| --- | --- | --- | --- |
+| Yard canvas | `--ui-canvas` | `#F7F9F8` | Workspace page background |
+| Paper | `--ui-surface` | `#FFFFFF` | Cards, dialogs, inputs and navigation |
+| Ink | `--ui-ink` | `#203D36` | Primary labels, figures, body text |
+| Muted ink | `--ui-muted` | `#526661` | Explanations and metadata |
+| Border | `--workspace-border` | `#E2E8E5` | 1px input, card and divider lines |
+| Yard green | `--ui-accent` | `#17645D` | One brand accent: primary actions, active navigation, 2px focus outline |
+| Yard green hover | - | `#134E4A` | Primary button hover |
+| Focus ring | - | `rgb(23 100 93 / .12)` | 3px input focus glow |
+| Error | - | `#8B3333` on `#FFF7F7`, border `#EFCECE` | Error messages only, paired with text explanation |
 
 Status uses words as well as color. Red is reserved for errors, not an additional brand accent. The reference bill's muted red wordmark is a document branding treatment, separate from software navigation.
 
 ## 3. Typography
 
-Reuse Plus Jakarta Sans already installed in the project, with Noto Telugu for Telugu and sans-serif fallbacks. Do not introduce another webfont or typography package. Show only the selected language; remember the language per device and set the document language.
+Use Geist (and Geist Mono for figures where needed), loaded in `index.css`, with Noto Telugu (`/fonts/NotoSansTelugu-Regular.ttf`) for Telugu and sans-serif fallbacks. Do not introduce another webfont or typography package. Show only the selected language; remember the language per device and set the document language.
 
 | Use | Size / line height | Weight |
 | --- | --- | --- |
@@ -40,9 +40,9 @@ Numbers use tabular figures. Amounts use Indian grouping and two decimal places 
 
 ## 4. Components
 
-- Buttons: minimum 48px tall, 12px corners, text labels, stable width while busy. Primary actions have green fill and white text. Secondary buttons are white with gray borders. Use a visible focus outline, pressed feedback and a disabled HTML state while submitting. No hover-only actions.
-- Inputs: labels above controls, 16px text, white fill, gray 2px borders, minimum 48px height. Native email, password, date, number, file and select controls. Keep fractions available on dimension entry. Never use a placeholder as the only label.
-- Cards: white with a subtle shadow, 16px corners and 16px padding. Use them to group a load or a task; use dividers inside groups instead of nested cards.
+- Buttons: minimum 44px tall (icon buttons 48px), 10px corners (`--ui-radius-sm`), text labels, stable width while busy. Primary actions have green fill and white text. Secondary buttons are white with gray borders. Use a visible focus outline, pressed feedback and a disabled HTML state while submitting. No hover-only actions.
+- Inputs: labels above controls, 16px text, white fill, 1px `--workspace-border` border, 44px height, green border and soft ring on focus. Native email, password, date, number, file and select controls. Keep fractions available on dimension entry. Never use a placeholder as the only label.
+- Cards: white with a 1px border and no shadow, 16px corners (`--ui-radius-md`) and 16 to 20px padding. Use them to group a load or a task; use dividers inside groups instead of nested cards.
 - Navigation: collapsible side drawer for all five destinations; four compact bottom destinations for daily work. Settings is available in the drawer/profile area. All hit areas are at least 48px tall.
 - Dialogs: native modal dialog for sign-in, navigation and information. Browser focus containment, Escape to close, labeled title, visible close button. The scrim is 50% ink. No hand-built focus trap.
 - Data: load cards on phones, containing lorry number, party, date, area, amount and textual status. The generated PDF and Excel are the detailed tabular views. Right-align numerical columns, repeat headings on new PDF pages, and preserve numeric Excel cells.
@@ -58,14 +58,14 @@ The utility header contains business identity, the language toggle, notification
 
 ## 6. Motion and accessibility
 
-Use CSS only: 150ms color/press feedback. Honor reduced motion. Avoid perpetual animation during yard entry, animated counters, parallax, and staggered movement of operational rows. This prioritizes the UI/UX skill's accessibility and task-focus rules over decorative motion suggestions from taste-design.
+Use CSS transitions: 160ms (`--ui-dur`) color and press feedback (`scale(.98)`). Motion is limited to the landing page (`pilot/MarketingMotion.jsx`) and light transitions in `SettingsScreen.jsx`, using the `motion` package with `useReducedMotion`. Honor reduced motion. Avoid perpetual animation during yard entry, animated counters, parallax, and staggered movement of operational rows. This prioritizes the UI/UX skill's accessibility and task-focus rules over decorative motion suggestions from taste-design.
 
 Visible keyboard focus, a skip link, semantic headings/labels, text status indicators, native dialogs, and 48px hit areas are required. Test at 320px and 390px plus landscape. Long business names and Telugu text wrap without covering controls.
 
 ## 7. Deliberate exclusions
 
-No neon colors, gradients, emoji icons, fake counters, fabricated testimonials, invented security certifications, or stock photos pretending to show customer yards. Social proof needs real, approved customer evidence. No dark mode, custom date picker, chart library, animation library or desktop sidebar framework for this pilot.
+No neon colors, gradients, emoji icons, fake counters, fabricated testimonials, invented security certifications, or stock photos pretending to show customer yards. Social proof needs real, approved customer evidence. No dark mode, custom date picker, chart library or desktop sidebar framework for this pilot. The `motion` package is the only animation dependency and stays out of yard data-entry screens.
 
 ## 8. Library decision
 
-Keep React, Tailwind v4, daisyUI 5, jsPDF/AutoTable and SheetJS already installed. Native dialog and form controls cover the current interaction requirements with no new dependencies. The pick-ui-library curated choice for more complex accessible primitives is [Base UI](https://base-ui.com/react/components/dialog); consider it if nested menus or richer dialog behavior become necessary. Do not replace working daisyUI controls to introduce it now. daisyUI's [button](https://daisyui.com/components/button/), [input](https://daisyui.com/components/input/) and [card](https://daisyui.com/components/card/) patterns remain the base.
+Keep React, Tailwind v4, daisyUI 5 (button, input, card only), Motion, jsPDF/AutoTable and SheetJS already installed. Native dialog and form controls cover the current interaction requirements with no new dependencies. The pick-ui-library curated choice for more complex accessible primitives is [Base UI](https://base-ui.com/react/components/dialog); consider it if nested menus or richer dialog behavior become necessary. Do not replace working daisyUI controls to introduce it now. daisyUI's [button](https://daisyui.com/components/button/), [input](https://daisyui.com/components/input/) and [card](https://daisyui.com/components/card/) patterns remain the base.

@@ -3,7 +3,7 @@ import React from 'react';
 import { Button, Card, Field } from './Controls.jsx';
 import Icon from './Icon.jsx';
 import { parseFraction, decimalToFraction } from '../../utils/fractionParser.js';
-const MAX_ROW = 15;
+const MAX_ROW = 20;
 export default function MeasurementEntry({ products, entry, onChange, onAdd }) {
   const { pick } = useLanguage();
   const rowNo = Number(entry.rowNo ?? 1) || 1;

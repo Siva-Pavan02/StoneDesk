@@ -6,6 +6,8 @@ const SENSITIVE_ACTIONS = new Set([
   'user.password_change',
   'user.role_change',
   'user.access_revoked',
+  'user.account_delete',
+  'organization.delete',
   'dispatch.create',
   'dispatch.update',
   'dispatch.finalize',

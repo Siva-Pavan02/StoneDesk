@@ -2,6 +2,7 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import React, { useState } from 'react';
 import { request, settingsPath } from '../../lib/pilotApi.js';
 import { Button, Card, Field, ErrorMessage } from './Controls.jsx';
+import Icon from './Icon.jsx';
 import { money } from '../../utils/pilotDraft.js';
 const empty = { stoneType: '', finish: '', defaultRate: '' };
 export default function ProductSettings({ settings, onChanged, onBack, onboarding = false, user }) {
@@ -25,7 +26,7 @@ export default function ProductSettings({ settings, onChanged, onBack, onboardin
     catch (err) { setError(err.message); } finally { setBusy(false); }
   }
   return <div className="product-settings space-y-4 text-sm">
-    {!onboarding && onBack && <div className="action-row flex"><Button disabled={busy} en="Back" te="వెనక్కి" onClick={onBack} /></div>}
+    {!onboarding && onBack && <button type="button" className="text-button inline-flex items-center gap-1.5" disabled={busy} onClick={onBack}><Icon name="back" className="h-4 w-4" />{pick('Back', 'వెనక్కి')}</button>}
     <div className="screen-heading"><h1 className="text-2xl font-semibold">{pick('Products & rates', 'రకాలు మరియు ధరలు')}</h1><p className="mt-3 text-sm text-gray-600">{pick('Add the tiles or stones you sell. All rates are per sq ft.', 'మీరు అమ్మే టైల్స్ లేదా రాళ్లను జోడించండి. ధరలు చదరపు అడుగుకు.')}</p></div>
     <ErrorMessage error={error} />
     <form onSubmit={save}><Card className="product-form gap-4">

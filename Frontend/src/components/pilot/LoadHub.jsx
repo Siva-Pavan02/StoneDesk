@@ -5,9 +5,23 @@ import { Button, Card } from "./Controls.jsx";
 import Icon from "./Icon.jsx";
 import DashboardAnalytics from "./DashboardAnalytics.jsx";
 
+const loadDate = (value) =>
+  new Date(value).toLocaleDateString("en-GB", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+const loadArea = (value) =>
+  (Number(value) || 0).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
 export default function LoadHub({
   loads,
   view,
+  status = "all",
   query,
   onOpen,
   onRefresh,
@@ -17,14 +31,29 @@ export default function LoadHub({
   recovery,
   onContinue,
   onNavigate,
+  onNew,
   updatedAt,
   analytics,
   onRetryAnalytics,
 }) {
   const { pick } = useLanguage();
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilterState] = useState(status);
+  const [linkedStatus, setLinkedStatus] = useState(status);
+  if (linkedStatus !== status) {
+    setLinkedStatus(status);
+    setFilterState(status);
+  }
+  function setFilter(value) {
+    setFilterState(value);
+    window.history.replaceState(
+      null,
+      "",
+      value === "all" ? "#entries" : `#entries?status=${value}`,
+    );
+  }
   const [priorityOnly, setPriorityOnly] = useState(false);
   const [refreshPhase, setRefreshPhase] = useState("idle");
+  const [now] = useState(() => Date.now());
   const doneTimer = useRef(null);
   useEffect(() => () => clearTimeout(doneTimer.current), []);
   async function handleRefresh() {
@@ -43,12 +72,35 @@ export default function LoadHub({
   const drafts = loads.filter((l) => l.status === "Draft");
   const transit = loads.filter((l) => l.status === "Dispatched");
   const invoices = loads.filter((l) => l.status !== "Draft");
+  const byOldest = (a, b) => new Date(a.date) - new Date(b.date);
+  const oldestDrafts = [...drafts].sort(byOldest).slice(0, 3);
+  const roadLoads = [...transit].sort(byOldest).slice(0, 3);
+  const dayKey = (value) =>
+    new Date(value).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const daysSince = (value) =>
+    value
+      ? Math.max(
+          0,
+          Math.round((Date.parse(dayKey(now)) - Date.parse(dayKey(value))) / 864e5),
+        )
+      : 0;
+  const age = (value) => {
+    const days = daysSince(value);
+    if (days === 0) return pick("Today", "ఈరోజు");
+    if (days === 1) return pick("Yesterday", "నిన్న");
+    return pick(`${days} days ago`, `${days} రోజుల క్రితం`);
+  };
+  const monthKey = dayKey(now).slice(0, 7);
+  const monthBills = invoices.filter(
+    (l) => l.date && dayKey(l.date).slice(0, 7) === monthKey,
+  );
+  const sumBilled = (list) =>
+    list.reduce((sum, l) => sum + (l.summary?.netBillableAmount || 0), 0);
   const search = query.trim().toLowerCase();
   const filtered = loads.filter(
     (l) =>
-      (view !== "invoices" || l.status !== "Draft") &&
       (!priorityOnly || view !== "home" || l.status === "Draft") &&
-      (filter === "all" || l.status === filter) &&
+      (view !== "entries" || filter === "all" || l.status === filter) &&
       [
         l.partyName,
         l.logistics?.truckNumber,
@@ -59,8 +111,6 @@ export default function LoadHub({
   const titles = {
     home: ["Your yard, at a glance", "మీ యార్డ్ వివరాలు"],
     entries: ["Loading entries", "లోడ్ వివరాలు"],
-    monitor: ["Monitor & dispatch", "లోడ్ మానిటర్"],
-    invoices: ["Invoices", "బిల్లులు"],
   };
   const heading = titles[view] || titles.home;
   const visible = view === "home" ? filtered.slice(0, 5) : filtered;
@@ -85,137 +135,211 @@ export default function LoadHub({
             {pick(...heading)}
           </h1>
           <p className="mt-2 text-sm text-gray-700">
-            {view === "invoices"
-              ? pick(
-                  "Final bills. Original values. Ready to share.",
-                  "ఖరారు చేసిన బిల్లులు. అసలు మొత్తాలు. షేర్ చేయడానికి సిద్ధం.",
-                )
-              : pick(
-                  "From the first measurement to the final bill.",
-                  "మొదటి కొలత నుండి చివరి బిల్లు వరకు.",
-                )}
+            {pick(
+              "From the first measurement to the final bill.",
+              "మొదటి కొలత నుండి చివరి బిల్లు వరకు.",
+            )}
           </p>
         </div>
-        {view === "entries" && (
-          <Button
-            className="pill-button"
-            en="Loading requirements"
-            te="లోడింగ్ అవసరాలు"
-            onClick={() => onNavigate("requirements")}
-          />
-        )}
       </header>
       {view === "home" && (
         <>
           {recovery && (
-            <Card className="gap-3 border-l-4 border-l-teal-700">
-              <h2 className="font-bold">
-                {pick("Pick up where you left off", "మీ లోడ్ కొనసాగించండి")}
-              </h2>
-              <p className="text-sm text-gray-700 break-words">
-                {recovery.partyName ||
-                  recovery.truckNumber ||
-                  pick(
-                    "An unfinished load is saved on this phone.",
-                    "ఈ ఫోన్‌లో పూర్తి కాని లోడ్ సేవ్ అయింది.",
-                  )}
-              </p>
+            <section
+              className="dashboard-resume"
+              aria-labelledby="resume-heading"
+            >
+              <div className="dashboard-resume-text">
+                <div className="dashboard-resume-top">
+                  <h2 id="resume-heading" className="surface-kicker">
+                    {pick("Pick up where you left off", "మీ లోడ్ కొనసాగించండి")}
+                  </h2>
+                  <span className="priority-status is-pending">
+                    {pick("Unsaved", "సేవ్ కాలేదు")}
+                  </span>
+                </div>
+                <p className="dashboard-resume-name">
+                  {recovery.partyName ||
+                    recovery.truckNumber ||
+                    pick(
+                      "An unfinished load is saved on this phone.",
+                      "ఈ ఫోన్‌లో పూర్తి కాని లోడ్ సేవ్ అయింది.",
+                    )}
+                </p>
+              </div>
               <Button
+                className="dashboard-resume-action"
                 en="Continue unsaved load"
                 te="లోడ్ కొనసాగించండి"
                 onClick={onContinue}
-              />
-            </Card>
+              >
+                <Icon name="arrow" className="h-4 w-4" />
+              </Button>
+            </section>
           )}
           <div className="dashboard-overview">
-            <div className="surface-bezel dashboard-priority-shell">
-              <section
-                className="dashboard-priority"
-                aria-labelledby="priority-heading"
-              >
-                <div className="dashboard-priority-top">
-                  <span className="surface-kicker">
-                    {pick("Needs your attention", "మీ తనిఖీ అవసరం")}
-                  </span>
-                  <span className="priority-icon">
-                    <Icon name="loads" />
-                  </span>
-                </div>
-                <h2 id="priority-heading">
-                  <strong>{drafts.length}</strong>
-                  <span>
-                    {pick("drafts to review", "తనిఖీ చేయవలసిన డ్రాఫ్ట్‌లు")}
-                  </span>
-                </h2>
-                <p>
+            <section
+              className="dashboard-priority"
+              aria-labelledby="priority-heading"
+            >
+              <div className="dashboard-priority-top">
+                <span className="surface-kicker">
+                  {pick("Needs your attention", "మీ తనిఖీ అవసరం")}
+                </span>
+                <span
+                  className={`priority-status ${drafts.length ? "is-pending" : "is-clear"}`}
+                >
                   {drafts.length
-                    ? pick(
-                        "Check measurements and rates before the next dispatch.",
-                        "తదుపరి డిస్పాచ్‌కు ముందు కొలతలు మరియు ధరలు తనిఖీ చేయండి.",
-                      )
-                    : pick(
-                        "Nothing waiting for review. Your saved loads are up to date.",
-                        "తనిఖీ కోసం ఏమీ లేదు. మీ సేవ్ చేసిన లోడ్లు తాజాగా ఉన్నాయి.",
-                      )}
-                </p>
+                    ? pick("Pending", "పెండింగ్")
+                    : pick("Up to date", "తాజాగా ఉంది")}
+                </span>
+              </div>
+              {onNew && (
                 <button
                   type="button"
-                  disabled={!drafts.length}
+                  className="dashboard-create-load"
+                  onClick={onNew}
+                >
+                  <Icon name="plus" />
+                  <span>{pick("Create load", "లోడ్ సృష్టించండి")}</span>
+                </button>
+              )}
+              <h2 id="priority-heading">
+                <strong>{drafts.length}</strong>
+                <span>
+                  {pick("drafts to review", "తనిఖీ చేయవలసిన డ్రాఫ్ట్‌లు")}
+                </span>
+              </h2>
+              {oldestDrafts.length ? (
+                <ul className="dashboard-queue">
+                  {oldestDrafts.map((item) => (
+                    <li key={item.id}>
+                      <button
+                        type="button"
+                        className="dashboard-queue-row"
+                        onClick={() => onOpen(item.id)}
+                      >
+                        <span className="queue-main">
+                          <span className="queue-lorry">
+                            {item.logistics?.truckNumber || "—"}
+                          </span>
+                          <span className="queue-sub">
+                            {item.partyName || pick("No party", "పార్టీ లేదు")}
+                            {" · "}
+                            {loadArea(item.summary?.totalDispatchVolumeSqFt)}{" "}
+                            {pick("sq ft", "చ.అ.")}
+                          </span>
+                        </span>
+                        <span className="queue-side">
+                          <span className="queue-amount">
+                            {money(item.summary?.netBillableAmount || 0)}
+                          </span>
+                          <span className="queue-sub">{age(item.date)}</span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="dashboard-queue-empty">
+                  {pick(
+                    "Nothing waiting for review.",
+                    "తనిఖీ కోసం ఏమీ లేదు.",
+                  )}
+                </p>
+              )}
+              {(drafts.length > 0 || priorityOnly) && (
+                <button
+                  type="button"
                   aria-pressed={priorityOnly}
                   className="dashboard-priority-action"
                   onClick={() => setPriorityOnly((value) => !value)}
                 >
                   {priorityOnly
                     ? pick("Show recent loads", "ఇటీవలి లోడ్లు చూడండి")
-                    : pick("Review drafts below", "క్రింద డ్రాఫ్ట్‌లు చూడండి")}
+                    : pick(
+                        `Show all ${drafts.length} drafts below`,
+                        `క్రింద మొత్తం ${drafts.length} డ్రాఫ్ట్‌లు చూడండి`,
+                      )}
                   <span className="action-icon-disc">
                     <Icon name="arrow" />
                   </span>
                 </button>
-              </section>
-            </div>
+              )}
+            </section>
             <div className="dashboard-supporting">
               <section className="dashboard-support-metric">
                 <div className="dashboard-metric-label">
-                  <span>{pick("Lorries in transit", "ప్రయాణంలో లారీలు")}</span>
+                  <span>
+                    {pick("On the road", "ప్రయాణంలో")} · {transit.length}
+                  </span>
                   <Icon name="truck" />
                 </div>
-                <strong className="dashboard-metric-value">
-                  {transit.length}
-                </strong>
+                {roadLoads.length ? (
+                  <ul className="dashboard-queue">
+                    {roadLoads.map((item) => {
+                      const days = daysSince(item.date);
+                      return (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            className="dashboard-queue-row"
+                            onClick={() => onOpen(item.id)}
+                          >
+                            <span className="queue-main">
+                              <span className="queue-lorry">
+                                {item.logistics?.truckNumber || "—"}
+                              </span>
+                              <span className="queue-sub">
+                                {item.logistics?.buyerDestination ||
+                                  item.partyName ||
+                                  "—"}
+                              </span>
+                            </span>
+                            <span
+                              className={`queue-age${days >= 3 ? " is-late" : ""}`}
+                            >
+                              {age(item.date)}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className="dashboard-queue-empty">
+                    {pick("No lorries on the road.", "ప్రయాణంలో లారీలు లేవు.")}
+                  </p>
+                )}
                 <button
                   type="button"
                   className="dashboard-metric-link"
-                  onClick={() => onNavigate("monitor")}
+                  onClick={() => onNavigate("entries?status=Dispatched")}
                 >
-                  {pick("Monitor dispatch", "లోడ్ మానిటర్")}
+                  {pick("Loads in transit", "ప్రయాణంలో లోడ్లు")}
                   <Icon name="arrow" />
                 </button>
               </section>
               <section className="dashboard-support-metric">
                 <div className="dashboard-metric-label">
-                  <span>
-                    {pick(
-                      "Billed · loaded records",
-                      "బిల్లులు · లోడ్ చేసిన రికార్డులు",
-                    )}
-                  </span>
+                  <span>{pick("Billed this month", "ఈ నెల బిల్లులు")}</span>
                   <Icon name="bill" />
                 </div>
                 <strong className="dashboard-metric-value">
-                  {money(
-                    invoices.reduce(
-                      (sum, l) => sum + l.summary.netBillableAmount,
-                      0,
-                    ),
-                  )}
+                  {money(sumBilled(monthBills))}
                 </strong>
+                <p className="queue-sub">
+                  {pick(
+                    `${monthBills.length} bills · ${money(sumBilled(invoices))} all time`,
+                    `${monthBills.length} బిల్లులు · మొత్తం ${money(sumBilled(invoices))}`,
+                  )}
+                </p>
                 <button
                   type="button"
                   className="dashboard-metric-link"
-                  onClick={() => onNavigate("invoices")}
+                  onClick={() => onNavigate("entries")}
                 >
-                  {pick("View invoices", "బిల్లులు చూడండి")}
+                  {pick("All loads", "అన్ని లోడ్లు")}
                   <Icon name="arrow" />
                 </button>
               </section>
@@ -229,13 +353,42 @@ export default function LoadHub({
           )}
         </>
       )}
+      {view === "entries" && (
+        <div
+          className="load-filters"
+          role="group"
+          aria-label={pick("Filter loads", "లోడ్ ఫిల్టర్")}
+        >
+          {[
+            ["all", "All", "అన్నీ", loads.length],
+            ["Draft", "Draft", "డ్రాఫ్ట్", drafts.length],
+            ["Dispatched", "In transit", "ప్రయాణంలో", transit.length],
+            [
+              "Delivered",
+              "Delivered",
+              "డెలివరీ అయింది",
+              loads.filter((l) => l.status === "Delivered").length,
+            ],
+          ].map(([value, en, te, count]) => (
+            <button
+              type="button"
+              key={value}
+              aria-pressed={filter === value}
+              data-tone={value}
+              onClick={() => setFilter(value)}
+              className="load-filter"
+            >
+              {pick(en, te)}
+              <span className="load-filter-count">{count}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <section
-        className={view === "home" ? "dashboard-activity" : "space-y-5"}
+        className="dashboard-activity"
         aria-labelledby="load-hub-records-heading"
       >
-        <div
-          className={`flex items-center justify-between gap-3 ${view === "home" ? "dashboard-activity-heading" : ""}`}
-        >
+        <div className="dashboard-activity-heading flex items-center justify-between gap-3">
           <h2 id="load-hub-records-heading" className="font-bold">
             {view === "home"
               ? priorityOnly
@@ -273,77 +426,53 @@ export default function LoadHub({
             <div />
           </div>
         )}
-        {view !== "home" && view !== "invoices" && (
-          <div
-            className="load-filters"
-            aria-label={pick("Filter loads", "లోడ్ ఫిల్టర్")}
-          >
-            {[
-              ["all", "All loads", "అన్ని లోడ్లు"],
-              ["Draft", "Draft", "డ్రాఫ్ట్"],
-              ["Dispatched", "In transit", "ప్రయాణంలో"],
-              ["Delivered", "Delivered", "డెలివరీ అయింది"],
-            ].map(([value, en, te]) => (
-              <button
-                key={value}
-                aria-pressed={filter === value}
-                onClick={() => setFilter(value)}
-                className={`min-h-12 rounded-xl border-2 px-3 text-sm font-semibold ${filter === value ? "bg-teal-800 border-teal-800 text-white" : "bg-white border-gray-300"}`}
-              >
-                {pick(en, te)}
-              </button>
-            ))}
-          </div>
-        )}
-        {view === "monitor" && (
-          <p className="text-sm text-gray-700">
-            {pick(
-              "Saved drafts keep your measurements. Finalize a bill to dispatch the load.",
-              "సేవ్ చేసిన డ్రాఫ్ట్‌లలో మీ కొలతలు ఉంటాయి. డిస్పాచ్ కోసం బిల్లును ఖరారు చేయండి.",
-            )}
-          </p>
-        )}
         {!loading && !filtered.length && (
-          <Card
-            className={`items-start gap-4 py-7 ${view === "home" ? "dashboard-empty" : ""}`}
-          >
-            <span className={view === "home" ? "dashboard-empty-icon" : ""}>
+          <Card className="dashboard-empty items-start gap-4 py-7">
+            <span className="dashboard-empty-icon">
               <Icon
-                name={view === "invoices" ? "bill" : "truck"}
+                name="truck"
                 className="h-8 w-8 text-teal-800"
               />
             </span>
             <h3 className="text-lg font-bold">
-              {search || filter !== "all" || priorityOnly
+              {search || priorityOnly
                 ? pick("No matching loads", "లోడ్లు కనబడలేదు")
-                : view === "invoices"
-                  ? pick(
-                      "Your first bill starts with a load",
-                      "మొదటి బిల్లు లోడ్‌తో ప్రారంభమవుతుంది",
-                    )
-                  : pick(
-                      "A fresh page for your yard",
-                      "మీ యార్డ్ కోసం కొత్త పేజీ",
-                    )}
+                : view === "entries" && filter === "Dispatched"
+                  ? pick("No lorries on the road", "ప్రయాణంలో లారీలు లేవు")
+                  : view === "entries" && filter === "Draft"
+                    ? pick("No drafts", "డ్రాఫ్ట్‌లు లేవు")
+                    : view === "entries" && filter === "Delivered"
+                      ? pick("No deliveries yet", "ఇంకా డెలివరీలు లేవు")
+                      : pick(
+                          "A fresh page for your yard",
+                          "మీ యార్డ్ కోసం కొత్త పేజీ",
+                        )}
             </h3>
             <p className="text-gray-700">
-              {search || filter !== "all" || priorityOnly
+              {search || priorityOnly
                 ? pick(
                     "Try another search or choose a different filter.",
                     "వేరొక పదంతో వెతకండి లేదా మరో ఫిల్టర్ ఎంచుకోండి.",
                   )
-                : pick(
+                : view === "entries" && filter === "Dispatched"
+                  ? pick(
+                      "Finalize a bill to dispatch a load. It will appear here until it is delivered.",
+                      "లోడ్ డిస్పాచ్ చేయడానికి బిల్లును ఖరారు చేయండి. డెలివరీ అయ్యే వరకు ఇది ఇక్కడ కనిపిస్తుంది.",
+                    )
+                  : pick(
                     "Use New load in the header to add measurements and prepare a bill.",
                     "కొలతలు జోడించి బిల్లు సిద్ధం చేయడానికి హెడర్‌లో కొత్త లోడ్ ఎంచుకోండి.",
                   )}
             </p>
           </Card>
         )}
-        {view === "home" && visible.length > 0 && (
+        {visible.length > 0 && (
           <div className="desktop-load-table table-scroll">
             <table className="business-table">
               <caption className="sr-only">
-                {pick("Recent saved loads", "ఇటీవల సేవ్ చేసిన లోడ్లు")}
+                {view === "home"
+                  ? pick("Recent saved loads", "ఇటీవల సేవ్ చేసిన లోడ్లు")
+                  : pick("Loading entries", "లోడ్ వివరాలు")}
               </caption>
               <thead>
                 <tr>
@@ -379,13 +508,9 @@ export default function LoadHub({
                         {stateLabel(item)}
                       </span>
                     </td>
-                    <td>
-                      {new Date(item.date).toLocaleDateString("en-IN", {
-                        timeZone: "Asia/Kolkata",
-                      })}
-                    </td>
+                    <td className="tabular-nums">{loadDate(item.date)}</td>
                     <td className="numeric">
-                      {item.summary.totalDispatchVolumeSqFt}
+                      {loadArea(item.summary.totalDispatchVolumeSqFt)}
                     </td>
                     <td className="numeric">
                       {money(item.summary.netBillableAmount)}
@@ -414,7 +539,7 @@ export default function LoadHub({
           return (
             <Card
               key={itemId}
-              className={`load-record gap-3 ${view === "home" ? "mobile-load-record" : ""}`}
+              className="load-record mobile-load-record gap-3"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -428,17 +553,13 @@ export default function LoadHub({
                 <span
                   className={`status-tag status-${item.status.toLowerCase()}`}
                 >
-                  {view === "invoices"
-                    ? pick("Billed", "బిల్లు సిద్ధం")
-                    : stateLabel(item)}
+                  {stateLabel(item)}
                 </span>
               </div>
               <div className="flex flex-wrap justify-between gap-2 border-t border-gray-200 pt-3 text-sm">
                 <span>
-                  {new Date(item.date).toLocaleDateString("en-IN", {
-                    timeZone: "Asia/Kolkata",
-                  })}{" "}
-                  · {item.summary.totalDispatchVolumeSqFt}{" "}
+                  {loadDate(item.date)} ·{" "}
+                  {loadArea(item.summary.totalDispatchVolumeSqFt)}{" "}
                   {pick("sq ft", "చ.అ.")}
                 </span>
                 <strong className="tabular-nums">
@@ -447,13 +568,7 @@ export default function LoadHub({
               </div>
               <Button
                 className="w-full justify-between"
-                en={
-                  item.status === "Draft"
-                    ? "Review draft"
-                    : view === "monitor"
-                      ? "Open dispatch"
-                      : "View invoice"
-                }
+                en={item.status === "Draft" ? "Review draft" : "View invoice"}
                 te={
                   item.status === "Draft" ? "డ్రాఫ్ట్ చూడండి" : "బిల్లు చూడండి"
                 }
@@ -464,15 +579,6 @@ export default function LoadHub({
             </Card>
           );
         })}
-        {view !== "home" && hasMore && (
-          <Button
-            className="w-full"
-            en="Load more"
-            te="మరిన్ని చూడండి"
-            onClick={onLoadMore}
-            disabled={loading}
-          />
-        )}
         {view === "home" && loads.length > 5 && (
           <Button
             className="w-full"
@@ -482,6 +588,15 @@ export default function LoadHub({
           />
         )}
       </section>
+      {view !== "home" && hasMore && (
+        <Button
+          className="w-full"
+          en="Load more"
+          te="మరిన్ని చూడండి"
+          onClick={onLoadMore}
+          disabled={loading}
+        />
+      )}
       {updatedAt && (
         <p
           className={`text-xs text-gray-600 ${view === "home" ? "dashboard-updated" : ""}`}
@@ -491,7 +606,7 @@ export default function LoadHub({
             hour: "2-digit",
             minute: "2-digit",
           })}
-          {view === "monitor"
+          {view === "entries"
             ? pick(
                 " · refreshes every 30 seconds",
                 " · ప్రతి 30 సెకన్లకు నవీకరణ",

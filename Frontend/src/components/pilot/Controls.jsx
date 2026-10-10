@@ -1,6 +1,15 @@
 import React, { useId, useRef, useState } from 'react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { translatePilotMessage } from '../../i18n/pilotMessages.js';
+import Icon from './Icon.jsx';
+const isoToDmy = iso => /^\d{4}-\d{2}-\d{2}$/.test(iso || '') ? iso.split('-').reverse().join('/') : '';
+function dmyToIso(text) {
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text);
+  if (!match) return '';
+  const [, d, m, y] = match;
+  const date = new Date(Date.UTC(+y, +m - 1, +d));
+  return date.getUTCFullYear() === +y && date.getUTCMonth() === +m - 1 && date.getUTCDate() === +d ? `${y}-${m}-${d}` : '';
+}
 export function Label({ en, te }) {
   const { pick } = useLanguage();
   return <span className="control-label">{pick(en, te)}</span>;
@@ -12,7 +21,53 @@ export function Field({ en, te, children, ...props }) {
   const { pick } = useLanguage();
   const generatedId = useId();
   const controlId = children?.props.id || props.id || generatedId;
-  return <div className="control-field"><label className="control-label" htmlFor={controlId}>{pick(en, te)}</label>{children ? React.cloneElement(children, { id: controlId }) : <input className="input" {...props} id={controlId} />}</div>;
+  const label = <label className="control-label" htmlFor={controlId}>{pick(en, te)}</label>;
+  if (!children && props.type === 'number') return <div className="control-field">{label}<NumberStepper {...props} id={controlId} name={pick(en, te)} /></div>;
+  return <div className="control-field">{label}{children ? React.cloneElement(children, { id: controlId }) : <input className="input" {...props} id={controlId} />}</div>;
+}
+// Number input with quiet − / + buttons instead of native spin arrows.
+// Decimal fields (step < 1) still accept typed decimals but step by whole units.
+function NumberStepper({ name, value, onChange, min, max, step, disabled, ...props }) {
+  const { pick } = useLanguage();
+  const by = Number(step) >= 1 ? Number(step) : 1;
+  const lo = min === undefined ? -Infinity : Number(min);
+  const hi = max === undefined ? Infinity : Number(max);
+  const current = Number(value) || 0;
+  const bump = dir => {
+    const next = Math.min(hi, Math.max(lo, Math.round((current + dir * by) * 100) / 100));
+    onChange?.({ target: { value: String(next) } });
+  };
+  return <div className="number-stepper">
+    <button type="button" className="number-step" aria-label={pick(`Decrease ${name}`, `${name} తగ్గించండి`)} disabled={disabled || current - by < lo} onClick={() => bump(-1)}>−</button>
+    <input className="input" type="number" inputMode={by === 1 && Number(step) === 1 ? 'numeric' : 'decimal'} {...props} min={min} max={max} step={step} disabled={disabled} value={value} onChange={onChange} />
+    <button type="button" className="number-step" aria-label={pick(`Increase ${name}`, `${name} పెంచండి`)} disabled={disabled || current + by > hi} onClick={() => bump(1)}>+</button>
+  </div>;
+}
+export function DateField({ en, te, value, onValue, ...props }) {
+  const { pick } = useLanguage();
+  const id = useId();
+  const picker = useRef(null);
+  const [text, setText] = useState(() => isoToDmy(value));
+  const [synced, setSynced] = useState(value);
+  if (value !== synced) { setSynced(value); setText(isoToDmy(value)); }
+  function commit(iso) { setSynced(iso); onValue(iso); }
+  function type(raw) {
+    const digits = raw.replace(/\D/g, '').slice(0, 8);
+    const next = [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4)].filter(Boolean).join('/');
+    setText(next);
+    commit(dmyToIso(next));
+  }
+  function openPicker() {
+    try { picker.current?.showPicker(); } catch { picker.current?.focus(); }
+  }
+  return <div className="control-field date-field">
+    <label className="control-label" htmlFor={id}>{pick(en, te)}</label>
+    <div className="combo-control">
+      <input {...props} id={id} className="input" inputMode="numeric" placeholder="dd/mm/yyyy" maxLength={10} autoComplete="off" value={text} aria-invalid={text.length === 10 && !dmyToIso(text) ? true : undefined} onChange={event => type(event.target.value)} />
+      <button type="button" className="combo-toggle date-toggle" aria-label={pick('Choose date', 'తేదీ ఎంచుకోండి')} onClick={openPicker}><Icon name="calendar" className="h-4 w-4" /></button>
+      <input ref={picker} type="date" className="date-picker-native" tabIndex={-1} aria-hidden="true" aria-label={pick(en, te)} value={value || ''} onChange={event => { setText(isoToDmy(event.target.value)); commit(event.target.value); }} />
+    </div>
+  </div>;
 }
 export function ComboField({ en, te, options = [], value, onValue, ...props }) {
   const { pick } = useLanguage();

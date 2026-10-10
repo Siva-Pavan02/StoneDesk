@@ -109,7 +109,7 @@ export function makeRow(entry, product) {
   const ratePerSqFt = Number(entry.rate);
   const rowNo = Number(entry.rowNo ?? 1);
   if (!product) throw new Error('Select a product');
-  if (!Number.isSafeInteger(rowNo) || rowNo < 1 || rowNo > 15) throw new Error('Enter a row number from 1 to 15');
+  if (!Number.isSafeInteger(rowNo) || rowNo < 1 || rowNo > 20) throw new Error('Enter a row number from 1 to 20');
   if (!(lengthFt > 0) || !Number.isFinite(lengthFt) || !(widthFt > 0) || !Number.isFinite(widthFt)) throw new Error('Enter positive lengths and widths');
   if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 100000) throw new Error('Enter a whole quantity from 1 to 100000');
   if (entry.rate === '' || !Number.isFinite(ratePerSqFt) || ratePerSqFt < 0) throw new Error('Enter a valid rate');

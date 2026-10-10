@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { memo, useEffect, useRef, useSyncExternalStore } from 'react';
 import { motion, useAnimationControls, useMotionValue, useReducedMotion, useSpring } from 'motion/react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import Icon from './Icon.jsx';
@@ -50,7 +50,7 @@ export function MagneticCTA({ children, onClick, compact = false, compactLabel, 
   return <motion.button type="button" aria-label={compactLabel ? children : undefined} onClick={onClick} onPointerMove={move} onPointerLeave={reset} onPointerCancel={reset} onBlur={reset}
     style={{ x: springX, y: springY }} className={`mk-primary inline-flex min-h-12 shrink-0 items-center justify-center gap-4 rounded-full pl-6 pr-2 text-sm font-semibold ${compact ? 'mk-primary-compact' : ''} ${className}`}>
     {compactLabel ? <><span className="hidden sm:inline">{children}</span><span className="sm:hidden" aria-hidden="true">{compactLabel}</span></> : <span>{children}</span>}
-    <span className="mk-cta-disc flex h-9 w-9 shrink-0 items-center justify-center rounded-full" aria-hidden="true"><Icon name="arrow" className="h-4 w-4" /></span>
+    {compact ? <Icon name="arrow" className="mk-cta-arrow h-4 w-4 shrink-0" /> : <span className="mk-cta-disc flex h-9 w-9 shrink-0 items-center justify-center rounded-full" aria-hidden="true"><Icon name="arrow" className="h-4 w-4" /></span>}
   </motion.button>;
 }
 
@@ -68,7 +68,6 @@ export const SampleMotionBadge = memo(function SampleMotionBadge() {
   const reduced = useMarketingReducedMotion();
   const controls = useAnimationControls();
   const target = useRef(null);
-  const [paused, setPaused] = useState(false);
 
   useEffect(() => {
     const node = target.current;
@@ -78,7 +77,7 @@ export const SampleMotionBadge = memo(function SampleMotionBadge() {
     controls.set({ y: 0 });
     const pointer = window.matchMedia('(pointer: coarse)');
     const sync = () => {
-      const shouldRun = intersecting && !document.hidden && !paused && reduced === false && !pointer.matches;
+      const shouldRun = intersecting && !document.hidden && reduced === false && !pointer.matches;
       if (shouldRun === running) return;
       running = shouldRun;
       controls.stop();
@@ -99,14 +98,11 @@ export const SampleMotionBadge = memo(function SampleMotionBadge() {
       pointer.removeEventListener('change', sync);
       controls.stop();
     };
-  }, [controls, paused, reduced]);
+  }, [controls, reduced]);
 
-  return <div ref={target} className="flex flex-wrap items-center justify-between gap-2 border-t border-[#e0eae7] px-4 py-3 text-xs sm:px-5">
+  return <div ref={target} className="flex min-h-[61px] items-center border-t border-[#e0eae7] px-4 py-3 text-xs sm:px-5">
     <motion.span animate={controls} className="inline-flex items-center gap-2 text-[#17645d]">
       <Icon name="check" className="h-4 w-4" />{pick('Sample bill · saved totals', 'నమూనా బిల్లు · సేవ్ చేసిన మొత్తాలు')}
     </motion.span>
-    <button type="button" aria-pressed={paused} disabled={Boolean(reduced)} onClick={() => setPaused(value => !value)} className="mk-motion-toggle min-h-9 rounded-full px-3 text-[#526661]">
-      {reduced ? pick('Motion off', 'చలనం ఆఫ్') : paused ? pick('Resume motion', 'చలనం కొనసాగించండి') : pick('Pause motion', 'చలనం ఆపండి')}
-    </button>
   </div>;
 });

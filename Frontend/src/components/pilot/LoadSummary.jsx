@@ -13,8 +13,8 @@ export default function LoadSummary({ rows, summary, groups, showGroups = true, 
       <div className="invoice-order-summary">
         <h3>{pick('Order summary', 'ఆర్డర్ సారాంశం')}</h3>
         <div className="table-scroll" tabIndex={0} role="region" aria-label={pick('Order summary', 'ఆర్డర్ సారాంశం')}><table className="invoice-summary-table">
-          <thead><tr><th scope="col">{pick('Row', 'వరుస')}</th><th scope="col" className="numeric">{pick('Pieces', 'ముక్కలు')}</th><th scope="col" className="numeric">{pick('Regular sq ft', 'సాధారణ చ.అ.')}</th><th scope="col" className="numeric">{pick('Top sq ft', 'టాప్ చ.అ.')}</th><th scope="col" className="numeric">{pick('Total sq ft', 'మొత్తం చ.అ.')}</th></tr></thead>
-          <tbody>{groups.map(g => <tr key={g.rowNo}><th scope="row">{pick('Row', 'వరుస')} {g.rowNo}</th><td className="numeric">{g.total.quantity}</td><td className="numeric">{fixed2(g.regular.sqFt)}</td><td className="numeric">{fixed2(g.top.sqFt)}</td><td className="numeric">{fixed2(g.total.sqFt)}</td></tr>)}</tbody>
+          <thead><tr><th scope="col">#</th><th scope="col" className="numeric">{pick('Pieces', 'ముక్కలు')}</th><th scope="col" className="numeric">{pick('Regular sq ft', 'సాధారణ చ.అ.')}</th><th scope="col" className="numeric">{pick('Top sq ft', 'టాప్ చ.అ.')}</th><th scope="col" className="numeric">{pick('Total sq ft', 'మొత్తం చ.అ.')}</th></tr></thead>
+          <tbody>{groups.map(g => <tr key={g.rowNo}><th scope="row">{g.rowNo}</th><td className="numeric">{g.total.quantity}</td><td className="numeric">{fixed2(g.regular.sqFt)}</td><td className="numeric">{fixed2(g.top.sqFt)}</td><td className="numeric">{fixed2(g.total.sqFt)}</td></tr>)}</tbody>
           <tfoot><tr><th scope="row">{pick('Grand total', 'మొత్తం')}</th><td className="numeric">{overview.pieces}</td><td className="numeric">{fixed2(overview.regularSqFt)}</td><td className="numeric">{fixed2(overview.topSqFt)}</td><td className="numeric">{fixed2(overview.totalSqFt)}</td></tr></tfoot>
         </table></div>
       </div>

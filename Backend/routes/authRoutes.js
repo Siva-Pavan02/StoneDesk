@@ -149,6 +149,18 @@ router.post('/password', auth.authLimit, auth.requireSession, async (req, res, n
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
+router.delete('/account', auth.authLimit, auth.requireSession, async (req, res, next) => {
+  try {
+    const confirm = typeof req.body.confirm === 'string' ? req.body.confirm.trim().toLowerCase() : '';
+    if (confirm !== req.user.email.toLowerCase()) return res.status(400).json({ error: 'Type your email exactly to confirm deletion' });
+    const deleteBusiness = req.user.role === 'Admin';
+    await auditLog(deleteBusiness ? 'organization.delete' : 'user.account_delete', req, { targetUserId: req.user.id });
+    await auth.endSession(req, res);
+    if (deleteBusiness) await prisma.masterSettings.delete({ where: { id: req.user.organizationId } });
+    else await prisma.user.delete({ where: { id: req.user.id } });
+    res.json({ ok: true, deletedBusiness: deleteBusiness });
+  } catch (err) { next(err); }
+});
 router.get('/users', auth.requireSession, auth.requireActive, auth.allowRoles('Admin'), async (req, res, next) => {
   try { res.json((await prisma.user.findMany({ where: { organizationId: req.user.organizationId }, orderBy: { createdAt: 'asc' } })).map(auth.publicUser)); } catch (err) { next(err); }
 });

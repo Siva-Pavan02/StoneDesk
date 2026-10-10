@@ -14,7 +14,14 @@ import {
   summarize,
   money,
 } from "../../utils/pilotDraft.js";
-import { Button, Card, ComboField, Field, ErrorMessage } from "./Controls.jsx";
+import {
+  Button,
+  Card,
+  ComboField,
+  DateField,
+  Field,
+  ErrorMessage,
+} from "./Controls.jsx";
 import MeasurementEntry from "./MeasurementEntry.jsx";
 import LoadSummary from "./LoadSummary.jsx";
 import { decimalToFraction } from "../../utils/fractionParser.js";
@@ -233,13 +240,12 @@ export default function NewLoad({
               value={draft.truckNumber}
               onValue={(value) => change("truckNumber")({ target: { value } })}
             />
-            <Field
+            <DateField
               en="Load date"
               te="తేదీ"
-              type="date"
               required
               value={draft.date}
-              onChange={change("date")}
+              onValue={(value) => change("date")({ target: { value } })}
             />
             <ComboField
               en="Destination"
@@ -287,13 +293,21 @@ export default function NewLoad({
         </Card>
       )}
       {[...new Set(rows.map((r) => r.rowNo))]
-        .sort((a, b) => a - b)
+        .sort((a, b) =>
+          review
+            ? a - b
+            : rows.findLastIndex((r) => r.rowNo === b) -
+              rows.findLastIndex((r) => r.rowNo === a),
+        )
         .map((no) => {
           const lines = rows
             .map((r, i) => ({ r, i }))
-            .filter(({ r }) => r.rowNo === no);
-          lines.sort(
-            (a, b) => (a.r.category === "TOP") - (b.r.category === "TOP"),
+            .filter(({ r }) => r.rowNo === no)
+            .map((line, order) => ({ ...line, order }));
+          lines.sort((a, b) =>
+            review
+              ? (a.r.category === "TOP") - (b.r.category === "TOP")
+              : b.i - a.i,
           );
           return (
             <section
@@ -304,10 +318,10 @@ export default function NewLoad({
               <h2 className="row-group-title">
                 {pick("Row", "వరుస")} {no}
               </h2>
-              {lines.map(({ r, i }, n) => (
+              {lines.map(({ r, i, order }, n) => (
                 <Card key={i} className="measurement-record gap-2">
                   <strong className="break-words">
-                    {n + 1}. {r.stoneType} · {r.finish}
+                    {(review ? n : order) + 1}. {r.stoneType} · {r.finish}
                     {r.category === "TOP" ? ` · ${pick("Top", "టాప్")}` : ""}
                   </strong>
                   <p>

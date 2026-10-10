@@ -12,18 +12,22 @@ export const largeBill = {
 };
 test('15-row invoice exports preserve totals, show no batch wording and hide driver prices',async()=>{
   const buyer=await buyerPdf(largeBill).blob.text(),driver=await driverPdf(largeBill).blob.text();
-  assert.match(buyer,/ROW 15/); assert.match(buyer,/Row 15 Total/); assert.match(buyer,/Regular Subtotal/); assert.match(buyer,/Top Subtotal/); assert.match(buyer,/NET PAYABLE/);assert.match(buyer,/1,01,198.75/);
+  assert.doesNotMatch(buyer,/ROW \d|Row \d|S\.No\./); assert.match(buyer,/\(Total\)/); assert.match(buyer,/Reg\. subtotal/); assert.match(buyer,/Top subtotal/); assert.match(buyer,/NET PAYABLE/);assert.match(buyer,/1,01,198.75/);
   assert.match(buyer,/Material Amount/); assert.match(buyer,/69,255.00/); assert.match(buyer,/Top Material Amount/); assert.match(buyer,/31,893.75/);
   assert.match(buyer,/ORDER SUMMARY/); assert.match(buyer,/PAYMENT SUMMARY/); assert.match(buyer,/Authorized Signatory/);
   assert.doesNotMatch(buyer,/batch/i); assert.doesNotMatch(driver,/batch/i);
-  assert.ok((buyer.match(/\/Type \/Page\b/g)||[]).length>=3);
-  assert.match(driver,/ROW 15/); assert.doesNotMatch(driver,/NET PAYABLE|PAYMENT SUMMARY|40\.50|1,01,198\.75|Rate \(INR\)/);
+  // This older PDF engine may fit all fifteen compact groups on one sheet;
+  // validate the first and final rows instead of enforcing its former page count.
+  assert.ok((buyer.match(/\/Type \/Page\b/g)||[]).length>=1);
+  assert.match(buyer,/\(1\)/); assert.match(buyer,/\(15\)/);
+  assert.match(driver,/\(15\)/); assert.doesNotMatch(driver,/ROW \d|Row \d|S\.No\./); assert.doesNotMatch(driver,/NET PAYABLE|PAYMENT SUMMARY|40\.50|1,01,198\.75|Rate \(INR\)/);
   const book=XLSX.read(await buyerExcel(largeBill).blob.arrayBuffer(),{type:'array'});
   const rows=XLSX.utils.sheet_to_json(book.Sheets['Buyer Invoice'],{header:1});
   assert.equal(rows.find(row=>row[0]==='Net payable')[1],101198.75);
   assert.equal(rows.find(row=>row[0]==='Top Material Amount')[1],31893.75);
-  assert.deepEqual(rows[8].slice(0,3),[1,1,'']); assert.deepEqual(rows[9].slice(0,3),[1,'','Regular Subtotal']); assert.deepEqual(rows[10].slice(0,3),[1,1,'Top']);
-  assert.equal(typeof rows[8][6],'number');
+  assert.deepEqual(rows[7].slice(0,2),['#','Type']); assert.deepEqual(rows[8].slice(0,2),[1,'']); assert.deepEqual(rows[9].slice(0,2),[1,'Regular Subtotal']); assert.deepEqual(rows[10].slice(0,2),[1,'Top']); assert.deepEqual(rows[12].slice(0,2),[1,'Total']);
+  assert.equal(typeof rows[8][5],'number');
+  assert.deepEqual(rows[10].slice(2,4),['3½','1½']);
 });
 
 test('Regular and Top lines entered under one row stay together and row numbers are never renumbered',()=>{
@@ -46,7 +50,8 @@ test('a 30-line row splits across pages without losing its totals',async()=>{
   const groups=rowGroups(billRows(bill));
   assert.deepEqual(groups.map(g=>[g.rowNo,g.regularLines.length,g.topLines.length]),[[1,14,16],[2,12,0],[15,0,3]]);
   const buyer=await buyerPdf(bill).blob.text();
-  for(const text of ['ROW 1','ROW 2','ROW 15','Row 1 Total','Row 2 Total','Row 15 Total','Regular Subtotal','Top Subtotal']) assert.match(buyer,new RegExp(text));
+  for(const text of ['\\(1\\)','\\(2\\)','\\(15\\)','\\(Total\\)','continued','Reg\\. subtotal','Top subtotal']) assert.match(buyer,new RegExp(text));
+  assert.doesNotMatch(buyer,/ROW \d|Row \d|S\.No\./);
 });
 
 test('records saved before row numbers existed map old batch N to Row N',()=>{
@@ -54,14 +59,13 @@ test('records saved before row numbers existed map old batch N to Row N',()=>{
   assert.deepEqual(rowGroups(billRows(legacy,false)).map(g=>g.rowNo),[1,2]);
 });
 
-test('invoice logo area renders a placeholder or the saved logo without stretching', async () => {
+test('previous buyer PDF uses a vector logo placeholder or a contained saved logo', async () => {
   const placeholder = await buyerPdf(largeBill).blob.text();
-  assert.match(placeholder, /YOUR LOGO/);
+  assert.doesNotMatch(placeholder, /\/Subtype \/Image/, 'Without a saved logo the previous PDF draws a compact vector placeholder');
   assert.doesNotMatch(placeholder, /ISSUED BY/);
   assert.match(placeholder, /BUYER INVOICE/);
   const record = { ...largeBill, businessSnapshot: { ...largeBill.businessSnapshot, logoDataUrl: testLogo } };
   const branded = await buyerPdf(record).blob.text();
-  assert.doesNotMatch(branded, /YOUR LOGO/);
   assert.match(branded, /\/Subtype \/Image/);
   assert.match(branded, /\/Width 120/);
   assert.match(branded, /\/Height 48/);
@@ -75,8 +79,8 @@ test('invoice logo area renders a placeholder or the saved logo without stretchi
 test('damaged historical logos fall back without preventing buyer or driver exports', async () => {
   const record = { ...largeBill, businessSnapshot: { ...largeBill.businessSnapshot, logoDataUrl: 'data:image/png;base64,not-a-real-image' } };
   const buyer = await buyerPdf(record).blob.text(), driver = await driverPdf(record).blob.text();
-  assert.match(buyer, /YOUR LOGO/); assert.match(buyer, /1,01,198.75/);
-  assert.match(driver, /YOUR LOGO/); assert.match(driver, /Prices hidden/);
+  assert.doesNotMatch(buyer, /\/Subtype \/Image/); assert.match(buyer, /1,01,198.75/);
+  assert.doesNotMatch(driver, /\/Subtype \/Image/); assert.match(driver, /Prices hidden/);
   assert.doesNotMatch(driver, /NET PAYABLE|40\.50|1,01,198\.75|Rate \(INR\)/);
 });
 
@@ -90,6 +94,6 @@ test('driver slip needs only inventory and never reads financial amounts', async
     return safe;
   });
   const driver = await driverPdf(record).blob.text();
-  assert.match(driver, /ROW 15/); assert.match(driver, /\/Subtype \/Image/);
+  assert.match(driver, /\(15\)/); assert.match(driver, /\/Subtype \/Image/);
   assert.match(driver, /Prices hidden/); assert.doesNotMatch(driver, /NET PAYABLE|40\.50|1,01,198\.75|Rate \(INR\)/);
 });

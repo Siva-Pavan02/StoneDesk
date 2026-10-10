@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "invoice:sample": "node scripts/generateA4InvoiceSample.mjs",
     "lint": "oxlint",
     "preview": "vite preview",
     "dev:lan": "vite --host 0.0.0.0"
@@ -14,6 +15,7 @@
     "@radix-ui/react-icons": "^1.3.2",
     "@tailwindcss/vite": "^4.3.3",
     "daisyui": "^5.7.47",
+    "decimal.js": "^10.6.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "motion": "^14.0.0",
@@ -23,10 +25,12 @@
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
+    "@napi-rs/canvas": "^1.0.11",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
     "oxlint": "^1.81.0",
+    "pdfjs-dist": "^6.4.299",
     "vite": "^8.3.0"
   }
 }

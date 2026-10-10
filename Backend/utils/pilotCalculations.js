@@ -47,7 +47,7 @@ function processInventory(raw) {
         if (!['Regular', 'TOP'].includes(category)) bad('Invalid row category');
         // Records saved before row numbers existed used the product group position as the row.
         const rowNo = row.rowNo ?? groupIndex + 1;
-        if (!Number.isSafeInteger(rowNo) || rowNo < 1 || rowNo > 15) bad('Row number must be a whole number from 1 to 15');
+        if (!Number.isSafeInteger(rowNo) || rowNo < 1 || rowNo > 20) bad('Row number must be a whole number from 1 to 20');
         const area = lengthFt * widthFt * row.quantity;
         return { rowNo, lengthFt, widthFt, quantity: row.quantity, category,
           lengthDisplay: String(lengthFt), widthDisplay: String(widthFt),

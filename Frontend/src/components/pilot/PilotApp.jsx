@@ -17,9 +17,19 @@ import AccountSettings from "./AccountSettings.jsx";
 const BillView = lazy(() => import("./BillView.jsx"));
 const SavedReferences = lazy(() => import("../SettingsScreen.jsx"));
 const LoadingRequirements = lazy(() => import("../LoadingListScreen.jsx"));
-const route = () => window.location.hash.slice(1) || "home";
+const legacyRoutes = {
+  monitor: "entries?status=Dispatched",
+  invoices: "entries",
+};
+const route = () => {
+  const hash = window.location.hash.slice(1) || "home";
+  const next = legacyRoutes[hash];
+  if (!next) return hash;
+  window.history.replaceState(null, "", `#${next}`);
+  return next;
+};
 
-export default function PilotApp({ user, onLogout, onLanding }) {
+export default function PilotApp({ user, onLogout }) {
   const { pick } = useLanguage();
   const [settings, setSettings] = useState(null),
     [loads, setLoads] = useState([]);
@@ -43,7 +53,9 @@ export default function PilotApp({ user, onLogout, onLanding }) {
   const analyticsRequest = useRef(0);
   const admin = user.role === "Admin",
     canFinalize = user.role !== "Yard Manager";
-  function navigate(next) {
+  function navigate(target) {
+    const next = legacyRoutes[target] || target;
+    if (view.split(/[/?]/)[0] === "references" && next !== "references") load();
     window.location.hash = next;
     setView(next);
     setError("");
@@ -123,7 +135,7 @@ export default function PilotApp({ user, onLogout, onLanding }) {
     };
   }, [settings?.id, view]);
   useEffect(() => {
-    if (view !== "monitor") return;
+    if (!view.startsWith("entries")) return;
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") refreshLoads(false);
     }, 30000);
@@ -208,7 +220,7 @@ export default function PilotApp({ user, onLogout, onLanding }) {
       ? !settings.businessName
         ? "profile"
         : "products"
-      : view.split("/")[0];
+      : view.split(/[/?]/)[0];
   let content;
   const openingBill =
     view.startsWith("bill/") && record?.id !== view.slice(5) && !error;
@@ -244,12 +256,12 @@ export default function PilotApp({ user, onLogout, onLanding }) {
         user={user}
         onBack={
           settings.businessName
-            ? () => navigate("settings/business")
+            ? () => navigate("settings/general")
             : undefined
         }
         onSaved={(data) => {
           setSettings(data);
-          navigate(data.stoneRates.length ? "settings/business" : "products");
+          navigate(data.stoneRates.length ? "settings/general" : "products");
         }}
       />
     );
@@ -258,10 +270,14 @@ export default function PilotApp({ user, onLogout, onLanding }) {
       <ProductSettings
         settings={settings}
         onChanged={setSettings}
-        onBack={() => {
-          navigate(onboarding ? "home" : "settings/business");
-          setOnboarding(false);
-        }}
+        onBack={
+          onboarding || needsSetup
+            ? () => {
+                navigate("home");
+                setOnboarding(false);
+              }
+            : undefined
+        }
         onboarding={onboarding || needsSetup}
         user={user}
       />
@@ -271,14 +287,7 @@ export default function PilotApp({ user, onLogout, onLanding }) {
       <Suspense
         fallback={<p role="status">{pick("Loading…", "లోడ్ అవుతోంది…")}</p>}
       >
-        <SavedReferences
-          embedded
-          user={user}
-          onClose={() => {
-            load();
-            navigate("settings/business");
-          }}
-        />
+        <SavedReferences embedded user={user} />
       </Suspense>
     ) : (
       <Card>
@@ -343,9 +352,7 @@ export default function PilotApp({ user, onLogout, onLanding }) {
         user={user}
         section={view.split("/")[1]}
         navigate={navigate}
-        onLogout={onLogout}
-        onLegacySettings={() => navigate("references")}
-        onLanding={onLanding}
+        onDeleted={onLogout}
       />
     );
   else
@@ -356,6 +363,10 @@ export default function PilotApp({ user, onLogout, onLanding }) {
           key={current}
           loads={loads}
           view={current}
+          status={
+            new URLSearchParams(view.split("?")[1] || "").get("status") ||
+            "all"
+          }
           query={query}
           onOpen={(id) => navigate(`bill/${id}`)}
           onRefresh={() => refreshLoads()}
@@ -371,6 +382,7 @@ export default function PilotApp({ user, onLogout, onLanding }) {
             navigate("load");
           }}
           onNavigate={navigate}
+          onNew={newLoad}
           updatedAt={updatedAt}
         />
       </>
@@ -381,6 +393,7 @@ export default function PilotApp({ user, onLogout, onLanding }) {
       user={user}
       view={current}
       navigate={navigate}
+      onLogout={onLogout}
       onNew={newLoad}
       query={query}
       setQuery={setQuery}

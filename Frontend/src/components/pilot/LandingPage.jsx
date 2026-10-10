@@ -1,23 +1,46 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import Icon from './Icon.jsx';
-import ProductShowcase, { SampleDownload, SampleInvoice } from './ProductShowcase.jsx';
+import ProductShowcase, { SampleInvoice } from './ProductShowcase.jsx';
 import { MagneticCTA, Reveal } from './MarketingMotion.jsx';
 
+function ScrubText({ text, className }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+    const words = [...node.querySelectorAll('span')];
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const box = node.getBoundingClientRect();
+      const progress = Math.min(1, Math.max(0, (window.innerHeight * 0.85 - box.top) / (window.innerHeight * 0.5)));
+      const lit = progress * words.length;
+      words.forEach((word, index) => { word.style.opacity = String(Math.min(1, Math.max(0.15, lit - index + 0.15))); });
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
+    update();
+    window.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule);
+    return () => { cancelAnimationFrame(frame); window.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); };
+  }, [text]);
+  return <p ref={ref} className={className}>{text.split(' ').map((word, index) => <span key={`${word}-${index}`} className="mk-scrub-word">{word} </span>)}</p>;
+}
+
 export default function LandingPage({ onStart, onLogin, user, onWorkspace }) {
-  const { pick, language, setLanguage } = useLanguage();
+  const { pick, language } = useLanguage();
   const info = useRef(null);
   const bill = useRef(null);
   const [topic, setTopic] = useState('privacy');
   const start = user ? onWorkspace : onStart;
-  const startLabel = user ? pick('Open workspace', 'వర్క్‌స్పేస్ తెరవండి') : pick('Create workspace', 'వర్క్‌స్పేస్ సృష్టించండి');
+  const startLabel = user ? pick('Open workspace', 'వర్క్‌స్పేస్ తెరవండి') : pick('Sign up', 'సైన్ అప్');
   const topics = {
     privacy: {
       title: pick('Your data, explained', 'మీ సమాచారం గురించి'),
       paragraphs: [
         pick('Accounts, business details, measurements and dispatch records are stored on the server running this StoneDesk installation. Your business administrator manages team access.', 'ఖాతాలు, వ్యాపార వివరాలు, కొలతలు మరియు డిస్పాచ్ రికార్డులు ఈ StoneDesk సర్వర్‌లో నిల్వ ఉంటాయి. మీ వ్యాపార అడ్మిన్ బృందం యాక్సెస్‌ను నిర్వహిస్తారు.'),
         pick('An unfinished load can also be kept on this device for recovery. On a shared device, use your own account and sign out when finished.', 'పూర్తి కాని లోడ్ రికవరీ కోసం ఈ పరికరంలో కూడా ఉండవచ్చు. పంచుకునే పరికరంలో మీ ఖాతానే ఉపయోగించి, పని ముగిసిన తర్వాత లాగ్ అవుట్ చేయండి.'),
-        pick('The public previews use sample data only. Downloading the sample PDF does not access or create a business record. Ask your administrator about this installation’s retention and deletion policies.', 'ఈ పబ్లిక్ ప్రివ్యూలలో నమూనా సమాచారం మాత్రమే ఉంటుంది. నమూనా PDF డౌన్‌లోడ్ మీ వ్యాపార రికార్డులను తెరవదు లేదా సృష్టించదు. సమాచారం నిల్వ, తొలగింపు విధానాల గురించి అడ్మిన్‌ను అడగండి.'),
+        pick('The public previews use sample data only and do not access or create a business record. Ask your administrator about this installation’s retention and deletion policies.', 'ఈ పబ్లిక్ ప్రివ్యూలలో నమూనా సమాచారం మాత్రమే ఉంటుంది; ఇవి మీ వ్యాపార రికార్డులను తెరవవు లేదా సృష్టించవు. సమాచారం నిల్వ, తొలగింపు విధానాల గురించి అడ్మిన్‌ను అడగండి.'),
       ],
     },
     terms: {
@@ -57,11 +80,8 @@ export default function LandingPage({ onStart, onLogin, user, onWorkspace }) {
           <a href="#how-it-works" onClick={event => anchor(event, 'how-it-works')} className="mk-nav-link flex min-h-11 items-center rounded-full px-3 text-sm">{pick('How it works', 'ఎలా పనిచేస్తుంది')}</a>
         </div>
         <div className="mk-nav-actions ml-auto flex items-center gap-1 sm:gap-3">
-          <div className="mk-language flex shrink-0 items-center rounded-full border border-[#dbe6e1] p-0.5" role="group" aria-label={pick('Language', 'భాష')}>
-            {[['en', 'EN', 'English'], ['te', 'TE', 'తెలుగు']].map(([value, short, label]) => <button type="button" key={value} lang={value} aria-label={label} aria-pressed={language === value} onClick={() => setLanguage(value)} className="min-h-10 min-w-10 rounded-full text-xs font-semibold">{short}</button>)}
-          </div>
           {!user && <button type="button" onClick={onLogin} className="mk-login min-h-11 rounded-full px-3 text-sm font-medium">{pick('Log in', 'లాగిన్')}</button>}
-          <div className="mk-nav-cta"><MagneticCTA compact compactLabel={user ? pick('Workspace', 'వర్క్‌స్పేస్') : pick('Create', 'సృష్టించండి')} onClick={start}>{startLabel}</MagneticCTA></div>
+          <div className="mk-nav-cta"><MagneticCTA compact compactLabel={user ? pick('Workspace', 'వర్క్‌స్పేస్') : undefined} onClick={start}>{startLabel}</MagneticCTA></div>
         </div>
       </nav>
     </header>
@@ -69,7 +89,6 @@ export default function LandingPage({ onStart, onLogin, user, onWorkspace }) {
     <main id="marketing-main" tabIndex={-1} className="mx-auto max-w-[1240px] px-5 outline-none sm:px-8 lg:px-10">
       <section className="mk-hero grid min-w-0 grid-cols-1 items-center gap-10 pb-8 pt-12 lg:grid-cols-[0.92fr_1.08fr] lg:gap-12 lg:pb-16 lg:pt-20" aria-labelledby="marketing-hero-title">
         <div className="min-w-0">
-          <p className="mb-5 flex items-center gap-2 text-xs font-medium tracking-wide text-[#17645d]"><span className="h-1.5 w-1.5 rounded-full bg-[#17645d]" aria-hidden="true" />{pick('FOR STONE & TILE BUSINESSES', 'రాయి మరియు టైల్ వ్యాపారాల కోసం')}</p>
           <h1 id="marketing-hero-title" className="mk-hero-title font-semibold tracking-[-0.055em]">{pick('Every load.', 'ప్రతి లోడ్.')}<br /><span className="text-[#17645d]">{pick('Accounted for.', 'కచ్చితమైన లెక్క.')}</span></h1>
           <p className="mt-6 max-w-[36ch] text-base leading-relaxed text-[#526661] sm:text-lg">{pick('From first measurement to final bill. A clear workspace for your stone business and the people running it.', 'మొదటి కొలత నుండి చివరి బిల్లు వరకు. మీ రాతి వ్యాపారం మరియు బృందం కోసం స్పష్టమైన వర్క్‌స్పేస్.')}</p>
           <div className="mt-8"><MagneticCTA onClick={start}>{startLabel}</MagneticCTA></div>
@@ -77,33 +96,45 @@ export default function LandingPage({ onStart, onLogin, user, onWorkspace }) {
         <Reveal className="mk-hero-product relative min-w-0" delay={0.08}><ProductShowcase animateStatus /></Reveal>
       </section>
 
-      <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-4 border-y border-[#dce6e1] py-5 text-sm text-[#526661]" aria-label={pick('Workspace essentials', 'వర్క్‌స్పేస్ ముఖ్యాంశాలు')}>
-        {[[ 'loads', 'Feet, fractions & square feet', 'అడుగులు, భిన్నాలు మరియు చ.అ.' ], [ 'user', 'Role-based team access', 'పాత్ర ఆధారిత బృందం యాక్సెస్' ], [ 'bill', 'PDF & Excel exports', 'PDF మరియు Excel ఎగుమతులు' ]].map(([icon, en, te]) => <span key={icon} className="flex items-center gap-2.5"><Icon name={icon} className="h-4 w-4 text-[#17645d]" />{pick(en, te)}</span>)}
-      </div>
+      <ul className="mk-essentials" aria-label={pick('Workspace essentials', 'వర్క్‌స్పేస్ ముఖ్యాంశాలు')}>
+        {[[ 'loads', 'Feet, fractions & sq ft', 'అడుగులు, భిన్నాలు, చ.అ.' ], [ 'user', 'Role-based access', 'పాత్ర ఆధారిత యాక్సెస్' ], [ 'bill', 'PDF & Excel exports', 'PDF, Excel ఎగుమతులు' ]].map(([icon, en, te]) => <li key={icon}><span className="mk-essential-icon" aria-hidden="true"><Icon name={icon} className="h-4 w-4" /></span><span>{pick(en, te)}</span></li>)}
+      </ul>
 
       <section id="product" tabIndex={-1} className="mk-section scroll-mt-32 outline-none" aria-labelledby="marketing-product-title">
-        <Reveal><h2 id="marketing-product-title" className="mk-section-title max-w-[18ch] font-semibold tracking-[-0.045em]">{pick('Made for the work. Not the paperwork.', 'పనికి తోడు. కాగితాల భారానికి కాదు.')}</h2><p className="mt-4 max-w-[51ch] text-base leading-relaxed text-[#526661]">{pick('Keep measurements, dispatch status and saved bills together.', 'కొలతలు, డిస్పాచ్ స్థితి, సేవ్ చేసిన బిల్లులు ఒకేచోట.')}</p></Reveal>
-        <div className="mt-9 divide-y divide-[#dce6e1] border-y border-[#dce6e1] lg:mt-12">
-          <Reveal className="grid grid-cols-1 gap-4 py-8 lg:grid-cols-[0.8fr_1.2fr] lg:gap-12"><div className="flex items-start gap-4"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#e5f1eb] text-[#17645d]" aria-hidden="true"><Icon name="loads" /></span><h3 className="text-2xl font-semibold tracking-tight">{pick('Measurements that add up.', 'సరిగ్గా కూడే కొలతలు.')}</h3></div><p className="max-w-[52ch] text-sm leading-relaxed text-[#526661]">{pick('Enter fractional feet, quantities and row numbers, with Top pieces kept in the same row. See area and material totals before you finalize.', 'అడుగుల్లో భిన్నాలు, ముక్కలు, వరుస సంఖ్య నమోదు చేయండి; టాప్ ముక్కలు అదే వరుసలో ఉంటాయి. ఖరారు చేసే ముందు విస్తీర్ణం, మెటీరియల్ మొత్తాలు చూడండి.')}</p></Reveal>
-          <Reveal className="grid grid-cols-1 gap-4 py-8 lg:grid-cols-[0.8fr_1.2fr] lg:gap-12" delay={0.06}><div className="flex items-start gap-4"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#e5f1eb] text-[#17645d]" aria-hidden="true"><Icon name="truck" /></span><h3 className="text-2xl font-semibold tracking-tight">{pick('Know where each load stands.', 'ప్రతి లోడ్ స్థితి తెలుసుకోండి.')}</h3></div><div className="max-w-[52ch]"><p className="text-sm leading-relaxed text-[#526661]">{pick('Draft, dispatched or delivered. Your team records each step, with lorry and destination details close at hand.', 'డ్రాఫ్ట్, పంపబడింది లేదా డెలివరీ అయింది. లారీ, గమ్యస్థానం వివరాలతో మీ బృందం ప్రతి దశను నమోదు చేస్తుంది.')}</p><p className="mt-3 text-xs text-[#526661]">{pick('Team-updated status, not live GPS tracking.', 'బృందం నవీకరించే స్థితి, లైవ్ GPS ట్రాకింగ్ కాదు.')}</p></div></Reveal>
-          <Reveal className="grid grid-cols-1 gap-4 py-8 lg:grid-cols-[0.8fr_1.2fr] lg:gap-12" delay={0.12}><div className="flex items-start gap-4"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#e5f1eb] text-[#17645d]" aria-hidden="true"><Icon name="lock" /></span><h3 className="text-2xl font-semibold tracking-tight">{pick('A final bill stays final.', 'ఖరారు చేసిన బిల్లు అలాగే ఉంటుంది.')}</h3></div><p className="max-w-[52ch] text-sm leading-relaxed text-[#526661]">{pick('Finalized financial values stay locked. Original branding, rates and totals remain with the bill, even when business settings change.', 'ఖరారు చేసిన బిల్లు మొత్తాలు లాక్ అవుతాయి. వ్యాపార సెట్టింగ్స్ మారినా అసలు బ్రాండింగ్, ధరలు, మొత్తాలు బిల్లులో అలాగే ఉంటాయి.')}</p></Reveal>
+        <Reveal><h2 id="marketing-product-title" className="mk-section-title max-w-[18ch] font-semibold tracking-[-0.045em]">{pick('Made for the work. Not the paperwork.', 'పనికి తోడు. కాగితాల భారానికి కాదు.')}</h2></Reveal>
+        <ScrubText className="mk-scrub mt-6 max-w-[34ch] font-medium tracking-[-0.03em]" text={pick('Measurements, dispatch status and saved bills live together, so every load leaves the yard with numbers you can trust.', 'కొలతలు, డిస్పాచ్ స్థితి, సేవ్ చేసిన బిల్లులు ఒకేచోట ఉంటాయి, కాబట్టి ప్రతి లోడ్ నమ్మదగిన లెక్కలతో యార్డ్ నుండి బయలుదేరుతుంది.')} />
+        <div className="mk-bento mt-10 grid grid-flow-dense grid-cols-1 gap-4 lg:mt-14 lg:grid-cols-2 lg:grid-rows-2">
+          <Reveal className="mk-bento-card mk-bento-lead group lg:row-span-2"><span className="mk-bento-icon" aria-hidden="true"><Icon name="loads" /></span><h3 className="mt-6 text-2xl font-semibold tracking-tight">{pick('Measurements that add up.', 'సరిగ్గా కూడే కొలతలు.')}</h3><p className="mt-3 max-w-[46ch] text-sm leading-relaxed text-[#526661]">{pick('Enter fractional feet, quantities and row numbers, with Top pieces kept in the same row. See area and material totals before you finalize.', 'అడుగుల్లో భిన్నాలు, ముక్కలు, వరుస సంఖ్య నమోదు చేయండి; టాప్ ముక్కలు అదే వరుసలో ఉంటాయి. ఖరారు చేసే ముందు విస్తీర్ణం, మెటీరియల్ మొత్తాలు చూడండి.')}</p>
+            <div className="mk-bento-sheet mt-8" aria-hidden="true">{[['6 1/2', '2', '13.0'], ['5 3/4', '3', '17.3'], ['7', '1', '7.0']].map(([length, qty, area]) => <div key={length} className="mk-bento-sheet-row"><span>{length} × 2</span><span>{qty}</span><span>{area}</span></div>)}<div className="mk-bento-sheet-row mk-bento-sheet-total"><span>{pick('Subtotal', 'ఉప మొత్తం')}</span><span>6</span><span>37.3</span></div></div>
+          </Reveal>
+          <Reveal className="mk-bento-card group" delay={0.06}><span className="mk-bento-icon" aria-hidden="true"><Icon name="truck" /></span><h3 className="mt-5 text-xl font-semibold tracking-tight">{pick('Know where each load stands.', 'ప్రతి లోడ్ స్థితి తెలుసుకోండి.')}</h3><p className="mt-3 max-w-[46ch] text-sm leading-relaxed text-[#526661]">{pick('Draft, dispatched or delivered. Your team records each step, with lorry and destination details close at hand.', 'డ్రాఫ్ట్, పంపబడింది లేదా డెలివరీ అయింది. లారీ, గమ్యస్థానం వివరాలతో మీ బృందం ప్రతి దశను నమోదు చేస్తుంది.')}</p><p className="mt-3 text-xs text-[#526661]">{pick('Team-updated status, not live GPS tracking.', 'బృందం నవీకరించే స్థితి, లైవ్ GPS ట్రాకింగ్ కాదు.')}</p></Reveal>
+          <Reveal className="mk-bento-card group" delay={0.12}><span className="mk-bento-icon" aria-hidden="true"><Icon name="lock" /></span><h3 className="mt-5 text-xl font-semibold tracking-tight">{pick('A final bill stays final.', 'ఖరారు చేసిన బిల్లు అలాగే ఉంటుంది.')}</h3><p className="mt-3 max-w-[46ch] text-sm leading-relaxed text-[#526661]">{pick('Finalized financial values stay locked. Original branding, rates and totals remain with the bill, even when business settings change.', 'ఖరారు చేసిన బిల్లు మొత్తాలు లాక్ అవుతాయి. వ్యాపార సెట్టింగ్స్ మారినా అసలు బ్రాండింగ్, ధరలు, మొత్తాలు బిల్లులో అలాగే ఉంటాయి.')}</p></Reveal>
         </div>
       </section>
 
       <section id="how-it-works" tabIndex={-1} className="mk-section scroll-mt-32 border-t border-[#dce6e1] outline-none" aria-labelledby="marketing-workflow-title">
         <Reveal><h2 id="marketing-workflow-title" className="mk-section-title font-semibold tracking-[-0.045em]">{pick('One load. A clear next step.', 'ఒక లోడ్. స్పష్టమైన తదుపరి దశ.')}</h2></Reveal>
-        <ol className="mt-8 grid grid-cols-1 gap-0 md:grid-cols-[1.05fr_1fr_1.2fr] md:gap-8">
-          {[[ '01', 'Measure & prepare', 'కొలిచి సిద్ధం చేయండి', 'Choose a product, add dimensions and quantities, then save a draft for review.', 'రకం ఎంచుకుని కొలతలు, ముక్కలు జోడించండి. తనిఖీ కోసం డ్రాఫ్ట్ సేవ్ చేయండి.' ], [ '02', 'Review & dispatch', 'తనిఖీ చేసి పంపండి', 'An Admin or Dispatcher reviews rates and charges, finalizes the bill and records dispatch.', 'అడ్మిన్ లేదా డిస్పాచర్ ధరలు, ఛార్జీలు తనిఖీ చేసి, బిల్లు ఖరారు చేసి, డిస్పాచ్ నమోదు చేస్తారు.' ], [ '03', 'Export & confirm', 'ఎగుమతి చేసి నిర్ధారించండి', 'Download the buyer PDF, driver slip or Excel bill. An authorized team member confirms delivery.', 'కొనుగోలుదారు PDF, డ్రైవర్ స్లిప్ లేదా Excel బిల్లు డౌన్‌లోడ్ చేయండి. అనుమతి ఉన్న సభ్యుడు డెలివరీ నిర్ధారిస్తారు.' ]].map(([number, en, te, detailEn, detailTe]) => <li key={number} className="mk-workflow-step border-b border-[#dce6e1] py-6 md:border-b-0 md:py-0"><Reveal delay={Number(number) * 0.05}><span className="text-sm font-medium text-[#17645d] tabular-nums">{number}</span><h3 className="mt-4 text-xl font-semibold tracking-tight">{pick(en, te)}</h3><p className="mt-3 max-w-[35ch] text-sm leading-relaxed text-[#526661]">{pick(detailEn, detailTe)}</p></Reveal></li>)}
+        <ol className="mk-steps mt-10 grid grid-cols-1 gap-0 md:grid-cols-3 md:gap-8">
+          {[[ '01', 'Measure & prepare', 'కొలిచి సిద్ధం చేయండి', 'Choose a product, add dimensions and quantities, then save a draft for review.', 'రకం ఎంచుకుని కొలతలు, ముక్కలు జోడించండి. తనిఖీ కోసం డ్రాఫ్ట్ సేవ్ చేయండి.' ], [ '02', 'Review & dispatch', 'తనిఖీ చేసి పంపండి', 'An Admin or Dispatcher reviews rates and charges, finalizes the bill and records dispatch.', 'అడ్మిన్ లేదా డిస్పాచర్ ధరలు, ఛార్జీలు తనిఖీ చేసి, బిల్లు ఖరారు చేసి, డిస్పాచ్ నమోదు చేస్తారు.' ], [ '03', 'Export & confirm', 'ఎగుమతి చేసి నిర్ధారించండి', 'Download the buyer PDF, driver slip or Excel bill. An authorized team member confirms delivery.', 'కొనుగోలుదారు PDF, డ్రైవర్ స్లిప్ లేదా Excel బిల్లు డౌన్‌లోడ్ చేయండి. అనుమతి ఉన్న సభ్యుడు డెలివరీ నిర్ధారిస్తారు.' ]].map(([number, en, te, detailEn, detailTe]) => <li key={number} className="mk-workflow-step"><Reveal delay={Number(number) * 0.05}><span className="mk-step-dot" aria-hidden="true" /><h3 className="text-xl font-semibold tracking-tight">{pick(en, te)}</h3><p className="mt-3 max-w-[35ch] text-sm leading-relaxed text-[#526661]">{pick(detailEn, detailTe)}</p></Reveal></li>)}
         </ol>
       </section>
 
       <section className="mk-section border-t border-[#dce6e1]" aria-labelledby="marketing-bill-title">
         <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:gap-16">
-          <Reveal><h2 id="marketing-bill-title" className="mk-section-title max-w-[14ch] font-semibold tracking-[-0.045em]">{pick('A bill you can actually open.', 'నిజంగా తెరిచి చూడగల బిల్లు.')}</h2><p className="mt-5 max-w-[39ch] text-base leading-relaxed text-[#526661]">{pick('Grouped measurements. Clear charges. A saved total. Try a real PDF generated from this sample, right on your device.', 'గ్రూప్ కొలతలు. స్పష్టమైన ఛార్జీలు. సేవ్ చేసిన మొత్తం. ఈ నమూనాతో మీ పరికరంలో నిజమైన PDF సృష్టించి చూడండి.')}</p>
-            <div className="mt-7 flex flex-col items-start gap-4"><button type="button" onClick={() => bill.current?.showModal()} className="mk-text-link inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[#17645d]">{pick('Open sample bill', 'నమూనా బిల్లు తెరవండి')}<Icon name="arrow" className="h-4 w-4" /></button><SampleDownload /></div>
+          <Reveal><h2 id="marketing-bill-title" className="mk-section-title max-w-[14ch] font-semibold tracking-[-0.045em]">{pick('A bill you can actually open.', 'నిజంగా తెరిచి చూడగల బిల్లు.')}</h2><p className="mt-5 max-w-[39ch] text-base leading-relaxed text-[#526661]">{pick('Grouped measurements. Clear charges. A saved total. Download it as a PDF or Excel bill from the workspace.', 'గ్రూప్ కొలతలు. స్పష్టమైన ఛార్జీలు. సేవ్ చేసిన మొత్తం. వర్క్‌స్పేస్ నుండి PDF లేదా Excel బిల్లుగా డౌన్‌లోడ్ చేయండి.')}</p>
+            <div className="mt-7 flex flex-col items-start gap-4"><button type="button" onClick={() => bill.current?.showModal()} className="mk-text-link inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[#17645d]">{pick('Open sample bill', 'నమూనా బిల్లు తెరవండి')}<Icon name="arrow" className="h-4 w-4" /></button></div>
             <p className="mt-6 max-w-[43ch] text-xs leading-relaxed text-[#526661]">{pick('Material bills in INR. No GST calculation or payment tracking. All figures shown are sample data.', 'INRలో మెటీరియల్ బిల్లులు. GST లెక్కింపు లేదా చెల్లింపుల ట్రాకింగ్ లేదు. చూపిన మొత్తాలు నమూనా మాత్రమే.')}</p>
           </Reveal>
-          <Reveal className="mk-bill-bezel min-w-0 rounded-[28px] border border-[#cfdfd8] p-2.5 sm:p-4" delay={0.06}><SampleInvoice /></Reveal>
+          <Reveal className="mk-bill-bezel min-w-0 rounded-[28px] border border-[#cfdfd8] p-2.5 sm:p-4" delay={0.06}>
+            <div className="mk-bill-card" aria-label={pick('Sample bill summary', 'నమూనా బిల్లు సారాంశం')} role="group">
+              <div className="mk-bill-card-head"><div><p className="mk-bill-card-kind">{pick('Buyer invoice', 'కొనుగోలుదారు ఇన్వాయిస్')}</p><p className="mk-bill-card-no">SAMPLE-001</p></div><span className="invoice-sample-tag">{pick('SAMPLE DATA', 'నమూనా')}</span></div>
+              <dl className="mk-bill-card-lines">
+                {[[ 'Material · 210 sq ft', 'మెటీరియల్ · 210 చ.అ.', '₹13,440.00' ], [ 'Top · 58.5 sq ft', 'టాప్ · 58.5 చ.అ.', '₹3,744.00' ], [ 'Loading / royalty', 'లోడింగ్ / రాయల్టీ', '₹1,200.00' ]].map(([en, te, value]) => <div key={en}><dt>{pick(en, te)}</dt><dd>{value}</dd></div>)}
+              </dl>
+              <div className="mk-bill-card-total"><span>{pick('Net payable', 'చెల్లించవలసిన మొత్తం')}</span><strong>₹18,384.00</strong></div>
+              <div className="mk-bill-card-files" aria-label={pick('Download formats', 'డౌన్‌లోడ్ రూపాలు')}>{['PDF', 'Excel', pick('Driver slip', 'డ్రైవర్ స్లిప్')].map(label => <span key={label}><Icon name="bill" className="h-3.5 w-3.5" />{label}</span>)}</div>
+            </div>
+          </Reveal>
         </div>
       </section>
 
@@ -116,7 +147,9 @@ export default function LandingPage({ onStart, onLogin, user, onWorkspace }) {
         </Reveal>
       </section>
 
-      <section className="mk-section border-t border-[#dce6e1]" aria-labelledby="marketing-start-title"><Reveal className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center"><div><h2 id="marketing-start-title" className="mk-section-title font-semibold tracking-[-0.045em]">{pick('Give your next load a home.', 'మీ తదుపరి లోడ్‌కు ఒక చోటు.')}</h2><p className="mt-3 text-sm text-[#526661]">{pick('Start with your business. Bring your team when you’re ready.', 'మీ వ్యాపారంతో మొదలుపెట్టండి. సిద్ధమైనప్పుడు బృందాన్ని చేర్చండి.')}</p></div><MagneticCTA onClick={start}>{startLabel}</MagneticCTA></Reveal></section>
+      <section className="mk-cta-band" aria-labelledby="marketing-cta-title">
+        <Reveal className="flex flex-col items-start gap-8 md:flex-row md:items-end md:justify-between"><h2 id="marketing-cta-title" className="mk-cta-title max-w-[20ch] font-semibold tracking-[-0.05em]">{pick('Start your next load in StoneDesk.', 'మీ తదుపరి లోడ్‌ను StoneDeskలో ప్రారంభించండి.')}</h2><MagneticCTA onClick={start}>{startLabel}</MagneticCTA></Reveal>
+      </section>
     </main>
 
     <footer className="border-t border-[#dce6e1]"><div className="mx-auto flex max-w-[1240px] flex-col items-start justify-between gap-5 px-5 py-8 sm:px-8 md:flex-row md:items-center lg:px-10"><div><p className="text-lg font-semibold tracking-[-0.045em]">StoneDesk</p><p className="mt-2 text-xs text-[#526661]">{pick('Small-business pilot · Feet, square feet & INR', 'చిన్న వ్యాపార పైలట్ · అడుగులు, చదరపు అడుగులు మరియు INR')}</p></div><div className="flex flex-wrap gap-2 sm:gap-5">{[['privacy', 'Privacy', 'గోప్యత'], ['terms', 'Terms', 'నిబంధనలు'], ['support', 'Support', 'సహాయం']].map(([key, en, te]) => <button type="button" key={key} onClick={() => openInfo(key)} className="mk-nav-link min-h-11 rounded-full px-3 text-sm text-[#526661]">{pick(en, te)}</button>)}</div></div></footer>
@@ -125,7 +158,7 @@ export default function LandingPage({ onStart, onLogin, user, onWorkspace }) {
       <div className="p-6 sm:p-8"><h2 id="marketing-info-title" className="text-2xl font-semibold tracking-tight">{topics[topic].title}</h2><div id="marketing-info-body" className="mt-5 space-y-4 text-sm leading-relaxed text-[#526661]">{topics[topic].paragraphs.map((paragraph, index) => <p key={`${topic}-${index}`}>{paragraph}</p>)}</div><div className="mt-6 flex justify-end"><button type="button" autoFocus onClick={() => info.current?.close()} className="mk-secondary min-h-11 rounded-full border border-[#cadbd5] px-5 text-sm font-semibold text-[#17645d]">{pick('Close', 'మూసివేయండి')}</button></div></div>
     </dialog>
     <dialog ref={bill} className="mk-dialog mk-bill-dialog" aria-labelledby="marketing-sample-title">
-      <div className="p-4 sm:p-6"><div className="mb-4 flex items-center justify-between gap-4"><h2 id="marketing-sample-title" className="text-lg font-semibold">{pick('Sample bill preview', 'నమూనా బిల్లు ప్రివ్యూ')}</h2><button type="button" autoFocus onClick={() => bill.current?.close()} aria-label={pick('Close sample preview', 'నమూనా ప్రివ్యూ మూసివేయండి')} className="mk-secondary flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#cadbd5]"><Icon name="close" className="h-4 w-4" /></button></div><SampleInvoice /><SampleDownload className="mt-5" /></div>
+      <div className="p-4 sm:p-6"><div className="mb-4 flex items-center justify-between gap-4"><h2 id="marketing-sample-title" className="text-lg font-semibold">{pick('Sample bill preview', 'నమూనా బిల్లు ప్రివ్యూ')}</h2><button type="button" autoFocus onClick={() => bill.current?.close()} aria-label={pick('Close sample preview', 'నమూనా ప్రివ్యూ మూసివేయండి')} className="mk-secondary flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#cadbd5]"><Icon name="close" className="h-4 w-4" /></button></div><SampleInvoice /></div>
     </dialog>
   </div>;
 }

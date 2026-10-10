@@ -1,72 +1,214 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { CheckIcon, CopyIcon, EyeClosedIcon, EyeOpenIcon } from '@radix-ui/react-icons';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { request } from '../../lib/pilotApi.js';
-import { Button, Card, ErrorMessage, Field } from './Controls.jsx';
+import { Button, ErrorMessage } from './Controls.jsx';
+import Icon from './Icon.jsx';
 
-export default function AccountSettings({ settings, user, section, navigate, onLogout, onLegacySettings, onLanding }) {
-  const { pick, language, setLanguage } = useLanguage();
-  const [users, setUsers] = useState([]);
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+const ROLES = [['Admin', 'అడ్మిన్'], ['Yard Manager', 'యార్డ్ మేనేజర్'], ['Dispatcher', 'డిస్పాచర్']];
+// Admin is the workspace owner and cannot be edited afterwards, so it is not offered for team members.
+const MEMBER_ROLES = ROLES.filter(([en]) => en !== 'Admin');
+
+function PasswordField({ en, te, ...props }) {
+  const { pick } = useLanguage();
+  const id = useId();
+  const [shown, setShown] = useState(false);
+  return <div className="control-field">
+    <label className="control-label" htmlFor={id}>{pick(en, te)}</label>
+    <div className="password-control">
+      <input className="input" {...props} id={id} type={shown ? 'text' : 'password'} autoCapitalize="none" spellCheck={false} />
+      <button type="button" className="password-toggle" aria-controls={id} aria-pressed={shown} aria-label={pick('Show password', 'పాస్‌వర్డ్ చూపించు')} onClick={() => setShown(value => !value)}>
+        {shown ? <EyeClosedIcon aria-hidden="true" /> : <EyeOpenIcon aria-hidden="true" />}
+      </button>
+    </div>
+  </div>;
+}
+
+function MemberAccess({ member, disabled, saving, onSave }) {
+  const { pick } = useLanguage();
+  const [role, setRole] = useState(member.role);
+  const [active, setActive] = useState(member.active);
+  const changed = role !== member.role || active !== member.active;
+  function submit(e) {
+    e.preventDefault();
+    if (member.active && !active && !window.confirm(pick(`Remove workspace access for ${member.name}? They won't be able to open this workspace.`, `${member.name} కి వర్క్‌స్పేస్ యాక్సెస్ తొలగించాలా? వారు ఈ వర్క్‌స్పేస్ తెరవలేరు.`))) return;
+    onSave(member, { role, active });
+  }
+  return <form className="st-access" onSubmit={submit}>
+    <select name="role" className="input st-access-role" aria-label={pick('Role', 'పాత్ర')} value={role} onChange={e => setRole(e.target.value)}>
+      {MEMBER_ROLES.map(([en, te]) => <option key={en} value={en}>{pick(en, te)}</option>)}
+    </select>
+    <label className="st-switch"><input name="active" type="checkbox" role="switch" checked={active} onChange={e => setActive(e.target.checked)} /><span className="st-switch-track" aria-hidden="true" />{pick('Access', 'యాక్సెస్')}</label>
+    {changed && <Button type="submit" primary className="st-access-save" disabled={disabled} aria-busy={saving || undefined} en={saving ? 'Saving…' : 'Save access'} te={saving ? 'సేవ్ అవుతోంది…' : 'యాక్సెస్ సేవ్ చేయండి'} />}
+  </form>;
+}
+
+function DeleteAccount({ user, onDeleted }) {
+  const { pick } = useLanguage();
+  const owner = user.role === 'Admin';
+  const [open, setOpen] = useState(false);
+  const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const inputId = useId();
+  const matches = confirm.trim().toLowerCase() === user.email.toLowerCase();
+  async function submit(e) {
+    e.preventDefault(); if (busy || !matches) return; setBusy(true); setError('');
+    try { await request('/auth/account', { method: 'DELETE', body: { confirm } }); onDeleted?.(); }
+    catch (err) { setError(err.message); setBusy(false); }
+  }
+  const title = owner ? pick('Delete account and business', 'ఖాతా మరియు వ్యాపారాన్ని తొలగించండి') : pick('Delete account', 'ఖాతా తొలగించండి');
+  const detail = owner
+    ? pick('Permanently removes your business, every bill, load and setting, and all team accounts. This cannot be undone.', 'మీ వ్యాపారం, అన్ని బిల్లులు, లోడ్లు, సెట్టింగ్స్ మరియు బృందం ఖాతాలు శాశ్వతంగా తొలగిపోతాయి. తిరిగి తేలేరు.')
+    : pick('Permanently removes your sign-in. Bills you made stay with the business.', 'మీ లాగిన్ శాశ్వతంగా తొలగిపోతుంది. మీరు చేసిన బిల్లులు వ్యాపారంలోనే ఉంటాయి.');
+  return <div className="st-card st-danger">
+    <div className="st-danger-row">
+      <div><strong>{title}</strong><p>{detail}</p></div>
+      {!open && <button type="button" className="st-danger-button" onClick={() => setOpen(true)}>{pick('Delete…', 'తొలగించు…')}</button>}
+    </div>
+    {open && <form className="st-danger-confirm" onSubmit={submit}>
+      <label htmlFor={inputId}>{pick('Type your email to confirm:', 'నిర్ధారించడానికి మీ ఇమెయిల్ టైప్ చేయండి:')} <b>{user.email}</b></label>
+      <input id={inputId} className="input" autoComplete="off" autoCapitalize="none" spellCheck={false} maxLength={254} value={confirm} onChange={e => setConfirm(e.target.value)} autoFocus />
+      <ErrorMessage error={error} />
+      <div className="st-danger-actions">
+        <button type="button" className="st-link" disabled={busy} onClick={() => { setOpen(false); setConfirm(''); setError(''); }}>{pick('Cancel', 'రద్దు')}</button>
+        <button type="submit" className="st-danger-button st-danger-submit" disabled={!matches || busy} aria-busy={busy || undefined}>{busy ? pick('Deleting…', 'తొలగిస్తోంది…') : pick('Delete permanently', 'శాశ్వతంగా తొలగించు')}</button>
+      </div>
+    </form>}
+  </div>;
+}
+
+export default function AccountSettings({ settings, user, section, navigate, onDeleted }) {
+  const { pick } = useLanguage();
+  const [users, setUsers] = useState([]);
+  const [message, setMessage] = useState(null);
+  const [busy, setBusy] = useState('');
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef(0);
+  const [loadingTeam, setLoadingTeam] = useState(user.role === 'Admin');
+  const [refreshing, setRefreshing] = useState(false);
   const admin = user.role === 'Admin';
-  const sections = [['general', 'General', 'సాధారణ'], ...(admin ? [['business', 'Business', 'వ్యాపారం'], ['team', 'Team & access', 'బృందం మరియు యాక్సెస్']] : []), ['account', 'Account & security', 'ఖాతా మరియు భద్రత']];
-  const activeSection = sections.some(([key]) => key === section) ? section : 'general';
+  const roleLabel = role => pick(role, ROLES.find(([en]) => en === role)?.[1] || role);
+  const showError = (key, err) => setMessage({ section: key, error: err.message });
+  const showNotice = (key, text) => setMessage({ section: key, notice: text });
+
+  useEffect(() => {
+    if (admin) request('/auth/users').then(setUsers).catch(err => setMessage({ section: 'team', error: err.message })).finally(() => setLoadingTeam(false));
+  }, [admin]);
+
+  useEffect(() => () => clearTimeout(copiedTimer.current), []);
+
+  useEffect(() => {
+    if (section) document.getElementById(`settings-${section}`)?.scrollIntoView({ block: 'start' });
+  }, [section]);
+
   async function copyCode() {
-    try { await navigator.clipboard.writeText(settings.organizationId); setNotice(pick('Organization ID copied', 'సంస్థ ఐడీ కాపీ అయింది')); }
-    catch { setNotice(pick('Select and copy the organization ID below.', 'క్రింద సంస్థ ఐడీని ఎంచుకుని కాపీ చేయండి.')); }
+    try {
+      await navigator.clipboard.writeText(settings.organizationId);
+      setCopied(true); clearTimeout(copiedTimer.current);
+      copiedTimer.current = setTimeout(() => setCopied(false), 2000);
+    }
+    catch { showNotice('general', pick('Select and copy the organization ID below.', 'క్రింద సంస్థ ఐడీని ఎంచుకుని కాపీ చేయండి.')); }
   }
-  async function refresh() {
-    try { setUsers(await request('/auth/users')); } catch (err) { setError(err.message); }
+  async function refreshTeam() {
+    if (refreshing) return; setRefreshing(true); setMessage(null);
+    try { setUsers(await request('/auth/users')); showNotice('team', pick('Team list updated', 'బృందం జాబితా నవీకరించబడింది')); }
+    catch (err) { showError('team', err); } finally { setRefreshing(false); }
   }
-  useEffect(() => { if (admin && activeSection === 'team') request('/auth/users').then(setUsers).catch(err => setError(err.message)); }, [admin, activeSection]);
-  async function saveUser(e, member) {
-    e.preventDefault(); if (busy) return; setBusy(true); setError('');
-    const data = new FormData(e.currentTarget);
-    try { await request(`/auth/users/${member.id}`, { method: 'PATCH', body: { role: data.get('role'), active: data.get('active') === 'on' } }); await refresh(); }
-    catch (err) { setError(err.message); } finally { setBusy(false); }
+  function accessNotice(before, after) {
+    const name = after.name || before.name;
+    if (before.active && !after.active) return pick(`Access removed. ${name} has been signed out.`, `యాక్సెస్ తొలగించబడింది. ${name} లాగ్ అవుట్ అయ్యారు.`);
+    if (!before.active && after.active) return pick(`Access restored. ${name} can sign in as ${after.role}.`, `యాక్సెస్ పునరుద్ధరించబడింది. ${name} ${roleLabel(after.role)} గా లాగిన్ అవ్వచ్చు.`);
+    return pick(`${name} is now a ${after.role}. They'll sign in again to continue.`, `${name} ఇప్పుడు ${roleLabel(after.role)}. కొనసాగడానికి మళ్ళీ లాగిన్ అవ్వాలి.`);
+  }
+  async function saveUser(member, body) {
+    if (busy) return; setBusy(`member:${member.id}`); setMessage(null);
+    try {
+      const updated = await request(`/auth/users/${member.id}`, { method: 'PATCH', body });
+      setUsers(list => list.map(u => u.id === member.id ? { ...u, ...updated } : u));
+      setMessage({ section: 'team', member: member.id, notice: accessNotice(member, updated) });
+    }
+    catch (err) { setMessage({ section: 'team', member: member.id, error: err.message }); }
+    finally { setBusy(''); }
   }
   async function changePassword(e) {
-    e.preventDefault(); if (busy) return; setBusy(true); setError(''); setNotice('');
-    try { await request('/auth/password', { method: 'POST', body: Object.fromEntries(new FormData(e.currentTarget)) }); e.target.reset(); setNotice(pick('Password updated. Other sessions have been signed out.', 'పాస్‌వర్డ్ మార్చబడింది. ఇతర పరికరాలలో లాగ్ అవుట్ అయింది.')); }
-    catch (err) { setError(err.message); } finally { setBusy(false); }
+    e.preventDefault(); if (busy) return; setBusy('password'); setMessage(null);
+    try { await request('/auth/password', { method: 'POST', body: Object.fromEntries(new FormData(e.currentTarget)) }); e.target.reset(); showNotice('account', pick('Password updated. Other sessions have been signed out.', 'పాస్‌వర్డ్ మార్చబడింది. ఇతర పరికరాలలో లాగ్ అవుట్ అయింది.')); }
+    catch (err) { showError('account', err); } finally { setBusy(''); }
   }
-  return <div className="settings-screen">
-    <h1 className="text-2xl font-bold">{pick('Settings', 'సెట్టింగ్స్')}</h1><ErrorMessage error={error} />
-    <div className="settings-tabs" role="tablist" aria-label={pick('Settings sections', 'సెట్టింగ్స్ విభాగాలు')}>{sections.map(([key, en, te], index) => <button type="button" key={key} id={`settings-tab-${key}`} role="tab" tabIndex={activeSection === key ? 0 : -1} aria-selected={activeSection === key} aria-controls="settings-panel" onKeyDown={event => {
-      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-      event.preventDefault();
-      const next = event.key === 'Home' ? 0 : event.key === 'End' ? sections.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + sections.length) % sections.length;
-      navigate(`settings/${sections[next][0]}`); document.getElementById(`settings-tab-${sections[next][0]}`)?.focus();
-    }} onClick={() => { setNotice(''); navigate(`settings/${key}`); }}>{pick(en, te)}</button>)}</div>
-    {notice && <p role="status" className="success-message">{notice}</p>}
-    <div id="settings-panel" className="settings-panel" role="tabpanel" tabIndex={0} aria-labelledby={`settings-tab-${activeSection}`}>
-    {activeSection === 'general' && <>
-    <Card className="settings-language">
-      <div className="settings-summary"><h2>{pick('Language', 'భాష')}</h2><p>{pick('Choose the language used on this device.', 'ఈ పరికరంలో ఉపయోగించే భాషను ఎంచుకోండి.')}</p></div>
-      <div className="settings-language-options" role="group" aria-label={pick('Language', 'భాష')}>
-        {[['en', 'English'], ['te', 'తెలుగు']].map(([value, label]) => <button type="button" key={value} lang={value} aria-pressed={language === value} onClick={() => setLanguage(value)}>{label}</button>)}
-      </div>
-    </Card>
-    <Card className="settings-organization">
-      <div className="settings-summary"><h2>{pick('Your organization', 'మీ సంస్థ')}</h2><p className="settings-business-name">{settings?.businessName}</p></div>
-      <div className="settings-organization-code">
-        <label htmlFor="settings-organization-id">{pick('Organization ID', 'సంస్థ ఐడీ')}</label>
-        <div className="settings-code-control"><input id="settings-organization-id" readOnly value={settings?.organizationId || ''} /><Button en="Copy organization ID" te="సంస్థ ఐడీ కాపీ చేయండి" disabled={!settings?.organizationId} onClick={copyCode} /></div>
-      </div>
-      <p className="settings-help">{pick('Share this ID only with your team. They can choose Join organization when creating an account. This ID is reusable and does not expire.', 'ఈ ఐడీని మీ బృందంతో మాత్రమే పంచుకోండి. ఖాతా సృష్టించేటప్పుడు సంస్థలో చేరండి ఎంచుకోవచ్చు. ఈ ఐడీని మళ్ళీ ఉపయోగించవచ్చు; గడువు లేదు.')}</p>
-    </Card>
-    <Card className="settings-links gap-3"><h2 className="font-bold">{pick('Workspace', 'వర్క్‌స్పేస్')}</h2><Button en="View welcome page" te="స్వాగత పేజీ చూడండి" onClick={onLanding} /><p className="text-sm text-gray-700">{pick('Measurements: feet and square feet. Currency: INR. GST is not calculated.', 'కొలతలు: అడుగులు మరియు చదరపు అడుగులు. కరెన్సీ: INR. GST లెక్కించబడదు.')}</p></Card>
-    </>}
-    {activeSection === 'business' && admin && <Card className="settings-links gap-3"><h2 className="font-bold">{pick('Business', 'వ్యాపారం')}</h2><Button en="Business profile & default charges" te="వ్యాపార వివరాలు మరియు డిఫాల్ట్ ఛార్జీలు" onClick={() => navigate('profile')} /><Button en="Products & rates" te="రకాలు మరియు ధరలు" onClick={() => navigate('products')} /><Button en="Saved trucks & destinations" te="లారీలు మరియు గమ్యస్థానాలు" onClick={onLegacySettings} /></Card>}
-    {activeSection === 'team' && admin && <section className="space-y-3"><div className="flex items-center justify-between"><h2 className="font-bold text-lg">{pick('Team & access', 'బృందం మరియు యాక్సెస్')}</h2><button className="text-button" onClick={refresh}>{pick('Refresh', 'రిఫ్రెష్')}</button></div><p className="text-sm text-gray-700">{pick('Manage access for people who belong to this business. Yard Managers can prepare loads; Dispatchers can also finalize and mark deliveries.', 'ఈ వ్యాపారానికి చెందిన వ్యక్తులను మాత్రమే ఆమోదించండి. యార్డ్ మేనేజర్లు లోడ్లు సిద్ధం చేస్తారు; డిస్పాచర్లు ఖరారు చేసి డెలివరీ నమోదు చేయవచ్చు.')}</p>
-      {users.map(member => <Card key={member.id} className="gap-3"><strong>{member.name}</strong><p className="break-all text-sm">{member.email}</p>{member.isOwner || member.id === user.id ? <p className="text-sm text-gray-700">{member.isOwner ? pick('Business owner · Admin', 'వ్యాపార యజమాని · అడ్మిన్') : member.role}</p> : <form onSubmit={e => saveUser(e, member)} className="space-y-3"><Field en="Role" te="పాత్ర"><select name="role" className="input rounded-xl" defaultValue={member.role}>{[['Admin', 'అడ్మిన్'], ['Yard Manager', 'యార్డ్ మేనేజర్'], ['Dispatcher', 'డిస్పాచర్']].map(([en, te]) => <option key={en} value={en}>{pick(en, te)}</option>)}</select></Field><label className="flex min-h-12 items-center gap-3"><input name="active" type="checkbox" className="h-5 w-5 accent-teal-800" defaultChecked={member.active} />{pick('Allow workspace access', 'వర్క్‌స్పేస్ యాక్సెస్ అనుమతించండి')}</label><Button type="submit" className="w-full" disabled={busy} en="Save access" te="యాక్సెస్ సేవ్ చేయండి" /></form>}</Card>)}
-    </section>}
-    {activeSection === 'account' && <>
-    <Card className="gap-2"><h2 className="font-bold text-lg break-words">{user.name}</h2><p className="break-all text-gray-700">{user.email}</p><p className="text-sm font-semibold">{pick(user.role, user.role === 'Admin' ? 'అడ్మిన్' : user.role === 'Yard Manager' ? 'యార్డ్ మేనేజర్' : 'డిస్పాచర్')}</p></Card>
-    <form onSubmit={changePassword}><Card className="gap-4"><h2 className="font-bold">{pick('Change password', 'పాస్‌వర్డ్ మార్చండి')}</h2><Field name="currentPassword" en="Current password" te="ప్రస్తుత పాస్‌వర్డ్" type="password" autoComplete="current-password" maxLength={128} required /><Field name="password" en="New password (12+ characters)" te="కొత్త పాస్‌వర్డ్ (12+ అక్షరాలు)" type="password" autoComplete="new-password" minLength={12} maxLength={128} required /><Button type="submit" disabled={busy} en="Update password" te="పాస్‌వర్డ్ మార్చండి" /></Card></form>
-    <Button en="Log out" te="లాగ్ అవుట్" onClick={onLogout} />
-    </>}
+
+  const feedback = (key, member) => message?.section === key && message.member === member && (message.error
+    ? <ErrorMessage error={message.error} />
+    : <p role="status" className="success-message">{message.notice}</p>);
+  const head = (key, en, te, den, dte, extra) => <header className="st-head">
+    <div>
+      <h2 id={`settings-${key}-heading`} tabIndex={-1}>{pick(en, te)}</h2>
+      {den && <p>{pick(den, dte)}</p>}
     </div>
+    {extra}
+  </header>;
+
+  return <div className="st-page">
+    <h1 className="st-title">{pick('Settings', 'సెట్టింగ్స్')}</h1>
+
+    <section id="settings-general" className="st-section" aria-labelledby="settings-general-heading">
+      {head('general', 'Organization', 'సంస్థ', 'Share the ID only with your team. They pick Join organization when signing up. It does not expire.', 'ఈ ఐడీని మీ బృందంతో మాత్రమే పంచుకోండి. ఖాతా సృష్టించేటప్పుడు సంస్థలో చేరండి ఎంచుకోవచ్చు. గడువు లేదు.')}
+      <div className="st-card">
+      <dl className="st-rows">
+        <div className="st-row">
+          <dt>{pick('Business name', 'వ్యాపారం పేరు')}</dt>
+          <dd>{settings?.businessName || '—'}</dd>
+        </div>
+        <div className="st-row">
+          <dt><label htmlFor="settings-organization-id">{pick('Organization ID', 'సంస్థ ఐడీ')}</label></dt>
+          <dd className="st-code">
+            <input id="settings-organization-id" readOnly spellCheck={false} size={14} value={settings?.organizationId || ''} onFocus={e => e.target.select()} />
+            <button type="button" className="st-link settings-copy-button" data-copied={copied || undefined} disabled={!settings?.organizationId} onClick={copyCode}>{copied ? <CheckIcon aria-hidden="true" /> : <CopyIcon aria-hidden="true" />}<span>{copied ? pick('Copied', 'కాపీ అయింది') : pick('Copy organization ID', 'సంస్థ ఐడీ కాపీ చేయండి')}</span></button>
+            <span className="sr-only" role="status">{copied ? pick('Organization ID copied', 'సంస్థ ఐడీ కాపీ అయింది') : ''}</span>
+          </dd>
+        </div>
+      </dl>
+      {admin && <button type="button" className="st-row st-nav-row" onClick={() => navigate('profile')}>
+        <span>{pick('Business profile & default charges', 'వ్యాపార వివరాలు మరియు డిఫాల్ట్ ఛార్జీలు')}</span>
+        <Icon name="next" />
+      </button>}
+      </div>
+      {feedback('general')}
+    </section>
+
+    {admin && <section id="settings-team" className="st-section" aria-labelledby="settings-team-heading">
+      {head('team', 'Team', 'బృందం', 'Yard Managers prepare loads. Dispatchers can also finalize and mark deliveries.', 'యార్డ్ మేనేజర్లు లోడ్లు సిద్ధం చేస్తారు. డిస్పాచర్లు ఖరారు చేసి డెలివరీ నమోదు చేయవచ్చు.',
+        <button type="button" className="st-link" disabled={refreshing} aria-busy={refreshing || undefined} onClick={refreshTeam}>{refreshing ? pick('Refreshing…', 'రిఫ్రెష్ అవుతోంది…') : pick('Refresh', 'రిఫ్రెష్')}</button>)}
+      {loadingTeam && users.length === 0 && <p role="status" className="st-muted">{pick('Loading team…', 'బృందం లోడ్ అవుతోంది…')}</p>}
+      {users.length > 0 && <ul className="st-rows st-card">
+        {users.map(member => <li key={member.id} className="st-row st-member">
+          <div className="st-person">
+            <span className="st-avatar" aria-hidden="true">{member.name?.[0]?.toUpperCase()}</span>
+            <div><strong>{member.name}{!member.active && <span className="st-member-off">{pick('No access', 'యాక్సెస్ లేదు')}</span>}</strong><small>{member.email}</small></div>
+          </div>
+          {member.isOwner || member.id === user.id
+            ? <span className="st-muted">{member.isOwner ? pick('Owner · Admin', 'యజమాని · అడ్మిన్') : roleLabel(member.role)}</span>
+            : <MemberAccess member={member} disabled={!!busy} saving={busy === `member:${member.id}`} onSave={saveUser} />}
+          {message?.member === member.id && <div className="st-member-status">{feedback('team', member.id)}</div>}
+        </li>)}
+      </ul>}
+      {feedback('team')}
+    </section>}
+
+    <section id="settings-account" className="st-section" aria-labelledby="settings-account-heading">
+      {head('account', 'Your account', 'మీ ఖాతా', `${user.name} · ${user.email} · ${roleLabel(user.role)}`, `${user.name} · ${user.email} · ${roleLabel(user.role)}`)}
+      <form className="st-password st-card" onSubmit={changePassword}>
+        <input type="text" autoComplete="username" value={user.email || ''} readOnly hidden />
+        <PasswordField name="currentPassword" en="Current password" te="ప్రస్తుత పాస్‌వర్డ్" autoComplete="current-password" maxLength={128} required />
+        <PasswordField name="password" en="New password (12+ characters)" te="కొత్త పాస్‌వర్డ్ (12+ అక్షరాలు)" autoComplete="new-password" minLength={12} maxLength={128} required />
+        <div><Button type="submit" disabled={!!busy} en={busy === 'password' ? 'Updating…' : 'Update password'} te={busy === 'password' ? 'మారుస్తోంది…' : 'పాస్‌వర్డ్ మార్చండి'} /></div>
+      </form>
+      {feedback('account')}
+    </section>
+
+    <section id="settings-delete" className="st-section" aria-labelledby="settings-delete-heading">
+      {head('delete', 'Danger zone', 'ప్రమాద ప్రాంతం', admin ? 'Close StoneDesk for your whole business.' : 'Leave this business.', admin ? 'మీ వ్యాపారానికి StoneDesk మూసివేయండి.' : 'ఈ వ్యాపారం నుండి వెళ్లండి.')}
+      <DeleteAccount user={user} onDeleted={onDeleted} />
+    </section>
   </div>;
 }

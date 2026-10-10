@@ -1,227 +1,74 @@
-# Design System Master File
+# Design Tokens Master File
 
-> **LOGIC:** When building a specific page, first check `design-system/pages/[page-name].md`.
-> If that file exists, its rules **override** this Master file.
-> If not, strictly follow the rules below.
+Source of truth: `Frontend/src/index.css` (`:root` tokens and shared `.pilot` controls), with screen styles in `Frontend/src/styles/` (`workspace.css`, `landing.css`, `invoice.css`, `a4Invoice.css`). Design intent and rules are in [DESIGN.md](DESIGN.md); screens and journeys are in [UX-SPEC.md](UX-SPEC.md).
 
----
+**Stack:** Tailwind CSS 4 (`@tailwindcss/vite`), daisyUI 5 (light theme; `button`, `input`, `card` only), Motion for landing-page animation.
 
-**Project:** StoneDesk
-**Generated:** 2026-10-07 14:22:52
-**Category:** Biotech / Life Sciences
-**Design Dials:** Variance 3/10 (Centered / Minimal) | Motion 3/10 (Subtle) | Density 6/10 (Standard)
+## Color
 
----
+| Variable | Value | Use |
+| --- | --- | --- |
+| `--ui-accent` | `#17645D` | Primary actions, active navigation, focus outline, brand mark |
+| `--ui-ink` | `#203D36` | Text and headings |
+| `--ui-muted` | `#526661` | Secondary text (`--workspace-muted`) |
+| `--ui-surface` | `#FFFFFF` | Cards, inputs, dialogs |
+| `--ui-canvas` | `#F7F9F8` | Workspace background |
+| `--workspace-border` | `#E2E8E5` | Inputs, cards, dividers |
 
-## Global Rules
+Fixed values in shared controls: primary hover `#134E4A`; input hover border `#C9D6D0`; focus ring `rgb(23 100 93 / .12)`; error `#8B3333` text on `#FFF7F7` with `#EFCECE` border; dialog scrim `rgb(17 24 39 / .5)`.
 
-### Color Palette
+## Typography
 
-| Role | Hex | CSS Variable |
-|------|-----|--------------|
-| Primary | `#1E3A8A` | `--color-primary` |
-| On Primary | `#FFFFFF` | `--color-on-primary` |
-| Secondary | `#3B82F6` | `--color-secondary` |
-| Accent/CTA | `#7C3AED` | `--color-accent` |
-| Background | `#F8FAFC` | `--color-background` |
-| Foreground | `#1E40AF` | `--color-foreground` |
-| Muted | `#E9EEF5` | `--color-muted` |
-| Border | `#BFDBFE` | `--color-border` |
-| Destructive | `#DC2626` | `--color-destructive` |
-| Ring | `#1E3A8A` | `--color-ring` |
+- **Font:** Geist (400, 500, 600, 700) and Geist Mono (400, 500) from Google Fonts; Noto Telugu (local `/fonts/NotoSansTelugu-Regular.ttf`) for Telugu.
+- **Stack:** `'Geist', 'Noto Telugu', sans-serif`.
+- **Base:** 14px / 1.5 in the workspace; inputs 16px to avoid mobile zoom.
+- **h1:** `clamp(22px, 2.5vw, 28px)`, weight 600, letter-spacing `-.035em`.
+- **h2, h3:** weight 600, letter-spacing `-.015em`; card titles 15px.
+- **Labels and buttons:** 13px, weight 500. Eyebrow 11px, weight 700, letter-spacing `.12em`.
 
-**Color Notes:** Knowledge blue + link purple + clean white
+## Radius
 
-### Typography
+| Variable | Value | Use |
+| --- | --- | --- |
+| `--ui-radius-xs` | 8px | Inner chips and segments |
+| `--ui-radius-sm` | 10px | Buttons, inputs, textareas |
+| `--ui-radius-md` | 16px | Cards and dialogs |
+| `--ui-radius-lg` | 20px | Panels, nav drawer |
+| `--ui-radius-xl` | 28px | Hero |
+| `--ui-radius-pill` | 999px | Status tags |
 
-- **Heading Font:** Inter
-- **Body Font:** Inter
-- **Mood:** flat, clean, system, bold, geometric, cross-platform, icon, poster, minimal, functional, responsive
-- **Google Fonts:** [Inter + Inter](https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap)
+## Elevation and Motion
 
-**CSS Import:**
-```css
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
-```
+| Variable | Value |
+| --- | --- |
+| `--ui-shadow-panel` | `0 12px 36px rgb(32 61 54 / .08)` (dialogs only; cards have no shadow) |
+| `--ui-ease` | `cubic-bezier(.22, .61, .36, 1)` |
+| `--ui-dur` | `160ms` |
+| `--ui-press` | `scale(.98)` |
 
-### Spacing Variables
+`prefers-reduced-motion: reduce` shortens all transitions and removes the press transform.
 
-*Density: 6/10 — Standard*
+## Shared Controls (`.pilot` scope)
 
-| Token | Value | Usage |
-|-------|-------|-------|
-| `--space-xs` | `4px` / `0.25rem` | Tight gaps |
-| `--space-sm` | `8px` / `0.5rem` | Icon gaps, inline spacing |
-| `--space-md` | `16px` / `1rem` | Standard padding |
-| `--space-lg` | `24px` / `1.5rem` | Section padding |
-| `--space-xl` | `32px` / `2rem` | Large gaps |
-| `--space-2xl` | `48px` / `3rem` | Section margins |
-| `--space-3xl` | `64px` / `4rem` | Hero padding |
+| Class | Spec |
+| --- | --- |
+| `.btn` | Min height 44px, padding 10px 14px, 1px border, `--ui-radius-sm`, 13px / 500 |
+| `.control-button-primary` | Accent fill, white text, hover `#134E4A` |
+| `.control-button-secondary` | White fill, border color, ink text, hover canvas |
+| `.input` | Height 44px, 1px border, `--ui-radius-sm`, 16px text, accent border and 3px ring on focus |
+| `.card`, `.control-card` | White, 1px border, `--ui-radius-md`, no shadow, 20px padding for control cards |
+| `.control-error` | Error colors above, 13px text |
+| `.icon-button` | 48 x 48px minimum |
+| `.status-tag` | Pill, 11px / 500, 4px 8px padding |
+| `.app-dialog` | Native dialog, `min(440px, 100% - 24px)`, panel shadow; `.nav-drawer` variant 300px |
+| `.skip-link` | Visible on focus, accent border |
 
-### Shadow Depths
+Focus: `:focus-visible` uses a 2px accent outline with 2px offset.
 
-| Level | Value | Usage |
-|-------|-------|-------|
-| `--shadow-sm` | `0 1px 2px rgba(0,0,0,0.05)` | Subtle lift |
-| `--shadow-md` | `0 4px 6px rgba(0,0,0,0.1)` | Cards, buttons |
-| `--shadow-lg` | `0 10px 15px rgba(0,0,0,0.1)` | Modals, dropdowns |
-| `--shadow-xl` | `0 20px 25px rgba(0,0,0,0.15)` | Hero images, featured cards |
+## Checklist
 
----
-
-## Component Specs
-
-### Buttons
-
-```css
-/* Primary Button */
-.btn-primary {
-  background: #7C3AED;
-  color: white;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-
-.btn-primary:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-/* Secondary Button */
-.btn-secondary {
-  background: transparent;
-  color: #1E3A8A;
-  border: 2px solid #1E3A8A;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-```
-
-### Cards
-
-```css
-.card {
-  background: #F8FAFC;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: var(--shadow-md);
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-
-.card:hover {
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-2px);
-}
-```
-
-### Inputs
-
-```css
-.input {
-  padding: 12px 16px;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-  font-size: 16px;
-  transition: border-color 200ms ease;
-}
-
-.input:focus {
-  border-color: #1E3A8A;
-  outline: none;
-  box-shadow: 0 0 0 3px #1E3A8A20;
-}
-```
-
-### Modals
-
-```css
-.modal-overlay {
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
-}
-
-.modal {
-  background: white;
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: var(--shadow-xl);
-  max-width: 500px;
-  width: 90%;
-}
-```
-
----
-
-## Style Guidelines
-
-**Style:** Exaggerated Minimalism
-
-**Keywords:** Bold minimalism, oversized typography, high contrast, negative space, loud minimal, statement design
-
-**Best For:** Fashion, architecture, portfolios, agency landing pages, luxury brands, editorial
-
-**Key Effects:** font-size: clamp(3rem 10vw 12rem), font-weight: 900, letter-spacing: -0.05em, massive whitespace
-
-### Page Pattern
-
-**Pattern Name:** Minimal Single Column
-
-- **Conversion Strategy:** Single CTA focus. Large typography. Lots of whitespace. No nav clutter. Mobile-first.
-- **CTA Placement:** Center, large CTA button
-- **Section Order:** 1. Hero headline, 2. Short description, 3. Benefit bullets (3 max), 4. CTA, 5. Footer
-
----
-
-## Motion
-
-**Scroll Reveal** (Subtle) — Trigger: scroll (viewport enter) | Duration: 300-400ms | Easing: `power1.out`
-
-```js
-gsap.from(el, { opacity: 0, y: 12, duration: 0.35, ease: 'power1.out', scrollTrigger: { trigger: el, start: 'top 90%', toggleActions: 'play none none reverse' } });
-```
-
-**Framework notes:** Requires the ScrollTrigger plugin registered once via gsap.registerPlugin(ScrollTrigger)
-
-- ✅ Keep the y offset small (8-16px) so it reads as a fade, not a slide
-- ❌ Don't reveal below-the-fold content needed for SEO/crawlers as invisible-by-default without a no-JS fallback
-- ⚡ toggleActions 'play none none reverse' avoids re-triggering on every scroll direction change
-
----
-
-## Anti-Patterns (Do NOT Use)
-
-- ❌ Cluttered data
-- ❌ Poor credibility
-
-### Additional Forbidden Patterns
-
-- ❌ **Emojis as icons** — Use SVG icons (Heroicons, Lucide, Simple Icons)
-- ❌ **Missing cursor:pointer** — All clickable elements must have cursor:pointer
-- ❌ **Layout-shifting hovers** — Avoid scale transforms that shift layout
-- ❌ **Low contrast text** — Maintain 4.5:1 minimum contrast ratio
-- ❌ **Instant state changes** — Always use transitions (150-300ms)
-- ❌ **Invisible focus states** — Focus states must be visible for a11y
-
----
-
-## Pre-Delivery Checklist
-
-Before delivering any UI code, verify:
-
-- [ ] No emojis used as icons (use SVG instead)
-- [ ] All icons from consistent icon set (Heroicons/Lucide)
-- [ ] `cursor-pointer` on all clickable elements
-- [ ] Hover states with smooth transitions (150-300ms)
-- [ ] Light mode: text contrast 4.5:1 minimum
-- [ ] Focus states visible for keyboard navigation
-- [ ] `prefers-reduced-motion` respected
-- [ ] Responsive: 375px, 768px, 1024px, 1440px
-- [ ] No content hidden behind fixed navbars
-- [ ] No horizontal scroll on mobile
+- No emojis as icons; use `pilot/Icon.jsx`.
+- Text contrast 4.5:1 minimum; status shown as text, not color only.
+- Visible keyboard focus and `prefers-reduced-motion` support.
+- No horizontal scroll at 320px; touch targets at least 44px (48px for icon buttons).
+- No dark mode.

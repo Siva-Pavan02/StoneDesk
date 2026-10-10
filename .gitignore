@@ -30,6 +30,7 @@ desktop.ini
 # Tooling output
 /graphify-out/
 .playwright-cli/
+.vercel/
 test-results/
 playwright-report/
 

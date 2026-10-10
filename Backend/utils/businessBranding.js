@@ -1,9 +1,8 @@
 const path = require('node:path');
-const fs = require('node:fs/promises');
 const sharp = require('sharp');
 const { randomUUID } = require('node:crypto');
 const { bad } = require('./pilotCalculations');
-const uploadDir = path.resolve(process.env.UPLOAD_DIR || path.join(__dirname, '../uploads'));
+const { uploadDir, saveLogo, readLogo } = require('./logoStorage');
 
 function validateLogoFilename(filename) {
   if (!filename || typeof filename !== 'string') return false;
@@ -24,9 +23,8 @@ async function storeLogo(buffer, mime) {
   } catch {
     bad('Invalid or oversized JPEG/PNG image');
   }
-  await fs.mkdir(uploadDir, { recursive: true });
   const filename = `${randomUUID()}.png`;
-  await fs.writeFile(path.join(uploadDir, filename), output);
+  await saveLogo(filename, output);
   return `/uploads/${filename}`;
 }
 async function snapshot(settings) {
@@ -37,7 +35,7 @@ async function snapshot(settings) {
     const filePath = path.join(uploadDir, filename);
     const resolvedPath = path.resolve(filePath);
     if (!resolvedPath.startsWith(uploadDir)) bad('Invalid logo path');
-    result.logoDataUrl = `data:image/png;base64,${(await fs.readFile(resolvedPath)).toString('base64')}`;
+    result.logoDataUrl = `data:image/png;base64,${(await readLogo(filename)).toString('base64')}`;
   }
   return result;
 }

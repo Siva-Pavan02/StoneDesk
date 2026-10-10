@@ -21,14 +21,14 @@ let completion;
 export function finishGoogleSignIn() {
   if (completion) return completion;
   const params = new URLSearchParams(window.location.search);
-  if (!params.has('google_callback')) return Promise.resolve(null);
+  if (!params.has('code') && !params.has('error') && !params.has('google_callback')) return Promise.resolve(null);
   completion = (async () => {
     const raw = sessionStorage.getItem(pendingKey);
     sessionStorage.removeItem(pendingKey);
     window.history.replaceState(null, '', '/');
     let pending;
     try { pending = JSON.parse(raw); } catch { /* handled below */ }
-    if (!pending || pending.state !== params.get('google_callback') || Date.now() - pending.started > 15 * 60 * 1000) throw new Error('Google sign-in expired. Please try again on this device.');
+    if (!pending || Date.now() - pending.started > 15 * 60 * 1000) throw new Error('Google sign-in expired. Please try again on this device.');
     if (params.has('error') || !params.get('code')) throw new Error('Google sign-in was cancelled or could not finish. Please try again.');
     return request('/auth/google/exchange', { method: 'POST', body: { code: params.get('code'), verifier: pending.verifier } });
   })();

@@ -8,7 +8,7 @@ export default defineConfig(({ mode }) => {
   const apiBase = env.VITE_API_BASE_URL || ''
   const headers = securityHeaders(apiBase)
   return {
-    server: { proxy: { '/api': process.env.API_PROXY_TARGET || 'http://localhost:5000', '/uploads': process.env.API_PROXY_TARGET || 'http://localhost:5000' } },
+    server: { proxy: { '/api': process.env.API_PROXY_TARGET || 'http://127.0.0.1:5000', '/uploads': process.env.API_PROXY_TARGET || 'http://127.0.0.1:5000' } },
     preview: { headers, proxy: { '/api': process.env.API_PROXY_TARGET || 'http://127.0.0.1:5000', '/uploads': process.env.API_PROXY_TARGET || 'http://127.0.0.1:5000' } },
     plugins: [
       react(),

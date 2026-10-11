@@ -11,7 +11,6 @@ import {
   updateRoyalty
 } from '../lib/api';
 import { useLanguage } from '../i18n/LanguageContext';
-import { motion } from 'motion/react';
 import { Button, Card, Field } from './pilot/Controls.jsx';
 import Icon from './pilot/Icon.jsx';
 
@@ -268,15 +267,8 @@ export default function SettingsScreen({ user, onClose, embedded = false, refere
                   type="button"
                   aria-pressed={visibleTab === tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`relative px-4 py-2 rounded-full font-bold whitespace-nowrap transition-colors ${visibleTab === tab ? 'text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}
+                  className={`relative px-4 py-2 rounded-full font-bold whitespace-nowrap transition-colors duration-200 ${visibleTab === tab ? 'bg-teal-700 text-white shadow-sm' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}
                 >
-                  {visibleTab === tab && (
-                    <motion.div
-                      layoutId="settings-tab"
-                      className="absolute inset-0 bg-teal-700 rounded-full shadow-sm"
-                      transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                    />
-                  )}
                   <span className="relative z-10">{tab === 'rates' ? t('stoneRates') : tab === 'royalty' ? t('royaltyLoading') : t(tab)}</span>
                 </button>
               ))}

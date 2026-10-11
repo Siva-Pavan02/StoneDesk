@@ -70,8 +70,18 @@
 .icon-button { display: inline-flex; align-items: center; justify-content: center; min-width: 48px; min-height: 48px; border-radius: var(--ui-radius-sm); }
 .status-tag { display: inline-flex; border-radius: var(--ui-radius-pill); padding: 4px 8px; font-size: 11px; font-weight: 500; white-space: nowrap; }
 .app-dialog { width: min(440px, calc(100% - 24px)); max-height: calc(100dvh - 32px); margin: auto; padding: 0; border: 1px solid var(--workspace-border); border-radius: var(--ui-radius-md); color: var(--ui-ink); background: var(--ui-surface); overflow-y: auto; box-shadow: var(--ui-shadow-panel); }
-.app-dialog::backdrop { background: rgb(17 24 39 / .5); }
+.app-dialog[open] { animation: app-dialog-glide 220ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.app-dialog::backdrop { background: rgb(17 24 39 / .5); animation: app-backdrop-fade 220ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 .app-dialog.nav-drawer { width: min(300px, 82vw); height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0 var(--ui-radius-lg) var(--ui-radius-lg) 0; }
+.app-dialog.nav-drawer[open] { animation: drawer-reveal 260ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+@keyframes app-dialog-glide {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes app-backdrop-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 .skip-link { position: fixed; top: -100px; left: 12px; z-index: 30; padding: 12px; background: var(--ui-surface); border: 2px solid var(--ui-accent); }
 .skip-link:focus { top: 8px; }
 /* Responsive layout fallback; the dedicated workspace stylesheet follows this file. */
@@ -547,7 +557,10 @@
 .row-bar-placement { margin-right: auto; padding: 4px 10px; border-radius: 999px; background: #e7f1ec; color: var(--ui-accent); font-size: 12px; font-weight: 500; }
 .row-group { display: grid; gap: 8px; }
 .row-group-title { font-size: 14px; font-weight: 600; color: var(--ui-accent); }
-.measurement-fractions summary { min-height: 32px; padding-block: 6px; color: var(--ui-accent); cursor: pointer; font-size: 12px; }
+.measurement-fractions { interpolate-size: allow-keywords; }
+.measurement-fractions summary { min-height: 32px; padding-block: 6px; color: var(--ui-accent); cursor: pointer; font-size: 12px; user-select: none; transition: color 150ms var(--ui-ease); }
+.measurement-fractions summary:hover { color: #114c46; }
+.measurement-fractions > div { animation: st-status-in 180ms cubic-bezier(0.16, 1, 0.3, 1); }
 .pilot .measurement-actions .btn { border-color: transparent; background: transparent; padding-inline: 10px; }
 .pilot .measurement-actions .btn:last-child { color: #963b3b; }
 .pilot .load-summary strong { font-variant-numeric: tabular-nums; font-weight: 600; }

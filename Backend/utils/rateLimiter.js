@@ -7,8 +7,8 @@ let hasWarned = false;
 function getRatelimiter() {
   if (ratelimit) return ratelimit;
   
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
   
   if (!url || !token) {
     if (!hasWarned && process.env.NODE_ENV !== 'test') {
@@ -30,7 +30,12 @@ function getRatelimiter() {
 }
 
 function authLimit(req, res, next) {
-  const limiter = getRatelimiter();
+  let limiter;
+  try { limiter = getRatelimiter(); }
+  catch {
+    console.error('Rate limiter initialization failed; using local rate limits. Check Upstash configuration.');
+    return fallbackRateLimit(req, res, next);
+  }
   
   if (!limiter) {
     return fallbackRateLimit(req, res, next);
@@ -38,7 +43,7 @@ function authLimit(req, res, next) {
   
   const key = `${req.ip}:${req.path}`;
   
-  limiter.limit(key).then(({ success, limit, remaining, reset }) => {
+  Promise.resolve().then(() => limiter.limit(key)).then(({ success, limit, remaining, reset }) => {
     res.set('X-RateLimit-Limit', limit);
     res.set('X-RateLimit-Remaining', remaining);
     res.set('X-RateLimit-Reset', Math.ceil(reset / 1000));
@@ -48,8 +53,8 @@ function authLimit(req, res, next) {
       return res.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' });
     }
     next();
-  }).catch(err => {
-    console.error('Rate limiter error:', err);
+  }).catch(() => {
+    console.error('Rate limiter request failed; using local rate limits.');
     fallbackRateLimit(req, res, next);
   });
 }

@@ -41,6 +41,12 @@ test('Google identities require verification, explicit linking and tenant-safe o
   result = await exchange();
   assert.equal(result.body.user.id, owner.body.user.id);
   assert.equal(result.body.accessToken, undefined);
+  provider.id = 'cccccccc-cccc-4ccc-cccc-cccccccccccc';
+  result = await exchange();
+  assert.equal(result.status, 409, 'replacement Google identity requires recovery');
+  assert.equal(result.body.needsLink, undefined, 'Google-only account is not asked for a password');
+  assert.equal(result.cookie, null);
+  provider.id = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa';
   await database.prisma.user.update({ where: { id: owner.body.user.id }, data: { active: false } });
   assert.equal((await exchange()).status, 403);
   await database.prisma.user.update({ where: { id: owner.body.user.id }, data: { active: true } });
@@ -52,6 +58,10 @@ test('Google identities require verification, explicit linking and tenant-safe o
   assert.equal(joined.body.user.email, 'member@example.test');
   assert.equal(joined.body.user.role, 'Dispatcher');
   assert.equal(joined.body.user.organizationId, owner.body.user.organizationId);
+  result = await exchange();
+  assert.equal(result.body.user.id, joined.body.user.id, 'Google signup is immediately linked for future sign-in');
+  assert.equal(result.body.needsLink, undefined);
+  assert.match(result.cookie, /HttpOnly/i);
   reject = true;
   assert.equal((await exchange()).status, 401);
   assert.equal((await call('/google/exchange', { code: 'code', verifier: 'short' })).status, 400);

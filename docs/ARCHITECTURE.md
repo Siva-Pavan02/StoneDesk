@@ -46,7 +46,7 @@ StoneDesk/
     public/                     Favicon, icons, fonts, sample invoice
     src/
       main.jsx                  Mounts App inside LanguageProvider (en / te)
-      App.jsx                   Checks /auth/me, renders LandingPage or PilotApp
+      App.jsx                   Checks /auth/session, renders LandingPage or PilotApp
       index.css                 Design tokens and shared controls
       styles/                   workspace.css, landing.css, invoice.css, a4Invoice.css
       components/
@@ -110,7 +110,7 @@ Every query on tenant data is scoped by the caller's `organizationId`.
 
 ## 5. Frontend Application
 
-`App.jsx` calls `/api/auth/me`. Signed-out users see `pilot/LandingPage.jsx` with `pilot/AuthDialog.jsx`; signed-in users get `pilot/PilotApp.jsx`, which uses hash routing:
+`App.jsx` calls `/api/auth/session`. Signed-out users see `pilot/LandingPage.jsx` with `pilot/AuthDialog.jsx`; signed-in users get `pilot/PilotApp.jsx`, which uses hash routing:
 
 | Hash | Screen | Notes |
 | --- | --- | --- |

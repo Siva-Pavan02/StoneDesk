@@ -2,6 +2,11 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useLanguage } from "../../i18n/LanguageContext";
 import { logoUrl } from "../../lib/pilotApi.js";
 import Icon from "./Icon.jsx";
+import LogoutDialog from "./LogoutDialog.jsx";
+
+// Hash links: let Cmd/Ctrl/Shift/middle-click open a new tab, handle plain clicks in-app.
+const isPlainClick = (e) =>
+  e.button === 0 && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey);
 
 const allNavigation = [
   ["home", "home", "Dashboard", "డ్యాష్‌బోర్డ్"],
@@ -61,6 +66,7 @@ export default function WorkspaceShell({
     notifications = useRef(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [confirmingLogout, setConfirmingLogout] = useState(false);
   const searchInput = useRef(null),
     searchToggle = useRef(null);
   useEffect(() => {
@@ -100,7 +106,7 @@ export default function WorkspaceShell({
   }
   function logout() {
     closeDrawer();
-    onLogout();
+    setConfirmingLogout(true);
   }
   return (
     <div className="pilot workspace min-h-dvh bg-gray-50 text-gray-900">
@@ -134,15 +140,20 @@ export default function WorkspaceShell({
         <p className="eyebrow px-4 mb-3">{pick("WORKSPACE", "వర్క్‌స్పేస్")}</p>
         <nav aria-label={pick("Desktop navigation", "డెస్క్‌టాప్ నావిగేషన్")}>
           {navigation.map(([key, icon, en, te]) => (
-            <button
+            <a
                 key={key}
+                href={`#${key}`}
                 className="sidebar-link"
                 aria-current={navigationView === key ? "page" : undefined}
-                onClick={() => navigate(key)}
+                onClick={(event) => {
+                  if (!isPlainClick(event)) return;
+                  event.preventDefault();
+                  navigate(key);
+                }}
               >
                 <Icon name={icon} />
                 <span>{pick(en, te)}</span>
-              </button>
+              </a>
           ))}
         </nav>
         <LanguageSwitch className="sidebar-language" />
@@ -168,7 +179,7 @@ export default function WorkspaceShell({
             className="icon-button sidebar-logout"
             aria-label={pick("Log out", "లాగ్ అవుట్")}
             title={pick("Log out", "లాగ్ అవుట్")}
-            onClick={onLogout}
+            onClick={logout}
           >
             <Icon name="logout" />
           </button>
@@ -194,7 +205,7 @@ export default function WorkspaceShell({
             <div className="workspace-organization">
               <span className="workspace-organization-mark">
                 {settings?.logoPath ? (
-                  <img src={logoUrl(settings.logoPath)} alt="" />
+                  <img src={logoUrl(settings.logoPath)} alt="" width={26} height={26} />
                 ) : (
                   <Icon name="loads" />
                 )}
@@ -327,6 +338,8 @@ export default function WorkspaceShell({
               <img
                 src={logoUrl(settings.logoPath)}
                 className="h-10 w-10 object-contain"
+                width={40}
+                height={40}
                 alt=""
               />
             ) : (
@@ -357,15 +370,20 @@ export default function WorkspaceShell({
             aria-label={pick("Main navigation", "ప్రధాన నావిగేషన్")}
           >
             {navigation.map(([key, icon, en, te]) => (
-              <button
+              <a
                 key={key}
+                href={`#${key}`}
                 aria-current={navigationView === key ? "page" : undefined}
-                onClick={() => go(key)}
+                onClick={(event) => {
+                  if (!isPlainClick(event)) return;
+                  event.preventDefault();
+                  go(key);
+                }}
                 className="sidebar-link"
               >
                 <Icon name={icon} />
                 {pick(en, te)}
-              </button>
+              </a>
             ))}
           </nav>
           <LanguageSwitch className="nav-drawer-language" />
@@ -434,6 +452,14 @@ export default function WorkspaceShell({
           </button>
         </div>
       </dialog>
+      <LogoutDialog
+        open={confirmingLogout}
+        onCancel={() => setConfirmingLogout(false)}
+        onConfirm={async () => {
+          await onLogout();
+          setConfirmingLogout(false);
+        }}
+      />
     </div>
   );
 }

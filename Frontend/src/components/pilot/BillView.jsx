@@ -22,25 +22,16 @@ export default function BillView({ record, onBack, onResume, onChanged, canFinal
   const [layoutVersion, setLayoutVersion] = useState(0);
   const previewId = useId();
   const lock = useRef(false);
-  const saved = useRef(null);
   const finalized = record.status !== 'Draft';
   const invoiceKey = `${record.id}:${record.status}`;
   const currentInvoice = invoiceState?.key === invoiceKey ? invoiceState : null;
-  const invoiceSource = currentInvoice?.source;
+  // PilotApp only passes complete records (GET by id or a save/finalize/status
+  // response), so the bill never needs to be fetched again here.
+  const invoiceSource = finalized ? record : null;
   const preview = currentInvoice?.preview;
   const previewIssue = currentInvoice?.issue || '';
   const destination = record.logistics?.buyerDestination;
   const invoiceHtml = useMemo(() => preview ? renderA4Invoice(preview.model, preview.pages, previewId, pick) : '', [preview, previewId, pick]);
-  // Use the saved complete record for both preview and export; a dashboard list
-  // record may contain only a partial inventory or no saved business snapshot.
-  useEffect(() => {
-    if (!finalized) return;
-    let live = true;
-    request(`/dispatches/${record.id}`).then(data => {
-      if (live) { saved.current = { key: invoiceKey, data }; setInvoiceState({ key: invoiceKey, source: data, preview: null, issue: '' }); }
-    }).catch(err => { if (live) setInvoiceState({ key: invoiceKey, source: null, preview: null, issue: err.message }); });
-    return () => { live = false; };
-  }, [record.id, invoiceKey, finalized]);
   useEffect(() => {
     const refresh = () => setLayoutVersion(version => version + 1);
     window.addEventListener('resize', refresh);
@@ -52,9 +43,9 @@ export default function BillView({ record, onBack, onResume, onChanged, canFinal
     let live = true;
     Promise.resolve().then(() => a4InvoiceFromDispatch(invoiceSource)).then(model => paginateA4Invoice(model, document, pick))
       .then(result => {
-        if (live) setInvoiceState(current => current?.key === invoiceKey ? { ...current, preview: result, issue: '' } : current);
+        if (live) setInvoiceState({ key: invoiceKey, preview: result, issue: '' });
       }).catch(err => {
-        if (live) setInvoiceState(current => current?.key === invoiceKey ? { ...current, preview: null, issue: err.message } : current);
+        if (live) setInvoiceState({ key: invoiceKey, preview: null, issue: err.message });
       });
     return () => { live = false; };
   }, [invoiceSource, invoiceKey, layoutVersion, pick]);
@@ -70,8 +61,7 @@ export default function BillView({ record, onBack, onResume, onChanged, canFinal
     const printWindow = kind === 'print' ? window.open('', '_blank') : null;
     try {
       if (kind === 'print' && !printWindow) throw new Error('Allow pop-ups to print, or download the HTML invoice and print it offline.');
-      const data = saved.current?.key === invoiceKey ? saved.current.data : await request(`/dispatches/${record.id}`);
-      saved.current = { key: invoiceKey, data };
+      const data = record;
       let output;
       if (kind === 'html' || kind === 'print') {
         const model = a4InvoiceFromDispatch(data);

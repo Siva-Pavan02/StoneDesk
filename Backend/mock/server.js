@@ -275,6 +275,9 @@ api.post("/auth/logout", (req, res) => {
 api.get("/auth/me", requireSession, (req, res) =>
   res.json({ user: publicUser(currentUser()) }),
 );
+api.get("/auth/session", (req, res) =>
+  res.json({ user: currentUser() ? publicUser(currentUser()) : null }),
+);
 api.post(
   "/auth/password",
   requireSession,

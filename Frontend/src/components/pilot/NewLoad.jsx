@@ -164,23 +164,43 @@ export default function NewLoad({
       if (entry.length || entry.width)
         throw new Error("Add the current measurement row before saving");
       const body = payload(draft);
-      let record = draft.serverId
-        ? await request(`/dispatches/${draft.serverId}`)
-        : await request("/dispatches", { method: "POST", body });
-      const savedDraft = { ...draft, serverId: record.id };
-      setDraft(savedDraft);
-      if (settings.id)
-        await writeDraft({ ...savedDraft, entry }, settings.id, localStorage);
-      if (record.status === "Draft") {
-        record = await request(`/dispatches/${record.id}`, {
-          method: "PUT",
-          body,
-        });
-        if (finalize)
-          record = await request(`/dispatches/${record.id}/finalize`, {
-            method: "POST",
+      const sentBody = JSON.stringify(body);
+      let record;
+      if (draft.serverId) {
+        try {
+          record = await request(`/dispatches/${draft.serverId}`, {
+            method: "PUT",
+            body,
+          });
+        } catch (err) {
+          if (err.status !== 400) throw err;
+          // A load finalized elsewhere is shown as-is; real validation errors still surface.
+          record = await request(`/dispatches/${draft.serverId}`);
+          if (record.status === "Draft") throw err;
+        }
+      } else {
+        // A retried POST (same clientRequestId) returns the earlier copy, so remember
+        // what was sent and only PUT when the retry carries newer edits.
+        const previousBody = draft.postedBody;
+        const postingDraft = { ...draft, postedBody: sentBody };
+        setDraft(postingDraft);
+        if (settings.id)
+          await writeDraft({ ...postingDraft, entry }, settings.id, localStorage);
+        record = await request("/dispatches", { method: "POST", body });
+        const savedDraft = { ...draft, serverId: record.id, postedBody: undefined };
+        setDraft(savedDraft);
+        if (settings.id)
+          await writeDraft({ ...savedDraft, entry }, settings.id, localStorage);
+        if (record.status === "Draft" && previousBody && previousBody !== sentBody)
+          record = await request(`/dispatches/${record.id}`, {
+            method: "PUT",
+            body,
           });
       }
+      if (finalize && record.status === "Draft")
+        record = await request(`/dispatches/${record.id}/finalize`, {
+          method: "POST",
+        });
       if (settings.id) await clearDraft(settings.id);
       onSaved(record);
     } catch (err) {
@@ -383,10 +403,10 @@ export default function NewLoad({
           );
         })}
       {!review && (
-        <Card>
+        <Card className="fee-field">
           <Field
-            en="Loading / royalty charges (₹)"
-            te="లోడింగ్ / రాయల్టీ ఛార్జీలు"
+            en="Loading charges (₹)"
+            te="లోడింగ్ ఛార్జీలు (₹)"
             type="number"
             min="0"
             step="0.01"

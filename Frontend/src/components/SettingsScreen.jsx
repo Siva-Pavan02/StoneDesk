@@ -11,6 +11,7 @@ import {
   updateRoyalty
 } from '../lib/api';
 import { useLanguage } from '../i18n/LanguageContext';
+import { money } from '../utils/pilotDraft.js';
 import { Button, Card, Field } from './pilot/Controls.jsx';
 import Icon from './pilot/Icon.jsx';
 
@@ -66,10 +67,12 @@ function ReferenceList({ kind, items, value, onValue, onAdd, adding, onRemove })
   </Card>;
 }
 
-export default function SettingsScreen({ user, onClose, embedded = false, referenceOnly = false }) {
+export default function SettingsScreen({ user, onClose, embedded = false, referenceOnly = false, initialSettings = null, onChanged }) {
   const { t, pick } = useLanguage();
-  const [settings, setSettings] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [settings, storeSettings] = useState(initialSettings);
+  const [loading, setLoading] = useState(!initialSettings);
+  // Keep the parent's copy in sync so it never needs to refetch settings.
+  const setSettings = data => { storeSettings(data); onChanged?.(data); };
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('trucks'); // trucks, destinations, rates, royalty
 
@@ -80,7 +83,7 @@ export default function SettingsScreen({ user, onClose, embedded = false, refere
   const Content = embedded ? 'div' : 'main';
 
   useEffect(() => {
-    loadSettings();
+    if (!initialSettings) loadSettings();
   }, []);
 
   const loadSettings = async () => {
@@ -242,7 +245,7 @@ export default function SettingsScreen({ user, onClose, embedded = false, refere
         <div className="max-w-xl mx-auto w-full px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <button aria-label="Go back" className="w-9 h-9 -ml-1.5 flex items-center justify-center rounded-full text-slate-700 hover:text-teal-700 hover:bg-slate-100 transition-colors" onClick={onClose} type="button">
-              <span className="material-symbols-outlined text-[24px]">arrow_back</span>
+              <span className="material-symbols-outlined text-[24px]" aria-hidden="true">arrow_back</span>
             </button>
             <h1 className="text-lg font-bold text-slate-900 leading-none">{t('settings')}</h1>
           </div>
@@ -284,10 +287,10 @@ export default function SettingsScreen({ user, onClose, embedded = false, refere
                   <span>{t('stoneRates')} ({t('rate')} / {t('sqFt')})</span>
                 </h2>
                 <div className="flex flex-col gap-2 mb-6 p-4 bg-slate-50 border border-slate-200 rounded-lg">
-                  <input type="text" value={newRate.stoneType} onChange={e => setNewRate({...newRate, stoneType: e.target.value})} placeholder={t('stoneType')} className="w-full h-12 px-3 border border-slate-300 rounded-lg outline-none" />
-                  <input type="text" value={newRate.finish} onChange={e => setNewRate({...newRate, finish: e.target.value})} placeholder={t('finish')} className="w-full h-12 px-3 border border-slate-300 rounded-lg outline-none" />
-                  <input type="number" value={newRate.defaultRate} onChange={e => setNewRate({...newRate, defaultRate: e.target.value})} placeholder={t('rate')} className="w-full h-12 px-3 border border-slate-300 rounded-lg outline-none" min="0" />
-                  <button onClick={handleAddRate} disabled={isAddingRate} className="w-full h-12 bg-teal-700 text-white rounded-lg font-bold mt-2 disabled:opacity-50">{t('addNew')}</button>
+                  <input type="text" value={newRate.stoneType} onChange={e => setNewRate({...newRate, stoneType: e.target.value})} placeholder={t('stoneType')} aria-label={t('stoneType')} autoComplete="off" className="w-full h-12 px-3 border border-slate-300 rounded-lg outline-none" />
+                  <input type="text" value={newRate.finish} onChange={e => setNewRate({...newRate, finish: e.target.value})} placeholder={t('finish')} aria-label={t('finish')} autoComplete="off" className="w-full h-12 px-3 border border-slate-300 rounded-lg outline-none" />
+                  <input type="number" inputMode="decimal" value={newRate.defaultRate} onChange={e => setNewRate({...newRate, defaultRate: e.target.value})} placeholder={t('rate')} aria-label={t('rate')} autoComplete="off" className="w-full h-12 px-3 border border-slate-300 rounded-lg outline-none" min="0" />
+                  <button type="button" onClick={handleAddRate} disabled={isAddingRate} className="w-full h-12 bg-teal-700 text-white rounded-lg font-bold mt-2 disabled:opacity-50">{t('addNew')}</button>
                 </div>
 
                 <div className="space-y-3">
@@ -296,9 +299,9 @@ export default function SettingsScreen({ user, onClose, embedded = false, refere
                     <div key={rate.id} className="flex flex-col p-3 border border-slate-200 rounded-lg relative">
                       {editingRateId === rate.id ? (
                         <div className="flex flex-col gap-2">
-                          <input type="text" value={editingRateData.stoneType} onChange={e => setEditingRateData({...editingRateData, stoneType: e.target.value})} placeholder={t('stoneType')} className="w-full h-10 px-2 border border-slate-300 rounded outline-none" />
-                          <input type="text" value={editingRateData.finish} onChange={e => setEditingRateData({...editingRateData, finish: e.target.value})} placeholder={t('finish')} className="w-full h-10 px-2 border border-slate-300 rounded outline-none" />
-                          <input type="number" value={editingRateData.defaultRate} onChange={e => setEditingRateData({...editingRateData, defaultRate: e.target.value})} placeholder={t('rate')} className="w-full h-10 px-2 border border-slate-300 rounded outline-none" min="0" />
+                          <input type="text" value={editingRateData.stoneType} onChange={e => setEditingRateData({...editingRateData, stoneType: e.target.value})} placeholder={t('stoneType')} aria-label={t('stoneType')} autoComplete="off" className="w-full h-10 px-2 border border-slate-300 rounded outline-none" />
+                          <input type="text" value={editingRateData.finish} onChange={e => setEditingRateData({...editingRateData, finish: e.target.value})} placeholder={t('finish')} aria-label={t('finish')} autoComplete="off" className="w-full h-10 px-2 border border-slate-300 rounded outline-none" />
+                          <input type="number" inputMode="decimal" value={editingRateData.defaultRate} onChange={e => setEditingRateData({...editingRateData, defaultRate: e.target.value})} placeholder={t('rate')} aria-label={t('rate')} autoComplete="off" className="w-full h-10 px-2 border border-slate-300 rounded outline-none" min="0" />
                           <div className="flex gap-2 mt-2">
                             <button onClick={handleUpdateRate} disabled={isUpdatingRate} className="flex-1 bg-teal-700 text-white rounded font-bold h-10 disabled:opacity-50">{t('save')}</button>
                             <button onClick={() => setEditingRateId(null)} className="flex-1 bg-slate-200 text-slate-700 rounded font-bold h-10">{t('cancel')}</button>
@@ -308,12 +311,12 @@ export default function SettingsScreen({ user, onClose, embedded = false, refere
                         <>
                           <div className="flex justify-between pr-14">
                             <span className="font-bold text-slate-800">{rate.stoneType}</span>
-                            <span className="font-bold text-green-700">₹{rate.defaultRate}</span>
+                            <span className="font-bold text-green-700 tabular-nums">{money(rate.defaultRate)}</span>
                           </div>
                           <span className="text-sm text-slate-600">{rate.finish}</span>
                           <div className="absolute top-2 right-2 flex gap-1">
-                            <button onClick={() => startEditRate(rate)} className="text-slate-500 p-1 hover:bg-slate-100 rounded"><span className="material-symbols-outlined text-[20px]">edit</span></button>
-                            <button onClick={() => handleRemoveRate(rate.id)} className="text-red-500 p-1 hover:bg-red-50 rounded"><span className="material-symbols-outlined text-[20px]">delete</span></button>
+                            <button type="button" aria-label={`${pick('Edit', 'సవరించు')} ${rate.stoneType} ${rate.finish}`} onClick={() => startEditRate(rate)} className="text-slate-500 p-1 hover:bg-slate-100 rounded"><span className="material-symbols-outlined text-[20px]" aria-hidden="true">edit</span></button>
+                            <button type="button" aria-label={`${t('delete')} ${rate.stoneType} ${rate.finish}`} onClick={() => handleRemoveRate(rate.id)} className="text-red-500 p-1 hover:bg-red-50 rounded"><span className="material-symbols-outlined text-[20px]" aria-hidden="true">delete</span></button>
                           </div>
                         </>
                       )}

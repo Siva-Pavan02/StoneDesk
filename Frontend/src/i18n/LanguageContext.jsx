@@ -13,7 +13,8 @@ export const LanguageProvider = ({ children }) => {
     } catch {
       // localStorage error fallback
     }
-    return 'en'; // Deterministic default
+    const browser = typeof navigator === 'undefined' ? [] : navigator.languages || [navigator.language];
+    return browser.some(code => /^te\b/i.test(code || '')) ? 'te' : 'en';
   });
 
   useEffect(() => {

@@ -192,11 +192,11 @@ async function makeCase(kind, language, width, options = {}) {
   async function view(name) { await expect(page.locator('#workspace-main')).toHaveAttribute('data-view', name); }
   async function nav(name) {
     const item = navigation.find(([key]) => key === name);
-    if (width >= 1024) await page.locator('.workspace-sidebar nav').getByRole('button', { name: t(item[1], item[2]), exact: true }).click();
+    if (width >= 1024) await page.locator('.workspace-sidebar nav').getByRole('link', { name: t(item[1], item[2]), exact: true }).click();
     else {
       await page.locator('.mobile-menu').click();
       await expect(page.locator('#workspace-navigation-dialog')).toBeVisible();
-      await page.locator('#workspace-navigation-dialog nav').getByRole('button', { name: t(item[1], item[2]), exact: true }).click();
+      await page.locator('#workspace-navigation-dialog nav').getByRole('link', { name: t(item[1], item[2]), exact: true }).click();
       await expect(page.locator('#workspace-navigation-dialog')).not.toBeVisible();
       await expect(page.locator('.mobile-menu')).toHaveAttribute('aria-expanded', 'false');
     }
@@ -461,7 +461,7 @@ async function workspace(language, width) {
     await expect(main().locator('input[name="currentPassword"]')).toHaveValue(''); await expect(main().locator('input[name="password"]')).toHaveAttribute('minlength', '12'); await expect(main().getByRole('button', { name: t('Log out', 'లాగ్ అవుట్'), exact: true })).toHaveCount(0);
   });
   await check('Business profile opens; wizard navigation never submits to the API', async () => {
-    await main().getByRole('button', { name: t('Business profile & default charges', 'వ్యాపార వివరాలు మరియు డిఫాల్ట్ ఛార్జీలు') }).click(); await view('profile');
+    await main().getByRole('link', { name: t('Business profile & default charges', 'వ్యాపార వివరాలు మరియు డిఫాల్ట్ ఛార్జీలు') }).click(); await view('profile');
     await expect(page.locator('.sidebar-subnav')).toHaveCount(0);
     await expect(page.locator('.sidebar-subnav')).toHaveCount(0);
     await expect(main().locator('.setup-progress [aria-current="step"]')).toHaveCount(1);

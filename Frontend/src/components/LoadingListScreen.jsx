@@ -10,13 +10,16 @@ import { loadingTotals } from '../utils/loadingListTotals';
 import { round2 } from '../utils/loadMath';
 import { Button, Card, Field } from './pilot/Controls.jsx';
 
-export default function LoadingListScreen({ onClose, embedded = false, organizationId = 'unit_04' }) {
+// Exported files use the same DD/MM/YYYY India date as invoices, whatever the browser locale.
+const exportDate = () => new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date());
+
+export default function LoadingListScreen({ onClose, embedded = false, organizationId = 'unit_04', settings: providedSettings = null }) {
   const { t, pick } = useLanguage();
   const Content = embedded ? 'div' : 'main';
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const savingLock = useRef(false);
-  const [settings, setSettings] = useState(null);
+  const [settings, setSettings] = useState(providedSettings);
   
   // Active Form State
   const [loadingListNumber, setLoadingListNumber] = useState('');
@@ -48,8 +51,8 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
 
   const loadData = async () => {
     try {
-      const ms = await getMasterSettings(organizationId);
-      setSettings(ms);
+      // The workspace already holds settings; only fetch them when used standalone.
+      if (!providedSettings) setSettings(await getMasterSettings(organizationId));
       const lists = await fetchLoadingLists();
       setSavedLists(lists);
     } catch (e) {
@@ -190,15 +193,17 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
 
     savingLock.current = true; setSaving(true); setError('');
     try {
+      // Both endpoints return the saved list, so update it locally instead of refetching everything.
       if (activeListId) {
-        await updateLoadingList(activeListId, payload);
+        const updated = await updateLoadingList(activeListId, payload);
+        setSavedLists(lists => lists.map(list => list.id === updated.id ? updated : list));
       } else {
         const created = await createLoadingList(payload);
         setActiveListId(created.id);
         setLoadingListNumber(created.loadingListNumber);
+        setSavedLists(lists => [created, ...lists]);
       }
       alert('Saved Loading List');
-      loadData();
     } catch (e) {
       setError(e.message);
     } finally { savingLock.current = false; setSaving(false); }
@@ -207,7 +212,7 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
   const handleGeneratePdf = () => {
     const listData = {
       loadingListNumber: loadingListNumber || `LL-${Date.now()}`,
-      date: new Date().toLocaleDateString(),
+      date: exportDate(),
       supervisor,
       buyerDestination,
       stoneType,
@@ -220,7 +225,7 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
   const handleGenerateExcel = () => {
     const listData = {
       loadingListNumber: loadingListNumber || `LL-${Date.now()}`,
-      date: new Date().toLocaleDateString(),
+      date: exportDate(),
       supervisor,
       buyerDestination,
       stoneType,

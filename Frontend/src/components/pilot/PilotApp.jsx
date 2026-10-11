@@ -51,11 +51,12 @@ export default function PilotApp({ user, onLogout }) {
     loading: true,
   });
   const analyticsRequest = useRef(0);
+  // Analytics only appear on the dashboard; fetch them there, and again only after loads change.
+  const analyticsStale = useRef(true);
   const admin = user.role === "Admin",
     canFinalize = user.role !== "Yard Manager";
   function navigate(target) {
     const next = legacyRoutes[target] || target;
-    if (view.split(/[/?]/)[0] === "references" && next !== "references") load();
     window.location.hash = next;
     setView(next);
     setError("");
@@ -63,6 +64,7 @@ export default function PilotApp({ user, onLogout }) {
   }
   async function refreshAnalytics() {
     const ticket = ++analyticsRequest.current;
+    analyticsStale.current = false;
     setAnalytics((prev) => ({ ...prev, error: "", loading: true }));
     try {
       const data = await request("/dispatches/analytics");
@@ -77,8 +79,7 @@ export default function PilotApp({ user, onLogout }) {
         }));
     }
   }
-  async function refreshLoads(includeAnalytics = true) {
-    if (includeAnalytics !== false) refreshAnalytics();
+  async function refreshLoads() {
     setRefreshing(true);
     try {
       const res = await request("/dispatches");
@@ -137,7 +138,9 @@ export default function PilotApp({ user, onLogout }) {
   useEffect(() => {
     if (!view.startsWith("entries")) return;
     const interval = setInterval(() => {
-      if (document.visibilityState === "visible") refreshLoads(false);
+      if (document.visibilityState !== "visible") return;
+      analyticsStale.current = true;
+      refreshLoads();
     }, 30000);
     return () => clearInterval(interval);
   }, [view]);
@@ -157,9 +160,9 @@ export default function PilotApp({ user, onLogout }) {
       cancelled = true;
     };
   }, [view, record?.id]);
+  // Lists are already refreshed by saved() after every change, so going back needs no refetch.
   function home() {
     navigate("home");
-    refreshLoads();
   }
   async function newLoad() {
     if (!settings?.businessName) return navigate("profile");
@@ -211,6 +214,7 @@ export default function PilotApp({ user, onLogout }) {
     setRecovery(null);
     setRecord(data);
     navigate(`bill/${data.id}`);
+    analyticsStale.current = true;
     refreshLoads();
   }
   const needsSetup =
@@ -221,6 +225,10 @@ export default function PilotApp({ user, onLogout }) {
         ? "profile"
         : "products"
       : view.split(/[/?]/)[0];
+  useEffect(() => {
+    if (current === "home" && settings && analyticsStale.current)
+      refreshAnalytics();
+  }, [current, settings]);
   let content;
   const openingBill =
     view.startsWith("bill/") && record?.id !== view.slice(5) && !error;
@@ -287,7 +295,12 @@ export default function PilotApp({ user, onLogout }) {
       <Suspense
         fallback={<p role="status">{pick("Loading…", "లోడ్ అవుతోంది…")}</p>}
       >
-        <SavedReferences embedded user={user} />
+        <SavedReferences
+          embedded
+          user={user}
+          initialSettings={settings}
+          onChanged={setSettings}
+        />
       </Suspense>
     ) : (
       <Card>
@@ -307,6 +320,7 @@ export default function PilotApp({ user, onLogout }) {
         <LoadingRequirements
           embedded
           organizationId={user.organizationId}
+          settings={settings}
           onClose={() => navigate("entries")}
         />
       </Suspense>
@@ -368,8 +382,18 @@ export default function PilotApp({ user, onLogout }) {
             "all"
           }
           query={query}
-          onOpen={(id) => navigate(`bill/${id}`)}
-          onRefresh={() => refreshLoads()}
+          onOpen={(id) => {
+            // Reuse the cached full bill unless the list shows it changed since.
+            const listed = loads.find((l) => l.id === id);
+            if (record?.id === id && listed?.updatedAt !== record.updatedAt)
+              setRecord(null);
+            navigate(`bill/${id}`);
+          }}
+          onRefresh={() => {
+            if (current === "home") refreshAnalytics();
+            else analyticsStale.current = true;
+            return refreshLoads();
+          }}
           onLoadMore={loadMore}
           hasMore={!!nextCursor}
           loading={refreshing}

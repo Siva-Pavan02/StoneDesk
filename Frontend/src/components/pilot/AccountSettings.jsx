@@ -168,10 +168,10 @@ export default function AccountSettings({ settings, user, section, navigate, onD
           </dd>
         </div>
       </dl>
-      {admin && <button type="button" className="st-row st-nav-row" onClick={() => navigate('profile')}>
+      {admin && <a href="#profile" className="st-row st-nav-row" onClick={e => { if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); navigate('profile'); }}>
         <span>{pick('Business profile & default charges', 'వ్యాపార వివరాలు మరియు డిఫాల్ట్ ఛార్జీలు')}</span>
         <Icon name="next" />
-      </button>}
+      </a>}
       </div>
       {feedback('general')}
     </section>

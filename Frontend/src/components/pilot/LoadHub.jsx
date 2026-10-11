@@ -5,19 +5,6 @@ import { Button, Card } from "./Controls.jsx";
 import Icon from "./Icon.jsx";
 import DashboardAnalytics from "./DashboardAnalytics.jsx";
 
-const loadDate = (value) =>
-  new Date(value).toLocaleDateString("en-GB", {
-    timeZone: "Asia/Kolkata",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-const loadArea = (value) =>
-  (Number(value) || 0).toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-
 export default function LoadHub({
   loads,
   view,
@@ -36,7 +23,20 @@ export default function LoadHub({
   analytics,
   onRetryAnalytics,
 }) {
-  const { pick } = useLanguage();
+  const { pick, language } = useLanguage();
+  const locale = language === "te" ? "te-IN" : "en-IN";
+  const dateFormat = new Intl.DateTimeFormat(locale, {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  const areaFormat = new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const loadDate = (value) => dateFormat.format(new Date(value));
+  const loadArea = (value) => areaFormat.format(Number(value) || 0);
   const [filter, setFilterState] = useState(status);
   const [linkedStatus, setLinkedStatus] = useState(status);
   if (linkedStatus !== status) {
@@ -602,10 +602,10 @@ export default function LoadHub({
           className={`text-xs text-gray-600 ${view === "home" ? "dashboard-updated" : ""}`}
         >
           {pick("Updated", "నవీకరించబడింది")}{" "}
-          {new Date(updatedAt).toLocaleTimeString("en-IN", {
+          {new Intl.DateTimeFormat(locale, {
             hour: "2-digit",
             minute: "2-digit",
-          })}
+          }).format(new Date(updatedAt))}
           {view === "entries"
             ? pick(
                 " · refreshes every 30 seconds",

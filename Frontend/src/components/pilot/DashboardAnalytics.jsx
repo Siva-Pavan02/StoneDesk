@@ -3,7 +3,6 @@ import { money } from '../../utils/pilotDraft.js';
 import Icon from './Icon.jsx';
 
 const zone = 'Asia/Kolkata';
-const count = value => Number(value).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 
 function change(current, previous) {
   if (!previous) return null;
@@ -13,6 +12,8 @@ function change(current, previous) {
 export default function DashboardAnalytics({ analytics, onRetry }) {
   const { pick, language } = useLanguage();
   const locale = language === 'te' ? 'te-IN' : 'en-IN';
+  const countFormat = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
+  const count = value => countFormat.format(Number(value));
   const day = (value, options) => new Date(`${value}T00:00:00+05:30`).toLocaleDateString(locale, { timeZone: zone, ...options });
   const short = value => day(value, { day: 'numeric', month: 'short' });
   const { data, error, loading } = analytics;
@@ -57,7 +58,7 @@ export default function DashboardAnalytics({ analytics, onRetry }) {
           <figcaption><span>{short(data.period.from)}</span><span>{pick('Peak day', 'అత్యధిక రోజు')} {money(peak)}</span><span>{short(data.period.to)}</span></figcaption>
           <details className="analytics-table">
             <summary>{pick('View daily values', 'రోజువారీ విలువలు చూడండి')}</summary>
-            <table className="business-table"><thead><tr><th scope="col">{pick('Date', 'తేదీ')}</th><th scope="col">{pick('Loads', 'లోడ్లు')}</th><th scope="col">{pick('Billed', 'బిల్లు')}</th></tr></thead><tbody>{billedDays.map(point => <tr key={point.date}><th scope="row">{day(point.date, { day: 'numeric', month: 'short', year: 'numeric' })}</th><td>{point.loads}</td><td>{money(point.billed)}</td></tr>)}</tbody></table>
+            <table className="business-table"><thead><tr><th scope="col">{pick('Date', 'తేదీ')}</th><th scope="col">{pick('Loads', 'లోడ్లు')}</th><th scope="col">{pick('Billed', 'బిల్లు')}</th></tr></thead><tbody>{billedDays.map(point => <tr key={point.date}><th scope="row">{day(point.date, { day: 'numeric', month: 'short', year: 'numeric' })}</th><td className="numeric">{count(point.loads)}</td><td className="numeric">{money(point.billed)}</td></tr>)}</tbody></table>
           </details>
         </figure>
         <div className="analytics-insights">

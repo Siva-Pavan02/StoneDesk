@@ -370,6 +370,25 @@
 .pilot.workspace .logistics-fields .control-field:focus-within .control-label {
   color: var(--ui-accent);
 }
+/* Label and amount stepper share one row. The card keeps the default card padding
+   and, on two-column layouts, occupies the same column as the measurement card
+   (grid gap is 20px in .load-entry-grid). */
+.pilot.workspace .fee-field > .control-field {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pilot.workspace .fee-field .number-stepper {
+  flex: 0 1 220px;
+  min-width: 0;
+}
+@media (min-width: 768px) {
+  .pilot.workspace .fee-field {
+    width: calc((100% - 20px) / 2);
+    margin-left: calc(50% + 10px);
+  }
+}
 .pilot.workspace .logistics-fields .input {
   height: 40px;
   padding-inline: 0;
@@ -391,6 +410,10 @@
   border-color: var(--ui-accent);
   box-shadow: 0 1px 0 var(--ui-accent);
   outline: 0;
+}
+.pilot.workspace .logistics-fields .input:focus-visible {
+  /* Underline fields: a 3px accent rule (plus the accent label) marks keyboard focus. */
+  box-shadow: 0 2px 0 var(--ui-accent);
 }
 /* Suggestion lists (datalist): always show one clear chevron button, and keep Chrome autofill from tinting the field blue. */
 .pilot input[list]::-webkit-calendar-picker-indicator {
@@ -505,6 +528,7 @@
   border-radius: 0 16px 16px 0;
   background: #fbfdfc;
   box-shadow: 8px 0 32px rgb(32 61 54 / 0.08);
+  overscroll-behavior: contain;
 }
 .pilot.workspace .nav-drawer::backdrop {
   background: rgb(20 36 31 / 0.24);

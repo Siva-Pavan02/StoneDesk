@@ -61,7 +61,7 @@ try {
     <Card className="gap-3">
       <Label en="Business logo (optional)" te="వ్యాపార లోగో" />
       <label className="logo-picker"><input ref={logoInput} aria-label={pick('Upload business logo', 'వ్యాపార లోగో జోడించండి')} type="file" accept="image/png,image/jpeg" onChange={chooseLogo} />
-        {(preview || (settings.logoPath && !removeLogo)) ? <img src={preview || logoUrl(settings.logoPath)} alt={pick('Business logo preview', 'వ్యాపార లోగో ప్రివ్యూ')} className="logo-preview" /> : <span className="logo-placeholder"><Icon name="plus" /></span>}
+        {(preview || (settings.logoPath && !removeLogo)) ? <img src={preview || logoUrl(settings.logoPath)} alt={pick('Business logo preview', 'వ్యాపార లోగో ప్రివ్యూ')} className="logo-preview" width={64} height={64} /> : <span className="logo-placeholder"><Icon name="plus" /></span>}
         <span className="logo-picker-text">
           <strong>{pick(file || (settings.logoPath && !removeLogo) ? 'Change logo' : 'Choose a logo', file || (settings.logoPath && !removeLogo) ? 'లోగో మార్చండి' : 'లోగో ఎంచుకోండి')}</strong>
           <span>{pick('JPEG or PNG · up to 2 MB', 'JPEG లేదా PNG · గరిష్ఠంగా 2 MB')}</span>

@@ -45,3 +45,34 @@ test('Google callback rejects mismatched state without calling the server', asyn
   await assert.rejects(finishGoogleSignIn(), /expired/);
   assert.equal(storage.size, 0);
 });
+
+test('Google callback accepts Site URL fallback with the original PKCE verifier', async t => {
+  const storage = browser(t, '?code=one-use');
+  storage.set('stonedesk.google.pending', JSON.stringify({ state: 'expected', verifier: 'v'.repeat(43), started: Date.now() }));
+  globalThis.fetch = async (_url, options) => {
+    assert.equal(JSON.parse(options.body).verifier, 'v'.repeat(43));
+    return Response.json({ needsSignup: true });
+  };
+  const { finishGoogleSignIn } = await import('../src/lib/googleSignIn.js?fallback');
+  assert.equal((await finishGoogleSignIn()).needsSignup, true);
+});
+
+test('Google provider errors in the fragment are handled without exposing descriptions', async t => {
+  browser(t);
+  window.location.hash = '#error=server_error&error_code=unexpected_failure&error_description=sensitive';
+  globalThis.fetch = () => { throw new Error('Must not call'); };
+  const { finishGoogleSignIn } = await import('../src/lib/googleSignIn.js?fragment-error');
+  await assert.rejects(finishGoogleSignIn(), error => {
+    assert.match(error.message, /Supabase Auth logs/);
+    assert.doesNotMatch(error.message, /sensitive/);
+    return true;
+  });
+  assert.equal(window.history.path, '/');
+});
+
+test('A callback without its browser verifier cannot create a session', async t => {
+  browser(t, '?code=one-use');
+  globalThis.fetch = () => { throw new Error('Must not call'); };
+  const { finishGoogleSignIn } = await import('../src/lib/googleSignIn.js?missing-pending');
+  await assert.rejects(finishGoogleSignIn(), /same browser tab/);
+});

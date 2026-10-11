@@ -21,15 +21,35 @@ let completion;
 export function finishGoogleSignIn() {
   if (completion) return completion;
   const params = new URLSearchParams(window.location.search);
-  if (!params.has('code') && !params.has('error') && !params.has('google_callback')) return Promise.resolve(null);
+  const fragment = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+  const providerError = params.get('error') || fragment.get('error');
+  if (!params.has('code') && !providerError && !params.has('google_callback')) return Promise.resolve(null);
   completion = (async () => {
     const raw = sessionStorage.getItem(pendingKey);
     sessionStorage.removeItem(pendingKey);
     window.history.replaceState(null, '', '/');
     let pending;
     try { pending = JSON.parse(raw); } catch { /* handled below */ }
-    if (!pending || Date.now() - pending.started > 15 * 60 * 1000) throw new Error('Google sign-in expired. Please try again on this device.');
-    if (params.has('error') || !params.get('code')) throw new Error('Google sign-in was cancelled or could not finish. Please try again.');
+    if (providerError) {
+      // Never display provider descriptions verbatim: they can contain sensitive data.
+      const code = params.get('error_code') || fragment.get('error_code');
+      const messages = {
+        bad_oauth_callback: 'Google did not complete sign-in. Please try again.',
+        bad_oauth_state: 'Google sign-in expired. Please start again from this tab.',
+        provider_disabled: 'Google sign-in is disabled in Supabase. Ask your administrator to enable it.',
+        signup_disabled: 'New Google accounts are disabled in Supabase. Ask your administrator to enable sign-ups.',
+        unexpected_failure: 'Supabase could not complete Google sign-in. Check the Supabase Auth logs.',
+        server_error: 'Supabase could not complete Google sign-in. Check the Supabase Auth logs.'
+      };
+      throw new Error(messages[code] || messages[providerError] || 'Google sign-in was cancelled or rejected. Please try again.');
+    }
+    if (!pending || !Number.isFinite(pending.started) || Date.now() - pending.started > 15 * 60 * 1000 ||
+      (params.has('google_callback') && pending.state !== params.get('google_callback'))) {
+      throw new Error('Google sign-in expired. Start again from the same browser tab and website address.');
+    }
+    // Supabase may return to its configured Site URL without our optional marker.
+    // The stored PKCE verifier still binds the returned code to this browser tab.
+    if (!params.get('code')) throw new Error('Google sign-in returned without a code. Check the Supabase redirect URL configuration.');
     return request('/auth/google/exchange', { method: 'POST', body: { code: params.get('code'), verifier: pending.verifier } });
   })();
   return completion;

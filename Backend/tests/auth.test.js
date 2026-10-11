@@ -21,6 +21,11 @@ test('accounts protect all business data, activate staff, enforce roles and revo
     return { status: response.status, data: await response.json(), cookies: response.headers.getSetCookie() };
   }
   const cookieOf = response => response.cookies.find(c => c.startsWith('stonedesk_session=') && !c.startsWith('stonedesk_session=;')).split(';')[0];
+  for (const cookie of [undefined, 'stonedesk_session=invalid', 'stonedesk_session=' + 'a'.repeat(64)]) {
+    const session = await call(`${API_PREFIX}/auth/session`, 'GET', undefined, cookie);
+    assert.equal(session.status, 200);
+    assert.equal(session.data.user, null);
+  }
   for (const path of [`${API_PREFIX}/dispatches`, `${API_PREFIX}/loading-lists`, `${API_PREFIX}/master-settings/unit_04`, '/uploads/unknown.png']) assert.equal((await call(path)).status, 401);
   const password = randomBytes(18).toString('hex');
   assert.equal((await call(`${API_PREFIX}/auth/signup`, 'POST', { email: 'a@example.test', password: 'short', name: 'Owner' })).status, 400);
@@ -32,6 +37,9 @@ test('accounts protect all business data, activate staff, enforce roles and revo
   assert.equal(staff.data.user.role,'Dispatcher');
   assert.equal(await prisma.user.count({where:{role:'Admin'}}),1);
   const ownerCookie = cookieOf(owner); let staffCookie = cookieOf(staff);
+  const discovery = await call(`${API_PREFIX}/auth/session`, 'GET', undefined, ownerCookie);
+  assert.equal(discovery.status, 200);
+  assert.deepEqual(discovery.data.user, owner.data.user);
   assert.match(owner.cookies.join(';'), /HttpOnly/); assert.match(owner.cookies.join(';'), /SameSite=Strict/);
   assert.equal(owner.data.user.passwordHash, undefined);
   assert.equal((await call(`${API_PREFIX}/dispatches`, 'GET', undefined, staffCookie)).status, 200);
@@ -62,6 +70,7 @@ test('accounts protect all business data, activate staff, enforce roles and revo
   const finalCookie = cookieOf(login);
   assert.equal((await call(`${API_PREFIX}/auth/logout`, 'POST', undefined, finalCookie)).status, 200);
   assert.equal((await call(`${API_PREFIX}/auth/me`, 'GET', undefined, finalCookie)).status, 401);
+  assert.equal((await call(`${API_PREFIX}/auth/session`, 'GET', undefined, finalCookie)).data.user, null);
   let last;
   for (let i = 0; i < 21; i++) last = await call(`${API_PREFIX}/auth/login`, 'POST', { email: 'missing@example.test', password });
   assert.equal(last.status, 429);

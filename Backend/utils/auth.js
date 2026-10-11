@@ -29,14 +29,18 @@ async function startSession(req, res, user) {
   await prisma.session.create({ data: { tokenHash: hash(token), userId: user.id, expiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000) } });
   res.cookie(cookieName, token, { ...cookieOptions(), maxAge: 12 * 60 * 60 * 1000 });
 }
+async function readSession(req) {
+  const token = tokenFrom(req);
+  if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
+  const tokenHash = hash(token);
+  const session = await prisma.session.findFirst({ where: { tokenHash, expiresAt: { gt: new Date() } }, include: { user: true } });
+  return session?.user || null;
+}
 async function requireSession(req, res, next) {
   try {
-    const token = tokenFrom(req);
-    if (!token || !/^[a-f0-9]{64}$/.test(token)) return res.status(401).json({ error: 'Please sign in to continue' });
-    const tokenHash = hash(token);
-    const session = await prisma.session.findFirst({ where: { tokenHash, expiresAt: { gt: new Date() } }, include: { user: true } });
-    if (!session?.user) return res.status(401).json({ error: 'Please sign in to continue' });
-    req.user = session.user;
+    const user = await readSession(req);
+    if (!user) return res.status(401).json({ error: 'Please sign in to continue' });
+    req.user = user;
     next();
   } catch (err) { next(err); }
 }
@@ -65,4 +69,4 @@ function allowedOrigin(origin, req) {
   } catch { return false; }
 }
 
-module.exports = { passwordHash, verifyPassword, startSession, endSession, requireSession, requireActive, allowRoles, publicUser, allowedOrigin, authLimit };
+module.exports = { passwordHash, verifyPassword, startSession, endSession, readSession, requireSession, requireActive, allowRoles, publicUser, allowedOrigin, authLimit };

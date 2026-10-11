@@ -9,6 +9,7 @@ const { sendPasswordResetEmail } = require('../utils/email');
 const { auditLog } = require('../utils/auditLog');
 const router = express.Router();
 const googleAuth = require('../utils/googleAuth');
+const deleteAuthUser = require('../utils/deleteAuthUser');
 
 router.get('/google/config', (req, res, next) => {
   try { res.json({ url: googleAuth.configuration().url }); } catch (err) { next(err); }
@@ -19,6 +20,9 @@ router.post('/google/exchange', auth.authLimit, async (req, res, next) => {
     const user = await prisma.user.findUnique({ where: { supabaseUserId: identity.supabaseUserId } });
     if (!user) {
       const existing = await prisma.user.findUnique({ where: { email: identity.email } });
+      // A replacement Supabase identity needs account recovery, not a password
+      // prompt: Google-only accounts do not have a user-chosen local password.
+      if (existing?.supabaseUserId) return res.status(409).json({ error: 'Your Google account link needs recovery. Contact your administrator to restore the existing StoneDesk account.' });
       return res.json({ needsSignup: !existing, needsLink: Boolean(existing), accessToken: identity.accessToken, email: identity.email });
     }
     if (!user.active) return res.status(403).json({ error: 'Your account access has been paused. Contact your administrator.' });
@@ -132,6 +136,14 @@ router.post('/logout', async (req, res, next) => {
   try { await auth.endSession(req, res); await auditLog('user.logout', req); res.json({ ok: true }); } catch (err) { next(err); }
 });
 router.get('/me', auth.requireSession, (req, res) => res.json({ user: auth.publicUser(req.user) }));
+// Public session discovery: being signed out is a normal landing-page state.
+router.get('/session', async (req, res, next) => {
+  res.set('Cache-Control', 'private, no-store');
+  try {
+    const user = await auth.readSession(req);
+    res.json({ user: user ? auth.publicUser(user) : null });
+  } catch (err) { next(err); }
+});
 router.post('/password', auth.authLimit, auth.requireSession, async (req, res, next) => {
   try {
     const { password } = credentials({ email: req.user.email, password: req.body.password });
@@ -154,10 +166,11 @@ router.delete('/account', auth.authLimit, auth.requireSession, async (req, res, 
     const confirm = typeof req.body.confirm === 'string' ? req.body.confirm.trim().toLowerCase() : '';
     if (confirm !== req.user.email.toLowerCase()) return res.status(400).json({ error: 'Type your email exactly to confirm deletion' });
     const deleteBusiness = req.user.role === 'Admin';
+    await deleteAuthUser(req.user);
     await auditLog(deleteBusiness ? 'organization.delete' : 'user.account_delete', req, { targetUserId: req.user.id });
-    await auth.endSession(req, res);
     if (deleteBusiness) await prisma.masterSettings.delete({ where: { id: req.user.organizationId } });
     else await prisma.user.delete({ where: { id: req.user.id } });
+    await auth.endSession(req, res);
     res.json({ ok: true, deletedBusiness: deleteBusiness });
   } catch (err) { next(err); }
 });

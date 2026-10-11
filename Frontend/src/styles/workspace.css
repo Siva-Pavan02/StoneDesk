@@ -509,9 +509,11 @@
 .pilot.workspace .nav-drawer::backdrop {
   background: rgb(20 36 31 / 0.24);
   backdrop-filter: blur(2px);
+  animation: app-backdrop-fade 240ms var(--ui-ease) both;
 }
 .nav-drawer[open] {
   animation: drawer-reveal 280ms var(--ui-ease) both;
+  will-change: transform;
 }
 .nav-drawer[open] .sidebar-link {
   animation: nav-reveal 360ms var(--ui-ease) both;

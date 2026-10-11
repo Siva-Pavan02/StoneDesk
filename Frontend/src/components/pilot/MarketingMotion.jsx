@@ -1,108 +1,127 @@
-'use client';
-
-import { memo, useEffect, useRef, useSyncExternalStore } from 'react';
-import { motion, useAnimationControls, useMotionValue, useReducedMotion, useSpring } from 'motion/react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import Icon from './Icon.jsx';
 
-function subscribeReducedMotion(notify) {
-  const query = window.matchMedia('(prefers-reduced-motion: reduce)');
-  query.addEventListener('change', notify);
-  return () => query.removeEventListener('change', notify);
-}
-function readReducedMotion() { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
-function useMarketingReducedMotion() {
-  const initial = useReducedMotion();
-  // This installed Motion version captures the initial preference only. Also
-  // subscribe to OS changes, including when motion is enabled and then disabled.
-  return useSyncExternalStore(subscribeReducedMotion, readReducedMotion, () => initial !== false);
+function isReducedMotion() {
+  return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-// Only these small leaves own animation. Pointer coordinates never enter React state.
+// 60fps Compositor-only Magnetic CTA button: Uses direct transform manipulation on the DOM node.
 export function MagneticCTA({ children, onClick, compact = false, compactLabel, className = '' }) {
-  const reduced = useMarketingReducedMotion();
+  const btnRef = useRef(null);
   const finePointer = useRef(false);
-  const x = useMotionValue(0);
-  const y = useMotionValue(0);
-  const springX = useSpring(x, { stiffness: 260, damping: 24, mass: 0.35 });
-  const springY = useSpring(y, { stiffness: 260, damping: 24, mass: 0.35 });
+  const rafId = useRef(0);
 
   useEffect(() => {
     const query = window.matchMedia('(hover: hover) and (pointer: fine)');
     const update = () => {
-      finePointer.current = query.matches && reduced === false;
-      x.set(0); y.set(0);
-      if (!finePointer.current) { springX.jump(0); springY.jump(0); }
+      finePointer.current = query.matches && !isReducedMotion();
+      if (btnRef.current) btnRef.current.style.transform = 'translate3d(0, 0, 0)';
     };
     update();
     query.addEventListener('change', update);
     return () => query.removeEventListener('change', update);
-  }, [reduced, x, y, springX, springY]);
+  }, []);
 
-  function reset() { x.set(0); y.set(0); }
-  function move(event) {
-    if (!finePointer.current || event.pointerType === 'touch') return;
-    const rect = event.currentTarget.getBoundingClientRect();
-    x.set(Math.max(-5, Math.min(5, (event.clientX - rect.left - rect.width / 2) * 0.055)));
-    y.set(Math.max(-3, Math.min(3, (event.clientY - rect.top - rect.height / 2) * 0.07)));
+  function reset() {
+    if (rafId.current) cancelAnimationFrame(rafId.current);
+    if (btnRef.current) {
+      btnRef.current.style.transform = 'translate3d(0, 0, 0)';
+    }
   }
 
-  return <motion.button type="button" aria-label={compactLabel ? children : undefined} onClick={onClick} onPointerMove={move} onPointerLeave={reset} onPointerCancel={reset} onBlur={reset}
-    style={{ x: springX, y: springY }} className={`mk-primary inline-flex min-h-12 shrink-0 items-center justify-center gap-4 rounded-full pl-6 pr-2 text-sm font-semibold ${compact ? 'mk-primary-compact' : ''} ${className}`}>
-    {compactLabel ? <><span className="hidden sm:inline">{children}</span><span className="sm:hidden" aria-hidden="true">{compactLabel}</span></> : <span>{children}</span>}
-    {compact ? <Icon name="arrow" className="mk-cta-arrow h-4 w-4 shrink-0" /> : <span className="mk-cta-disc flex h-9 w-9 shrink-0 items-center justify-center rounded-full" aria-hidden="true"><Icon name="arrow" className="h-4 w-4" /></span>}
-  </motion.button>;
+  function move(event) {
+    if (!finePointer.current || event.pointerType === 'touch' || !btnRef.current) return;
+    const rect = btnRef.current.getBoundingClientRect();
+    const x = Math.max(-5, Math.min(5, (event.clientX - rect.left - rect.width / 2) * 0.055));
+    const y = Math.max(-3, Math.min(3, (event.clientY - rect.top - rect.height / 2) * 0.07));
+    if (rafId.current) cancelAnimationFrame(rafId.current);
+    rafId.current = requestAnimationFrame(() => {
+      if (btnRef.current) {
+        btnRef.current.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0)`;
+      }
+    });
+  }
+
+  return (
+    <button
+      ref={btnRef}
+      type="button"
+      aria-label={compactLabel ? children : undefined}
+      onClick={onClick}
+      onPointerMove={move}
+      onPointerLeave={reset}
+      onPointerCancel={reset}
+      onBlur={reset}
+      className={`mk-primary inline-flex min-h-12 shrink-0 items-center justify-center gap-4 rounded-full pl-6 pr-2 text-sm font-semibold transition-transform duration-150 ease-out ${compact ? 'mk-primary-compact' : ''} ${className}`}
+      style={{ willChange: 'transform' }}
+    >
+      {compactLabel ? (
+        <>
+          <span className="hidden sm:inline">{children}</span>
+          <span className="sm:hidden" aria-hidden="true">{compactLabel}</span>
+        </>
+      ) : (
+        <span>{children}</span>
+      )}
+      {compact ? (
+        <Icon name="arrow" className="mk-cta-arrow h-4 w-4 shrink-0" />
+      ) : (
+        <span className="mk-cta-disc flex h-9 w-9 shrink-0 items-center justify-center rounded-full" aria-hidden="true">
+          <Icon name="arrow" className="h-4 w-4" />
+        </span>
+      )}
+    </button>
+  );
 }
 
+// 60fps Reveal: Native IntersectionObserver with compositor opacity & transform
 export function Reveal({ children, className = '', delay = 0 }) {
-  const reduced = useMarketingReducedMotion();
-  return <motion.div className={className} initial={reduced !== false ? false : { opacity: 0, y: 14 }}
-    whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.12 }}
-    transition={{ duration: reduced ? 0 : 0.5, delay: reduced ? 0 : delay, ease: [0.16, 1, 0.3, 1] }}>
-    {children}
-  </motion.div>;
-}
-
-export const SampleMotionBadge = memo(function SampleMotionBadge() {
-  const { pick } = useLanguage();
-  const reduced = useMarketingReducedMotion();
-  const controls = useAnimationControls();
-  const target = useRef(null);
+  const [visible, setVisible] = useState(false);
+  const ref = useRef(null);
 
   useEffect(() => {
-    const node = target.current;
-    if (!node) return;
-    let intersecting = false;
-    let running = null;
-    controls.set({ y: 0 });
-    const pointer = window.matchMedia('(pointer: coarse)');
-    const sync = () => {
-      const shouldRun = intersecting && !document.hidden && reduced === false && !pointer.matches;
-      if (shouldRun === running) return;
-      running = shouldRun;
-      controls.stop();
-      if (shouldRun) {
-        // The only perpetual animation: a sample saved-status marker, not live activity.
-        void controls.start({ y: [0, -3, 0], transition: { duration: 4, repeat: Infinity, ease: [0.45, 0, 0.55, 1] } });
-      } else controls.set({ y: 0 });
-    };
-    const observer = typeof IntersectionObserver === 'undefined' ? null : new IntersectionObserver(entries => {
-      intersecting = entries[0]?.isIntersecting ?? false; sync();
-    }, { threshold: 0.15 });
-    if (observer) observer.observe(node);
-    document.addEventListener('visibilitychange', sync);
-    pointer.addEventListener('change', sync);
-    return () => {
-      observer?.disconnect();
-      document.removeEventListener('visibilitychange', sync);
-      pointer.removeEventListener('change', sync);
-      controls.stop();
-    };
-  }, [controls, reduced]);
+    if (isReducedMotion()) {
+      setVisible(true);
+      return undefined;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry?.isIntersecting) {
+        setVisible(true);
+        observer.disconnect();
+      }
+    }, { threshold: 0.12 });
+    if (ref.current) observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, []);
 
-  return <div ref={target} className="flex min-h-[61px] items-center border-t border-[#e0eae7] px-4 py-3 text-xs sm:px-5">
-    <motion.span animate={controls} className="inline-flex items-center gap-2 text-[#17645d]">
-      <Icon name="check" className="h-4 w-4" />{pick('Sample bill · saved totals', 'నమూనా బిల్లు · సేవ్ చేసిన మొత్తాలు')}
-    </motion.span>
-  </div>;
+  return (
+    <div
+      ref={ref}
+      className={className}
+      style={{
+        opacity: visible ? 1 : 0,
+        transform: visible ? 'translate3d(0, 0, 0)' : 'translate3d(0, 14px, 0)',
+        transition: visible
+          ? `opacity 500ms cubic-bezier(0.16, 1, 0.3, 1) ${delay}s, transform 500ms cubic-bezier(0.16, 1, 0.3, 1) ${delay}s`
+          : 'none',
+        willChange: visible ? 'auto' : 'transform, opacity'
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+// 60fps Compositor-Only Sample Motion Badge
+export const SampleMotionBadge = memo(function SampleMotionBadge() {
+  const { pick } = useLanguage();
+  return (
+    <div className="flex min-h-[61px] items-center border-t border-[#e0eae7] px-4 py-3 text-xs sm:px-5">
+      <span className="sample-badge-float inline-flex items-center gap-2 text-[#17645d]">
+        <Icon name="check" className="h-4 w-4" />
+        {pick('Sample bill · saved totals', 'నమూనా బిల్లు · సేవ్ చేసిన మొత్తాలు')}
+      </span>
+    </div>
+  );
 });

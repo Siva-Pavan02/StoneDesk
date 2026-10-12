@@ -1,5 +1,5 @@
 import { useLanguage } from "../../i18n/LanguageContext";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { request, settingsPath } from "../../lib/pilotApi.js";
 import {
   fromDispatch,
@@ -53,6 +53,21 @@ export default function PilotApp({ user, onLogout }) {
   const analyticsRequest = useRef(0);
   // Analytics only appear on the dashboard; fetch them there, and again only after loads change.
   const analyticsStale = useRef(true);
+  const loadsStale = useRef(true);
+  const loadsKey = useRef(null);
+  const loadsRequest = useRef(0);
+  const loadsInFlight = useRef(null);
+  const [search, setSearch] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(query.trim().slice(0, 120)), 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+  const requestedPage = view.split(/[/?]/)[0];
+  const listStatus = requestedPage === 'entries' ? new URLSearchParams(view.split('?')[1] || '').get('status') : null;
+  const listParams = new URLSearchParams();
+  if (['home', 'entries'].includes(requestedPage) && search) listParams.set('q', search);
+  if (listStatus && listStatus !== 'all') listParams.set('status', listStatus);
+  const listPath = `/dispatches${listParams.size ? `?${listParams}` : ''}`;
   const admin = user.role === "Admin",
     canFinalize = user.role !== "Yard Manager";
   function navigate(target) {
@@ -62,7 +77,7 @@ export default function PilotApp({ user, onLogout }) {
     setError("");
     window.scrollTo(0, 0);
   }
-  async function refreshAnalytics() {
+  const refreshAnalytics = useCallback(async () => {
     const ticket = ++analyticsRequest.current;
     analyticsStale.current = false;
     setAnalytics((prev) => ({ ...prev, error: "", loading: true }));
@@ -78,47 +93,55 @@ export default function PilotApp({ user, onLogout }) {
           loading: false,
         }));
     }
-  }
-  async function refreshLoads() {
+  }, []);
+  const refreshLoads = useCallback(async () => {
+    if (loadsInFlight.current?.path === listPath) return;
+    const ticket = ++loadsRequest.current;
+    const promise = request(listPath);
+    loadsInFlight.current = { path: listPath, promise };
     setRefreshing(true);
     try {
-      const res = await request("/dispatches");
+      const res = await promise;
+      if (ticket !== loadsRequest.current) return;
       setLoads(res.data);
+      loadsKey.current = listPath;
+      loadsStale.current = false;
       setNextCursor(res.nextCursor);
       setHistoryError("");
       setUpdatedAt(Date.now());
     } catch (err) {
-      setHistoryError(err.message);
+      if (ticket === loadsRequest.current) setHistoryError(err.message);
     } finally {
-      setRefreshing(false);
+      if (ticket === loadsRequest.current) { loadsInFlight.current = null; setRefreshing(false); }
     }
-  }
+  }, [listPath]);
   async function loadMore() {
-    if (!nextCursor || refreshing) return;
+    if (!nextCursor || refreshing || loadsKey.current !== listPath) return;
+    const ticket = ++loadsRequest.current;
     setRefreshing(true);
     try {
-      const res = await request(`/dispatches?cursor=${nextCursor}`);
+      const res = await request(`${listPath}${listPath.includes('?') ? '&' : '?'}cursor=${encodeURIComponent(nextCursor)}`);
+      if (ticket !== loadsRequest.current) return;
       setLoads((prev) => [...prev, ...res.data]);
       setNextCursor(res.nextCursor);
     } catch (err) {
-      setHistoryError(err.message);
+      if (ticket === loadsRequest.current) setHistoryError(err.message);
     } finally {
-      setRefreshing(false);
+      if (ticket === loadsRequest.current) setRefreshing(false);
     }
   }
-  function load() {
+  const load = useCallback(() => {
     return request(settingsPath(user.organizationId))
       .then((data) => {
         setSettings(data);
         setOnboarding(!data.businessName || !data.stoneRates.length);
-        return refreshLoads();
       })
       .catch((err) => setError(err.message))
       .finally(() => setBusy(false));
-  }
+  }, [user.organizationId]);
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
   useEffect(() => {
     const changed = () => setView(route());
     window.addEventListener("hashchange", changed);
@@ -136,14 +159,14 @@ export default function PilotApp({ user, onLogout }) {
     };
   }, [settings?.id, view]);
   useEffect(() => {
-    if (!view.startsWith("entries")) return;
+    if (!view.startsWith("entries") || !settings?.businessName || !settings?.stoneRates.length) return;
     const interval = setInterval(() => {
       if (document.visibilityState !== "visible") return;
       analyticsStale.current = true;
       refreshLoads();
     }, 30000);
     return () => clearInterval(interval);
-  }, [view]);
+  }, [view, settings?.businessName, settings?.stoneRates.length, refreshLoads]);
   useEffect(() => {
     if (!view.startsWith("bill/")) return;
     const id = view.slice(5);
@@ -160,7 +183,7 @@ export default function PilotApp({ user, onLogout }) {
       cancelled = true;
     };
   }, [view, record?.id]);
-  // Lists are already refreshed by saved() after every change, so going back needs no refetch.
+  // The list refreshes on return only when a mutation marked it stale.
   function home() {
     navigate("home");
   }
@@ -211,11 +234,14 @@ export default function PilotApp({ user, onLogout }) {
     navigate("load");
   }
   function saved(data) {
+    ++loadsRequest.current;
+    loadsInFlight.current = null;
+    setRefreshing(false);
     setRecovery(null);
     setRecord(data);
     navigate(`bill/${data.id}`);
     analyticsStale.current = true;
-    refreshLoads();
+    loadsStale.current = true;
   }
   const needsSetup =
     settings && (!settings.businessName || !settings.stoneRates.length);
@@ -226,9 +252,15 @@ export default function PilotApp({ user, onLogout }) {
         : "products"
       : view.split(/[/?]/)[0];
   useEffect(() => {
+    // Settings, setup and bill pages do not use dispatch lists.
+    if (!settings || !['home', 'entries', 'load'].includes(current)) return;
+    if (loadsStale.current || loadsKey.current !== listPath ||
+      (loadsInFlight.current && loadsInFlight.current.path !== listPath)) refreshLoads();
+  }, [current, settings, listPath, refreshLoads]);
+  useEffect(() => {
     if (current === "home" && settings && analyticsStale.current)
       refreshAnalytics();
-  }, [current, settings]);
+  }, [current, settings, refreshAnalytics]);
   let content;
   const openingBill =
     view.startsWith("bill/") && record?.id !== view.slice(5) && !error;
@@ -381,7 +413,8 @@ export default function PilotApp({ user, onLogout }) {
             new URLSearchParams(view.split("?")[1] || "").get("status") ||
             "all"
           }
-          query={query}
+          query={search}
+          onFilterChange={value => navigate(value === 'all' ? 'entries' : `entries?status=${value}`)}
           onOpen={(id) => {
             // Reuse the cached full bill unless the list shows it changed since.
             const listed = loads.find((l) => l.id === id);

@@ -592,6 +592,9 @@ dispatches.get(
       50,
     );
     let rows = db.dispatches.filter((d) => !status || d.status === status);
+    if (req.query.q !== undefined && (typeof req.query.q !== 'string' || req.query.q.length > 120)) calc.bad('Search must be at most 120 characters');
+    const search = req.query.q?.trim().toLowerCase();
+    if (search) rows = rows.filter(d => [d.partyName, d.dispatchSlipNumber, d.logistics?.truckNumber, d.logistics?.buyerDestination].some(value => value?.toLowerCase().includes(search)));
     if (cursor) {
       const i = rows.findIndex((d) => d.id === cursor);
       rows = i >= 0 ? rows.slice(i + 1) : rows;

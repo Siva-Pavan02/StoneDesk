@@ -23,7 +23,8 @@ applyTo: "Frontend/src/**"
 - One click = only the calls it needs:
   - Settings are loaded once in `PilotApp`; pass them down as props with an `onChanged` callback. Do not refetch them in child screens.
   - Use the response of a POST/PUT/PATCH to update state locally instead of refetching lists.
-  - `PilotApp.saved()` already refreshes loads after any change; navigation must not trigger another refresh.
+  - `PilotApp.saved()` marks lists stale; refresh them only when a screen needs them. Settings and bill screens must not fetch load lists.
+  - Search load lists on the server with debounced `q` requests; keep pagination and status filters on the same query.
   - Bill records passed to `BillView` are complete; do not fetch them again.
 
 ## Drafts

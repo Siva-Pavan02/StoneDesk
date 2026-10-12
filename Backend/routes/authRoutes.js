@@ -11,6 +11,7 @@ const router = express.Router();
 const googleAuth = require('../utils/googleAuth');
 const deleteAuthUser = require('../utils/deleteAuthUser');
 const invitations = require('../utils/invitations');
+const { limitAccount } = require('../utils/rateLimiter');
 
 router.get('/google/config', (req, res, next) => {
   try { res.json({ url: googleAuth.configuration().url }); } catch (err) { next(err); }
@@ -18,6 +19,7 @@ router.get('/google/config', (req, res, next) => {
 router.post('/google/exchange', auth.authLimit, async (req, res, next) => {
   try {
     const identity = await googleAuth.exchange(req.body.code, req.body.verifier);
+    await limitAccount(identity.email);
     const user = await prisma.user.findUnique({ where: { supabaseUserId: identity.supabaseUserId } });
     if (!user) {
       const existing = await prisma.user.findUnique({ where: { email: identity.email } });
@@ -35,6 +37,7 @@ router.post('/google/exchange', auth.authLimit, async (req, res, next) => {
 router.post('/google/link', auth.authLimit, async (req, res, next) => {
   try {
     const identity = await googleAuth.verifiedGoogleUser(req.body.googleAccessToken);
+    await limitAccount(identity.email);
     const user = await prisma.user.findUnique({ where: { email: identity.email } });
     const password = req.body.password;
     if (typeof password !== 'string' || password.length > 128 || !await auth.verifyPassword(password, user)) return res.status(401).json({ error: 'Your StoneDesk password is incorrect.' });
@@ -72,6 +75,7 @@ function hashToken(token) {
 router.post('/signup', auth.authLimit, async (req, res, next) => {
   try {
     const google = req.body.googleAccessToken ? await googleAuth.verifiedGoogleUser(req.body.googleAccessToken) : null;
+    if (google) await limitAccount(google.email);
     const { email, password } = google
       ? { email: google.email, password: randomBytes(48).toString('base64url') }
       : credentials(req.body);

@@ -27,6 +27,7 @@ model User {
 
   sessions       Session[]
   passwordResetTokens PasswordResetToken[]
+  issuedInvitations Invitation[]
 
   @@index([organizationId])
 }
@@ -67,6 +68,24 @@ model MasterSettings {
   users             User[]
   dispatches        Dispatch[]
   loadingLists      LoadingList[]
+  invitations       Invitation[]
+}
+
+model Invitation {
+  id             String @id @default(uuid()) @db.Uuid
+  tokenHash      String @unique
+  organizationId String @db.Uuid
+  organization   MasterSettings @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  issuedById     String @db.Uuid
+  issuedBy       User @relation(fields: [issuedById], references: [id], onDelete: Cascade)
+  email          String @db.VarChar(254)
+  role           Role @default(Dispatcher)
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+  usedAt         DateTime?
+  revokedAt      DateTime?
+
+  @@index([organizationId, createdAt])
 }
 
 model LoadingList {

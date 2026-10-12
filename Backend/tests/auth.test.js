@@ -32,7 +32,8 @@ test('accounts protect all business data, activate staff, enforce roles and revo
   assert.equal((await call(`${API_PREFIX}/auth/signup`, 'POST', { email: 'owner@example.test', password, name: 'Owner' }, null, 'https://untrusted.example')).status, 403);
   const owner = await call(`${API_PREFIX}/auth/signup`, 'POST', {email:'one@example.test',name:'Owner',password,createOrganization:true,businessName:'Test Yard'});
   assert.equal(owner.status,201);
-  const staff = await call(`${API_PREFIX}/auth/signup`, 'POST', {email:'two@example.test',name:'Staff',password,organizationId:owner.data.organizationCode,role:'Admin'});
+  const invite = await require('./authHelper').invite(base, cookieOf(owner), 'two@example.test');
+  const staff = await call(`${API_PREFIX}/auth/signup`, 'POST', {email:'two@example.test',name:'Staff',password,invitationToken:invite,role:'Admin'});
   assert.equal(staff.status,201);
   assert.equal(staff.data.user.role,'Dispatcher');
   assert.equal(await prisma.user.count({where:{role:'Admin'}}),1);

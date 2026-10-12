@@ -25,10 +25,12 @@ test('organization creation, joining and membership remain isolated', async t =>
   const a = await create('alice'), b = await create('mallory');
   assert.equal(a.status,201); assert.equal(b.status,201);
   assert.notEqual(a.data.organizationCode,b.data.organizationCode);
-  const join = await call('/auth/signup', {email:'bob@example.test',name:'Bob',password,organizationId:a.data.organizationCode.toLowerCase(),role:'Admin'});
+  const invite = await call('/auth/invitations', {email:'bob@example.test',role:'Dispatcher'},a.cookie);
+  assert.equal(invite.status,201);
+  const join = await call('/auth/signup', {email:'bob@example.test',name:'Bob',password,invitationToken:invite.data.token,role:'Admin'});
   assert.equal(join.status,201); assert.equal(join.data.user.organizationId,a.data.user.organizationId); assert.equal(join.data.user.role,'Dispatcher');
-  assert.equal((await call('/auth/signup',{email:'bob@example.test',name:'Bob',password,organizationId:a.data.organizationCode})).status,409);
-  assert.equal((await call('/auth/signup',{email:'unknown@example.test',name:'Unknown',password,organizationId:'MISSING-ORG'})).status,404);
+  assert.equal((await call('/auth/signup',{email:'bob@example.test',name:'Bob',password,invitationToken:invite.data.token})).status,409);
+  assert.equal((await call('/auth/signup',{email:'unknown@example.test',name:'Unknown',password,organizationId:'MISSING-ORG'})).status,400);
   const before = await database.prisma.user.findUnique({where:{id:join.data.user.id}});
   assert.equal((await call(`/auth/users/${join.data.user.id}`,{role:'Admin',active:false},b.cookie,'PATCH')).status,404);
   const after = await database.prisma.user.findUnique({where:{id:join.data.user.id}});

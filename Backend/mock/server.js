@@ -758,7 +758,14 @@ function listFields(body) {
 }
 const findList = (id) => db.loadingLists.find((l) => l.id === id);
 const lists = express.Router();
-lists.get("/", (req, res) => res.json(db.loadingLists));
+lists.get("/", wrap((req, res) => {
+  const { loadingListQuery, summaryFields } = require('../utils/loadingListQuery');
+  const {limit,cursor,status,search}=loadingListQuery(req.query);
+  let rows=db.loadingLists.filter(l=>(!status||l.status===status)&&(!search||[l.loadingListNumber,l.buyerDestination,l.supervisor].some(v=>v?.toLowerCase().includes(search.toLowerCase())))).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)||b.id.localeCompare(a.id));
+  if(cursor){const i=rows.findIndex(l=>l.id===cursor);if(i<0)fail(400,'Invalid cursor');rows=rows.slice(i+1);}
+  const more=rows.length>limit;const data=rows.slice(0,limit).map(l=>Object.fromEntries(Object.keys(summaryFields).map(k=>[k,l[k]])));
+  res.json({data,nextCursor:more?data.at(-1).id:null});
+}));
 lists.get(
   "/:id",
   wrap((req, res) => {
@@ -771,7 +778,7 @@ lists.post(
   "/",
   wrap((req, res) => {
     const list = {
-      id: "list_" + randomUUID().slice(0, 8),
+      id: randomUUID(),
       organizationId: ORG,
       ...listFields(req.body),
       loadingListNumber: req.body.loadingListNumber

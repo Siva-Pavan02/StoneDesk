@@ -103,7 +103,7 @@ test('Multi-tenancy: Organization isolation', async (t) => {
   await t.test('Org A users cannot access Org B loading lists', async () => {
     const res = await call(`${API_PREFIX}/loading-lists`, 'GET', undefined, orgAOwnerCookie);
     assert.equal(res.status, 200);
-    assert.equal(res.data.length, 0);
+    assert.equal(res.data.data.length, 0);
     
     const orgBList = await call(`${API_PREFIX}/loading-lists`, 'POST', {
       supervisor: 'Owner B',
@@ -116,7 +116,7 @@ test('Multi-tenancy: Organization isolation', async (t) => {
     
     const res2 = await call(`${API_PREFIX}/loading-lists`, 'GET', undefined, orgAOwnerCookie);
     assert.equal(res2.status, 200);
-    assert.equal(res2.data.length, 0);
+    assert.equal(res2.data.data.length, 0);
   });
   
   await t.test('Org A staff cannot access Org B data', async () => {

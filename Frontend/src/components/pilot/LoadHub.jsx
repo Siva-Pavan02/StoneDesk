@@ -10,6 +10,7 @@ export default function LoadHub({
   view,
   status = "all",
   query,
+  onFilterChange,
   onOpen,
   onRefresh,
   onLoadMore,
@@ -45,6 +46,7 @@ export default function LoadHub({
   }
   function setFilter(value) {
     setFilterState(value);
+    if (onFilterChange) return onFilterChange(value);
     window.history.replaceState(
       null,
       "",

@@ -251,13 +251,14 @@ export default function WorkspaceShell({
               ref={searchInput}
               id="global-search"
               type="search"
+                maxLength={120}
               className="input"
               value={query}
               onChange={(e) => {
                 setQuery(e.target.value);
                 if (
                   e.target.value.trim() &&
-                  !["home", "entries", "monitor", "invoices"].includes(view)
+                    view !== "entries"
                 )
                   navigate("entries");
               }}

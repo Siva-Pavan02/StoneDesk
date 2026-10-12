@@ -136,7 +136,7 @@ router.get('/session', async (req, res, next) => {
   res.set('Cache-Control', 'private, no-store');
   try {
     const user = await auth.readSession(req);
-    res.json({ user: user ? auth.publicUser(user) : null });
+    res.json({ user: user?.active ? auth.publicUser(user) : null });
   } catch (err) { next(err); }
 });
 router.post('/password', auth.authLimit, auth.requireSession, async (req, res, next) => {
@@ -211,7 +211,7 @@ router.post('/forgot-password', auth.authLimit, async (req, res, next) => {
     }
     
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
+    if (!user || !user.active) {
       return res.json({ ok: true });
     }
     
@@ -258,7 +258,7 @@ router.post('/reset-password', auth.authLimit, async (req, res, next) => {
       include: { user: true }
     });
     
-    if (!resetToken || resetToken.user.email !== email) {
+    if (!resetToken || !resetToken.user.active || resetToken.user.email !== email) {
       return res.status(400).json({ error: 'Invalid or expired reset token' });
     }
     

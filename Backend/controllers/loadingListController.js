@@ -2,6 +2,7 @@ const prisma = require('../utils/prisma');
 const { randomUUID } = require('node:crypto');
 const { text, number, bad } = require('../utils/pilotCalculations');
 const { round2 } = require('../utils/dispatchCalculations');
+const { loadingListQuery, summaryFields } = require('../utils/loadingListQuery');
 function fields(body) {
   const data = {};
   for (const key of ['supervisor', 'buyerDestination', 'stoneType', 'finish']) data[key] = text(body[key], key);
@@ -43,8 +44,14 @@ exports.createLoadingList = async (req, res, next) => {
 
 exports.getLoadingLists = async (req, res, next) => {
   try {
-    const lists = await prisma.loadingList.findMany({ where: { organizationId: req.user.organizationId }, orderBy: { createdAt: 'desc' } });
-    res.status(200).json(lists);
+    const { limit, cursor, status, search } = loadingListQuery(req.query);
+    const where = { organizationId: req.user.organizationId, ...(status ? { status } : {}) };
+    if (search) where.OR = ['loadingListNumber', 'buyerDestination', 'supervisor'].map(field => ({ [field]: { contains: search, mode: 'insensitive' } }));
+    if (cursor && !await prisma.loadingList.findFirst({ where: { ...where, id: cursor }, select: { id: true } })) bad('Invalid cursor');
+    const lists = await prisma.loadingList.findMany({ where, select: summaryFields, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: limit + 1, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}) });
+    const more = lists.length > limit;
+    if (more) lists.pop();
+    res.status(200).json({ data: lists, nextCursor: more ? lists.at(-1).id : null });
   } catch (error) {
     next(error);
   }

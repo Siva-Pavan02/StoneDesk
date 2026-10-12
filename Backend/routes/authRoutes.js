@@ -233,7 +233,7 @@ router.post('/forgot-password', auth.authLimit, async (req, res, next) => {
     const appOrigin = process.env.APP_ORIGIN || `${req.protocol}://${req.get('host') || 'localhost:5000'}`;
     const resetUrl = `${appOrigin}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
     
-    const settings = await prisma.masterSettings.findUnique({ where: { id: user.organizationId } });
+    const settings = await prisma.masterSettings.findUnique({ where: { id: user.organizationId }, select: { businessName: true } });
     
     try {
       await sendPasswordResetEmail(email, resetUrl, settings?.businessName);

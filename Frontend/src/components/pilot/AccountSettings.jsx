@@ -4,6 +4,7 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import { request } from '../../lib/pilotApi.js';
 import { Button, ErrorMessage } from './Controls.jsx';
 import Icon from './Icon.jsx';
+import Invitations from './Invitations.jsx';
 
 const ROLES = [['Admin', 'అడ్మిన్'], ['Yard Manager', 'యార్డ్ మేనేజర్'], ['Dispatcher', 'డిస్పాచర్']];
 // Admin is the workspace owner and cannot be edited afterwards, so it is not offered for team members.
@@ -152,7 +153,7 @@ export default function AccountSettings({ settings, user, section, navigate, onD
     <h1 className="st-title">{pick('Settings', 'సెట్టింగ్స్')}</h1>
 
     <section id="settings-general" className="st-section" aria-labelledby="settings-general-heading">
-      {head('general', 'Organization', 'సంస్థ', 'Share the ID only with your team. They pick Join organization when signing up. It does not expire.', 'ఈ ఐడీని మీ బృందంతో మాత్రమే పంచుకోండి. ఖాతా సృష్టించేటప్పుడు సంస్థలో చేరండి ఎంచుకోవచ్చు. గడువు లేదు.')}
+      {head('general', 'Organization', 'సంస్థ', 'This ID identifies your business. New members need a private invitation from an administrator.', 'ఈ ఐడీ మీ వ్యాపారాన్ని గుర్తిస్తుంది. కొత్త సభ్యులకు అడ్మిన్ నుండి వ్యక్తిగత ఆహ్వానం అవసరం.')}
       <div className="st-card">
       <dl className="st-rows">
         <div className="st-row">
@@ -179,6 +180,7 @@ export default function AccountSettings({ settings, user, section, navigate, onD
     {admin && <section id="settings-team" className="st-section" aria-labelledby="settings-team-heading">
       {head('team', 'Team', 'బృందం', 'Yard Managers prepare loads. Dispatchers can also finalize and mark deliveries.', 'యార్డ్ మేనేజర్లు లోడ్లు సిద్ధం చేస్తారు. డిస్పాచర్లు ఖరారు చేసి డెలివరీ నమోదు చేయవచ్చు.',
         <button type="button" className="st-link" disabled={refreshing} aria-busy={refreshing || undefined} onClick={refreshTeam}>{refreshing ? pick('Refreshing…', 'రిఫ్రెష్ అవుతోంది…') : pick('Refresh', 'రిఫ్రెష్')}</button>)}
+      <Invitations />
       {loadingTeam && users.length === 0 && <p role="status" className="st-muted">{pick('Loading team…', 'బృందం లోడ్ అవుతోంది…')}</p>}
       {users.length > 0 && <ul className="st-rows st-card">
         {users.map(member => <li key={member.id} className="st-row st-member">

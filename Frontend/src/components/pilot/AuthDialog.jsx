@@ -38,7 +38,7 @@ export default function AuthDialog({ mode, onClose, onSignedIn, onMode, googleSi
         <fieldset className="auth-mode">
           <legend className="auth-mode-legend">{pick('How are you joining?', 'ఎలా చేరుతున్నారు?')}</legend>
           {[
-            [false, 'Join organization', 'సంస్థలో చేరండి', 'Use the organization ID from your administrator.', 'మీ అడ్మిన్ ఇచ్చిన సంస్థ ఐడీతో చేరండి.'],
+            [false, 'Join organization', 'సంస్థలో చేరండి', 'Use the private invitation code from your administrator.', 'మీ అడ్మిన్ ఇచ్చిన ఆహ్వాన కోడ్‌తో చేరండి.'],
             [true, 'Create new workspace', 'కొత్త వర్క్‌స్పేస్ సృష్టించండి', 'Set up your business. You will be the administrator.', 'మీ వ్యాపారాన్ని సెటప్ చేయండి. మీరు అడ్మిన్ అవుతారు.']
           ].map(([value, en, te, detailEn, detailTe]) => (
             <label key={en} className="auth-mode-option">
@@ -55,7 +55,7 @@ export default function AuthDialog({ mode, onClose, onSignedIn, onMode, googleSi
       <form className="space-y-4" onSubmit={submit}>
         <ErrorMessage error={error || initialError} />
         {signup && <Field name="name" en="Your name" te="మీ పేరు" autoComplete="name" required maxLength={120} />}
-        {signup && (createOrganization ? <><Field name="businessName" en="Business name" te="వ్యాపారం పేరు" required maxLength={120} autoComplete="organization" /><p className="text-sm text-gray-600">{pick('We will create a short organization ID for your team to join.', 'మీ బృందం చేరడానికి చిన్న సంస్థ ఐడీని సృష్టిస్తాము.')}</p></> : <Field name="organizationId" en="Organization ID" te="సంస్థ ఐడీ" required maxLength={50} pattern="[a-zA-Z0-9-]+" autoCapitalize="characters" autoCorrect="off" spellCheck={false} placeholder="STONE-YARD-7K2M4N…" title={pick('Enter the ID shared by your administrator', 'మీ అడ్మిన్ పంచుకున్న ఐడీని నమోదు చేయండి')} />)}
+        {signup && (createOrganization ? <><Field name="businessName" en="Business name" te="వ్యాపారం పేరు" required maxLength={120} autoComplete="organization" /><p className="text-sm text-gray-600">{pick('Invite your team from Settings after creating your workspace.', 'మీ బృందం చేరడానికి చిన్న సంస్థ ఐడీని సృష్టిస్తాము.')}</p></> : <Field name="invitationToken" en="Invitation code" te="ఆహ్వాన కోడ్" required minLength={43} maxLength={43} pattern="[A-Za-z0-9_-]{43}" autoCapitalize="none" autoCorrect="off" spellCheck={false} />)}
         {googleSignup ? <p className="break-all text-sm">{pick('Google account:', 'Google ఖాతా:')} {googleSignup.email}</p> : <Field name="email" en="Email address" te="ఇమెయిల్ చిరునామా" type="email" autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={254} />}
         {googleSignup?.needsLink && <p className="text-sm text-gray-700">{pick('Confirm your StoneDesk password once to connect Google. Future Google sign-ins will not need it.', 'Googleను అనుసంధానించడానికి ఒకసారి మీ StoneDesk పాస్‌వర్డ్‌ను నిర్ధారించండి.')}</p>}
         {(!googleSignup || googleSignup.needsLink) && <>

@@ -5,7 +5,7 @@ const express = require("express");
 const cors = require("cors");
 const fs = require("node:fs");
 const path = require("node:path");
-const { randomUUID } = require("node:crypto");
+const { randomUUID, randomBytes, createHash } = require("node:crypto");
 const zxcvbn = require("zxcvbn");
 const calc = require("../utils/pilotCalculations");
 const { round2 } = require("../utils/dispatchCalculations");
@@ -114,6 +114,8 @@ function load() {
   }
 }
 const db = load();
+db.invitations ||= [];
+const inviteHash = token => createHash("sha256").update(token).digest("hex");
 function save() {
   fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
 }
@@ -201,10 +203,7 @@ api.post(
   wrap((req, res) => {
     const { email } = credentials(req.body);
     const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
-    const orgId =
-      typeof req.body.organizationId === "string"
-        ? req.body.organizationId.trim()
-        : "";
+    const token = req.body.invitationToken;
     const create =
       req.body.createOrganization === true ||
       req.body.createOrganization === "true";
@@ -216,11 +215,12 @@ api.post(
       fail(400, "Enter your name (up to 120 characters)");
     if (create && (!businessName || businessName.length > 120))
       fail(400, "Enter your business name (up to 120 characters)");
-    if (!create && !/^[a-zA-Z0-9-]{1,50}$/.test(orgId))
-      fail(400, "Enter the organization ID shared by your administrator");
+    if (!create && (typeof token !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(token))) fail(400, "Enter a valid invitation code");
     if (db.users.some((u) => u.email === email))
       fail(409, "Unable to create this account. Try signing in.");
     let target = db.settings;
+    const invitation = !create && db.invitations.find(i => i.tokenHash === inviteHash(token) && i.email === email && !i.usedAt && !i.revokedAt && new Date(i.expiresAt) > new Date() && db.users.some(u => u.id === i.issuedById && u.active && u.role === "Admin"));
+    if (!create && !invitation) fail(400, "Invitation is invalid, expired, used, or does not match your email.");
     if (create) {
       // The mock holds a single organization; a new workspace renames and resets it.
       Object.assign(db.settings, {
@@ -232,22 +232,18 @@ api.post(
       });
       db.dispatches = [];
       db.loadingLists = [];
-    } else if (orgId.toLowerCase() !== db.settings.organizationId.toLowerCase())
-      fail(
-        404,
-        "Organization ID is invalid or unavailable. Check it with your administrator.",
-      );
+    }
     const user = {
       id: "user_" + randomUUID().slice(0, 8),
       name,
       email,
-      role: create ? "Admin" : "Dispatcher",
+      role: create ? "Admin" : invitation.role,
       active: true,
       organizationId: target.id,
       createdAt: now(),
     };
     if (create) db.users = [user];
-    else db.users.push(user);
+    else { db.users.push(user); invitation.usedAt = now(); }
     session = user.id;
     save();
     res

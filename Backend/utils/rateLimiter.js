@@ -1,76 +1,59 @@
 const { Ratelimit } = require('@upstash/ratelimit');
 const { Redis } = require('@upstash/redis');
-
+const { createHash } = require('node:crypto');
 let ratelimit = null;
 let hasWarned = false;
-const requestKey = req => `${req.ip}:${String(req.route?.path || req.path).toLowerCase().replace(/\/+$/, '') || '/'}`;
-
+const route = req => String(req.route?.path || req.path).toLowerCase().replace(/\/+$/, '') || '/';
+const unavailable = () => Object.assign(new Error('Sign-in protection is temporarily unavailable. Please retry.'), { status: 503, safeAuthError: true });
 function getRatelimiter() {
   if (ratelimit) return ratelimit;
-  
   const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
   const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
-  
-  if (!url || !token) {
-    if (!hasWarned && process.env.NODE_ENV !== 'test') {
-      console.warn('Upstash Redis credentials not configured, falling back to in-memory rate limiter');
-      hasWarned = true;
-    }
-    return null;
-  }
-  
-  const redis = new Redis({ url, token });
-  ratelimit = new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(20, '15 m'),
-    analytics: true,
-    prefix: 'stonedesk:ratelimit'
-  });
-  
+  if (!url || !token) return null;
+  ratelimit = new Ratelimit({ redis: new Redis({ url, token }), limiter: Ratelimit.slidingWindow(20, '15 m'), analytics: false, prefix: 'stonedesk:ratelimit', timeout: 3000 });
   return ratelimit;
 }
-
-function authLimit(req, res, next) {
-  let limiter;
-  try { limiter = getRatelimiter(); }
-  catch {
-    console.error('Rate limiter initialization failed; using local rate limits. Check Upstash configuration.');
-    return fallbackRateLimit(req, res, next);
-  }
-  
-  if (!limiter) {
-    return fallbackRateLimit(req, res, next);
-  }
-  
-  const key = requestKey(req);
-  
-  Promise.resolve().then(() => limiter.limit(key)).then(({ success, limit, remaining, reset }) => {
-    res.set('X-RateLimit-Limit', limit);
-    res.set('X-RateLimit-Remaining', remaining);
-    res.set('X-RateLimit-Reset', Math.ceil(reset / 1000));
-    
-    if (!success) {
-      res.set('Retry-After', '900');
-      return res.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' });
-    }
-    next();
-  }).catch(() => {
-    console.error('Rate limiter request failed; using local rate limits.');
-    fallbackRateLimit(req, res, next);
-  });
-}
-
 const attempts = new Map();
-function fallbackRateLimit(req, res, next) {
+function localLimit(key) {
   const now = Date.now();
-  for (const [key, value] of attempts) if (value.until <= now) attempts.delete(key);
-  const key = requestKey(req);
-  const entry = attempts.get(key) || { count: 0, until: now + 15 * 60 * 1000 };
-  if (++entry.count > 20 || attempts.size >= 10000) {
-    res.set('Retry-After', '900');
-    return res.status(429).json({ error: 'Too many attempts. Try again in 15 minutes.' });
-  }
-  attempts.set(key, entry); next();
+  for (const [k, value] of attempts) if (value.until <= now) attempts.delete(k);
+  const entry = attempts.get(key) || { count: 0, until: now + 900000 };
+  const success = ++entry.count <= 20 && (attempts.has(key) || attempts.size < 10000);
+  if (success) attempts.set(key, entry);
+  return { success, limit: 20, remaining: Math.max(0, 20 - entry.count), reset: entry.until };
 }
-
-module.exports = { authLimit };
+async function limit(key) {
+  try {
+    const limiter = getRatelimiter();
+    if (!limiter) throw unavailable();
+    const result = await limiter.limit(key);
+    if (result.reason === 'timeout') throw unavailable();
+    return result;
+  } catch {
+    if (!hasWarned) { console.error('Distributed authentication rate limiting unavailable. Check Upstash configuration.'); hasWarned = true; }
+    if (process.env.NODE_ENV === 'production' || process.env.VERCEL) throw unavailable();
+    return localLimit(key);
+  }
+}
+function rejected() { return Object.assign(new Error('Too many attempts. Try again in 15 minutes.'), { status: 429 }); }
+async function limitAccount(email) {
+  if (typeof email !== 'string' || email.length > 254) return;
+  const key = createHash('sha256').update(email.trim().toLowerCase()).digest('hex');
+  if (!(await limit('account:' + key)).success) throw rejected();
+}
+async function authLimit(req, res, next) {
+  try {
+    const result = await limit('ip:' + req.ip + ':' + route(req));
+    res.set('X-RateLimit-Limit', result.limit);
+    res.set('X-RateLimit-Remaining', result.remaining);
+    res.set('X-RateLimit-Reset', Math.ceil(result.reset / 1000));
+    if (!result.success) throw rejected();
+    // Google account limits use the verified provider identity inside its handlers.
+    if (['/login', '/signup', '/forgot-password', '/reset-password'].includes(route(req)) && !req.body?.googleAccessToken) await limitAccount(req.body?.email);
+    next();
+  } catch (error) {
+    res.set('Retry-After', error.status === 429 ? '900' : '30');
+    res.status(error.status || 503).json({ error: error.message });
+  }
+}
+module.exports = { authLimit, limitAccount };

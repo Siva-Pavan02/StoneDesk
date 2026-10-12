@@ -49,7 +49,7 @@ async function authLimit(req, res, next) {
     res.set('X-RateLimit-Reset', Math.ceil(result.reset / 1000));
     if (!result.success) throw rejected();
     // Google account limits use the verified provider identity inside its handlers.
-    if (['/login', '/signup', '/forgot-password', '/reset-password'].includes(route(req)) && !req.body?.googleAccessToken) await limitAccount(req.body?.email);
+    if (['/login', '/signup', '/forgot-password', '/reset-password'].includes(route(req)) && !(route(req) === '/signup' && req.body?.googleAccessToken)) await limitAccount(req.body?.email);
     next();
   } catch (error) {
     res.set('Retry-After', error.status === 429 ? '900' : '30');

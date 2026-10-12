@@ -4,7 +4,23 @@ export function logoUrl(path) {
   return path ? `${API_BASE.replace(/\/api\/?$/, '')}${path}` : undefined;
 }
 
-export async function request(path, { method = 'GET', body, file } = {}) {
+const pendingReads = new Map();
+
+export function request(path, options = {}) {
+  const method = (options.method || 'GET').toUpperCase();
+  if (method !== 'GET') {
+    pendingReads.clear();
+    return sendRequest(path, { ...options, method });
+  }
+  if (pendingReads.has(path)) return pendingReads.get(path);
+  const promise = sendRequest(path, options).finally(() => {
+    if (pendingReads.get(path) === promise) pendingReads.delete(path);
+  });
+  pendingReads.set(path, promise);
+  return promise;
+}
+
+async function sendRequest(path, { method = 'GET', body, file } = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
     method,
     credentials: 'include',

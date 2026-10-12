@@ -157,6 +157,14 @@ exports.list = async (req, res, next) => {
     const filter = { organizationId: req.user.organizationId };
     if (req.query.status && !['Draft', 'Dispatched', 'Delivered'].includes(req.query.status)) calc.bad('Invalid status');
     if (req.query.status) filter.status = req.query.status;
+    if (req.query.q !== undefined && (typeof req.query.q !== 'string' || req.query.q.length > 120)) calc.bad('Search must be at most 120 characters');
+    const search = req.query.q?.trim();
+    if (search) filter.OR = [
+      { partyName: { contains: search, mode: 'insensitive' } },
+      { dispatchSlipNumber: { contains: search, mode: 'insensitive' } },
+      { logistics: { path: ['truckNumber'], string_contains: search, mode: 'insensitive' } },
+      { logistics: { path: ['buyerDestination'], string_contains: search, mode: 'insensitive' } }
+    ];
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || DEFAULT_LIST_LIMIT, 1), MAX_LIST_LIMIT);
     const cursor = req.query.cursor;
     const dispatches = await prisma.dispatch.findMany({

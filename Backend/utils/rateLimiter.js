@@ -3,6 +3,7 @@ const { Redis } = require('@upstash/redis');
 
 let ratelimit = null;
 let hasWarned = false;
+const requestKey = req => `${req.ip}:${String(req.route?.path || req.path).toLowerCase().replace(/\/+$/, '') || '/'}`;
 
 function getRatelimiter() {
   if (ratelimit) return ratelimit;
@@ -41,7 +42,7 @@ function authLimit(req, res, next) {
     return fallbackRateLimit(req, res, next);
   }
   
-  const key = `${req.ip}:${req.path}`;
+  const key = requestKey(req);
   
   Promise.resolve().then(() => limiter.limit(key)).then(({ success, limit, remaining, reset }) => {
     res.set('X-RateLimit-Limit', limit);
@@ -63,7 +64,7 @@ const attempts = new Map();
 function fallbackRateLimit(req, res, next) {
   const now = Date.now();
   for (const [key, value] of attempts) if (value.until <= now) attempts.delete(key);
-  const key = `${req.ip}:${req.path}`;
+  const key = requestKey(req);
   const entry = attempts.get(key) || { count: 0, until: now + 15 * 60 * 1000 };
   if (++entry.count > 20 || attempts.size >= 10000) {
     res.set('Retry-After', '900');

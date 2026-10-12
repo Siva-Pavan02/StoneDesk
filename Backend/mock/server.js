@@ -123,7 +123,7 @@ save();
 
 // The mock has one signed-in session. Logout makes /auth/me return 401 until login/signup.
 let session = db.users[0].id;
-const currentUser = () => db.users.find((u) => u.id === session);
+const currentUser = () => db.users.find((u) => u.id === session && u.active);
 const publicUser = (u) => ({
   id: u.id,
   name: u.name,

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { getMasterSettings } from '../lib/api';
-import { createLoadingList, updateLoadingList, fetchLoadingLists } from '../lib/loadingListApi';
+import { createLoadingList, updateLoadingList, fetchLoadingLists, fetchLoadingList } from '../lib/loadingListApi';
 import { parseFraction, decimalToFraction } from '../utils/fractionParser';
 import FractionChips from './dispatch/FractionChips';
 import { generateLoadingListPdf } from '../utils/generateLoadingListPdf';
@@ -45,20 +45,36 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
   const [savedLists, setSavedLists] = useState([]);
   const [activeListId, setActiveListId] = useState(null);
 
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyQuery, setHistoryQuery] = useState('');
+  const [nextCursor, setNextCursor] = useState(null);
+  const [historyBusy, setHistoryBusy] = useState(false);
+  const [opening, setOpening] = useState(false);
+  const historyTicket = useRef(0);
+  const detailTicket = useRef(0);
   useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
-    try {
-      // The workspace already holds settings; only fetch them when used standalone.
-      if (!providedSettings) setSettings(await getMasterSettings(organizationId));
-      const lists = await fetchLoadingLists();
-      setSavedLists(lists);
-    } catch (e) {
-      setError(e.message);
-    }
-  };
+    let active = true;
+    if (providedSettings) setSettings(providedSettings);
+    else getMasterSettings(organizationId).then(data => { if (active) setSettings(data); }).catch(e => { if (active) setError(e.message); });
+    return () => { active = false; };
+  }, [organizationId, providedSettings]);
+  useEffect(() => { const timer = setTimeout(() => setHistoryQuery(historySearch.trim()), 300); return () => clearTimeout(timer); }, [historySearch]);
+  useEffect(() => {
+    const ticket = ++historyTicket.current; setHistoryBusy(true);
+    fetchLoadingLists(historyQuery ? { q: historyQuery } : {}).then(result => {
+      if (ticket === historyTicket.current) { setSavedLists(result.data); setNextCursor(result.nextCursor); }
+    }).catch(e => { if (ticket === historyTicket.current) setError(e.message); }).finally(() => { if (ticket === historyTicket.current) setHistoryBusy(false); });
+    return () => { historyTicket.current++; };
+  }, [historyQuery]);
+  useEffect(() => () => { detailTicket.current++; }, []);
+  async function moreLists() {
+    if (historyBusy || !nextCursor) return;
+    const ticket = ++historyTicket.current; setHistoryBusy(true);
+    try { const result = await fetchLoadingLists({ ...(historyQuery ? { q: historyQuery } : {}), cursor: nextCursor });
+      if (ticket === historyTicket.current) { setSavedLists(rows => [...rows, ...result.data]); setNextCursor(result.nextCursor); }
+    } catch(e) { if (ticket === historyTicket.current) setError(e.message); }
+    finally { if (ticket === historyTicket.current) setHistoryBusy(false); }
+  }
 
   const handleAddRequirement = () => {
     const pLen = parseFraction(reqLen);
@@ -175,7 +191,7 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
   };
 
   const handleSaveList = async () => {
-    if (savingLock.current) return;
+    if (savingLock.current || opening) return;
     if (!supervisor || !buyerDestination || !stoneType || !finish) {
       alert('Please fill out all basic details');
       return;
@@ -210,6 +226,7 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
   };
 
   const handleGeneratePdf = () => {
+    if (opening) return;
     const listData = {
       loadingListNumber: loadingListNumber || `LL-${Date.now()}`,
       date: exportDate(),
@@ -223,6 +240,7 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
   };
 
   const handleGenerateExcel = () => {
+    if (opening) return;
     const listData = {
       loadingListNumber: loadingListNumber || `LL-${Date.now()}`,
       date: exportDate(),
@@ -254,7 +272,7 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
             <h1 className="truncate font-bold text-lg text-slate-800">{t('loadingList') || 'Loading List'}</h1>
           </div>
           <div className="flex items-center gap-2">
-          <button className="px-4 py-1.5 bg-teal-700 text-white rounded-lg font-semibold text-sm" disabled={saving} onClick={handleSaveList}>
+          <button className="px-4 py-1.5 bg-teal-700 text-white rounded-lg font-semibold text-sm" disabled={saving || opening} onClick={handleSaveList}>
             {t('save') || 'Save'}
           </button></div>
         </div>
@@ -262,17 +280,29 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
 
       <Content className={embedded ? 'space-y-4' : 'pt-20 px-4 max-w-xl mx-auto space-y-4'}>
         {error && <p role="alert" className="mb-4 rounded-xl border-2 border-red-300 bg-white p-4 text-red-800">{error}</p>}
+        {opening && <p role="status">{pick('Opening loading list…', 'లోడింగ్ జాబితా తెరుస్తోంది…')}</p>}
+        <fieldset disabled={opening} className="space-y-4 min-w-0">
+        <Field en="Search loading lists" te="లోడింగ్ జాబితాలు వెతకండి" type="search" maxLength={120} value={historySearch} onChange={e => setHistorySearch(e.target.value)} />
         <Field en="Saved loading lists" te="సేవ్ చేసిన లోడింగ్ జాబితాలు">
-          <select className="input rounded-xl" disabled={saving} value={activeListId || ''} onChange={event => {
+          <select className="input rounded-xl" disabled={saving || opening || historyBusy} value={activeListId || ''} onChange={async event => {
             if (!window.confirm(pick('Replace the current form with this loading list?', 'ప్రస్తుత వివరాలను మార్చాలా?'))) return;
-            const list = savedLists.find(item => item.id === event.target.value);
+            const id = event.target.value;
+            const ticket = ++detailTicket.current; setOpening(true);
+            try {
+            const list = id ? await fetchLoadingList(id) : null;
+            if (ticket !== detailTicket.current) return;
             setActiveListId(list?.id || null); setLoadingListNumber(list?.loadingListNumber || '');
             setSupervisor(list?.supervisor || ''); setBuyerDestination(list?.buyerDestination || '');
             setStoneType(list?.stoneType || ''); setFinish(list?.finish || '');
             setRequirements(list ? structuredClone(list.requirements) : []); setEditIndex(null); setActiveCustomIdx(null); setError('');
+            } catch(e) { if (ticket === detailTicket.current) setError(e.message); }
+            finally { if (ticket === detailTicket.current) setOpening(false); }
           }}><option value="">{pick('New loading list', 'కొత్త లోడింగ్ జాబితా')}</option>{savedLists.map(list => <option key={list.id} value={list.id}>{list.loadingListNumber} · {list.buyerDestination}</option>)}</select>
         </Field>
         
+        {historyBusy && <p role="status">{pick('Loading lists…', 'జాబితాలు లోడ్ అవుతున్నాయి…')}</p>}
+        {nextCursor && <Button onClick={moreLists} disabled={historyBusy} en="Load more lists" te="మరిన్ని జాబితాలు" />}
+        {!historyBusy && savedLists.length === 0 && <p>{pick('No saved lists match.', 'సేవ్ చేసిన జాబితాలు లేవు.')}</p>}
         {/* Basic Details */}
         <Card className="gap-4">
           <h2 className="section-heading text-sm font-semibold">{pick('Loading list details', 'లోడింగ్ జాబితా వివరాలు')}</h2>
@@ -429,13 +459,14 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
             {loadingListNumber && <span className="text-sm text-gray-600 break-all">{loadingListNumber}</span>}
           </div>
           <div className="action-row flex flex-wrap gap-2">
-            {embedded && <Button primary en={saving ? pick('Saving…', 'సేవ్ అవుతోంది…') : t('save')} te={saving ? pick('Saving…', 'సేవ్ అవుతోంది…') : t('save')} disabled={saving} onClick={handleSaveList} />}
+            {embedded && <Button primary en={saving ? pick('Saving…', 'సేవ్ అవుతోంది…') : t('save')} te={saving ? pick('Saving…', 'సేవ్ అవుతోంది…') : t('save')} disabled={saving || opening} onClick={handleSaveList} />}
             {requirements.length > 0 && <>
               <Button en="Download PDF" te="PDF డౌన్‌లోడ్" onClick={handleGeneratePdf} />
               <Button en="Download Excel" te="Excel డౌన్‌లోడ్" onClick={handleGenerateExcel} />
             </>}
           </div>
         </Card>}
+        </fieldset>
       </Content>
     </div>
   );

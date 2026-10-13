@@ -20,6 +20,9 @@ app.use(require('./utils/securityHeaders'));
 if (isProduction) {
   if (!process.env.APP_ORIGIN) throw new Error('APP_ORIGIN must be set in production');
 }
+if (process.env.VERCEL && (process.env.LOGO_STORAGE !== 'supabase' || process.env.SERVE_FRONTEND === 'true')) {
+  throw new Error('Vercel backend requires Supabase logo storage and a separate frontend project');
+}
 
 // Reject untrusted origins before preflight handling; allowed OPTIONS requests
 // end in cors(), before any session or role middleware runs.
@@ -54,7 +57,7 @@ app.use('/uploads', auth.requireSession, auth.requireActive, require('./utils/re
   maxAge: 0, setHeaders: res => { res.setHeader('X-Content-Type-Options', 'nosniff'); res.setHeader('Cache-Control', 'private, no-store'); }
 }));
 
-app.get('/healthz', (req, res) => res.json({ ok: true }));
+app.get(['/healthz', '/api/healthz'], (req, res) => res.json({ ok: true }));
 if (process.env.SERVE_FRONTEND === 'true') {
   const path = require('node:path');
   const directory = path.join(__dirname, '../Frontend/dist');
@@ -69,7 +72,7 @@ if (process.env.SERVE_FRONTEND === 'true') {
 
 app.use(require('./utils/errorHandler'));
 
-if (process.env.NODE_ENV !== 'test') {
+if (require.main === module && process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
   const host = process.env.HOST || (isProduction ? '0.0.0.0' : '127.0.0.1');
   prisma.$connect().then(() => {
     const server = app.listen(PORT, host, () => console.log(`Server running on port ${PORT}`));

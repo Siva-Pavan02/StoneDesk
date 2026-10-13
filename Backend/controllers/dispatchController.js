@@ -27,7 +27,7 @@ exports.createDraft = async (req, res, next) => {
     // Parallelize: check for existing dispatch + fetch settings simultaneously
     const [existing, settings] = await Promise.all([
       clientRequestId ? prisma.dispatch.findFirst({ where: { clientRequestId, organizationId: req.user.organizationId } }) : null,
-      prisma.masterSettings.findUnique({ where: { id: req.user.organizationId } })
+      prisma.masterSettings.findUnique({ where: { id: req.user.organizationId }, select: { businessName: true, stoneRates: true, defaultRoyaltyFee: true } })
     ]);
     if (existing) return res.json(existing);
     const metadata = details(req.body);
@@ -83,7 +83,7 @@ exports.finalizeDispatch = async (req, res, next) => {
     // Parallelize: fetch dispatch and settings simultaneously
     const [dispatch, settings] = await Promise.all([
       prisma.dispatch.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } }),
-      prisma.masterSettings.findUnique({ where: { id: req.user.organizationId } })
+      prisma.masterSettings.findUnique({ where: { id: req.user.organizationId }, select: { businessName: true, address: true, phone: true, logoPath: true } })
     ]);
     if (!dispatch) return res.status(404).json({ error: 'Not found' });
     if (dispatch.status !== 'Draft') return res.json(dispatch);

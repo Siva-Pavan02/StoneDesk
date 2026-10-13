@@ -10,6 +10,8 @@ const { auditLog } = require('../utils/auditLog');
 const router = express.Router();
 const googleAuth = require('../utils/googleAuth');
 const deleteAuthUser = require('../utils/deleteAuthUser');
+const invitations = require('../utils/invitations');
+const { limitAccount } = require('../utils/rateLimiter');
 
 router.get('/google/config', (req, res, next) => {
   try { res.json({ url: googleAuth.configuration().url }); } catch (err) { next(err); }
@@ -17,6 +19,7 @@ router.get('/google/config', (req, res, next) => {
 router.post('/google/exchange', auth.authLimit, async (req, res, next) => {
   try {
     const identity = await googleAuth.exchange(req.body.code, req.body.verifier);
+    await limitAccount(identity.email);
     const user = await prisma.user.findUnique({ where: { supabaseUserId: identity.supabaseUserId } });
     if (!user) {
       const existing = await prisma.user.findUnique({ where: { email: identity.email } });
@@ -34,6 +37,7 @@ router.post('/google/exchange', auth.authLimit, async (req, res, next) => {
 router.post('/google/link', auth.authLimit, async (req, res, next) => {
   try {
     const identity = await googleAuth.verifiedGoogleUser(req.body.googleAccessToken);
+    await limitAccount(identity.email);
     const user = await prisma.user.findUnique({ where: { email: identity.email } });
     const password = req.body.password;
     if (typeof password !== 'string' || password.length > 128 || !await auth.verifyPassword(password, user)) return res.status(401).json({ error: 'Your StoneDesk password is incorrect.' });
@@ -71,17 +75,17 @@ function hashToken(token) {
 router.post('/signup', auth.authLimit, async (req, res, next) => {
   try {
     const google = req.body.googleAccessToken ? await googleAuth.verifiedGoogleUser(req.body.googleAccessToken) : null;
+    if (google) await limitAccount(google.email);
     const { email, password } = google
       ? { email: google.email, password: randomBytes(48).toString('base64url') }
       : credentials(req.body);
     const name = typeof req.body.name === 'string' ? req.body.name.trim() : '';
-    const organizationId = typeof req.body.organizationId === 'string' ? req.body.organizationId.trim() : '';
     const createOrganization = req.body.createOrganization === true || req.body.createOrganization === 'true';
     const businessName = typeof req.body.businessName === 'string' ? req.body.businessName.trim() : '';
 
     if (!name || name.length > 120) return res.status(400).json({ error: 'Enter your name (up to 120 characters)' });
     if (createOrganization && (!businessName || businessName.length > 120)) return res.status(400).json({ error: 'Enter your business name (up to 120 characters)' });
-    if (!createOrganization && !/^[a-zA-Z0-9-]{1,50}$/.test(organizationId)) return res.status(400).json({ error: 'Enter the organization ID shared by your administrator' });
+    if (!createOrganization && !req.body.invitationToken) return res.status(400).json({ error: 'Enter the invitation code shared by your administrator' });
     
     // Check if the user already exists to fail fast
     if (await prisma.user.findUnique({ where: { email } })) {
@@ -106,12 +110,7 @@ router.post('/signup', auth.authLimit, async (req, res, next) => {
         }
       }
     } else {
-      // Join existing organization
-      const matches = await prisma.masterSettings.findMany({ where: { organizationId: { equals: organizationId, mode: 'insensitive' }, users: { some: { role: 'Admin', active: true } } }, take: 2 });
-      const existingOrg = matches.length === 1 ? matches[0] : null;
-      if (!existingOrg) return res.status(404).json({ error: 'Organization ID is invalid or unavailable. Check it with your administrator.' });
-      
-      user = await prisma.user.create({ data: { ...fields, organizationId: existingOrg.id, role: 'Dispatcher' } });
+      user = await invitations.redeem(req.body.invitationToken, fields);
     }
 
     await auth.startSession(req, res, user);
@@ -141,7 +140,7 @@ router.get('/session', async (req, res, next) => {
   res.set('Cache-Control', 'private, no-store');
   try {
     const user = await auth.readSession(req);
-    res.json({ user: user ? auth.publicUser(user) : null });
+    res.json({ user: user?.active ? auth.publicUser(user) : null });
   } catch (err) { next(err); }
 });
 router.post('/password', auth.authLimit, auth.requireSession, async (req, res, next) => {
@@ -177,6 +176,19 @@ router.delete('/account', auth.authLimit, auth.requireSession, async (req, res, 
 router.get('/users', auth.requireSession, auth.requireActive, auth.allowRoles('Admin'), async (req, res, next) => {
   try { res.json((await prisma.user.findMany({ where: { organizationId: req.user.organizationId }, orderBy: { createdAt: 'asc' } })).map(auth.publicUser)); } catch (err) { next(err); }
 });
+router.get('/invitations', auth.requireSession, auth.requireActive, auth.allowRoles('Admin'), async (req, res, next) => {
+  try { res.json(await prisma.invitation.findMany({ where: { organizationId: req.user.organizationId, usedAt: null, revokedAt: null, expiresAt: { gt: new Date() } }, select: invitations.select, orderBy: { createdAt: 'desc' }, take: 50 })); } catch (err) { next(err); }
+});
+router.post('/invitations', auth.requireSession, auth.requireActive, auth.allowRoles('Admin'), auth.authLimit, async (req, res, next) => {
+  try { res.status(201).json(await invitations.issue(req.user, req.body)); } catch (err) { next(err); }
+});
+router.delete('/invitations/:id', auth.requireSession, auth.requireActive, auth.allowRoles('Admin'), async (req, res, next) => {
+  try {
+    if (!/^[a-f0-9-]{36}$/i.test(req.params.id)) return res.status(404).json({ error: 'Not found' });
+    const result = await prisma.invitation.updateMany({ where: { id: req.params.id, organizationId: req.user.organizationId, usedAt: null, revokedAt: null }, data: { revokedAt: new Date() } });
+    res.status(result.count ? 200 : 404).json(result.count ? { ok: true } : { error: 'Not found' });
+  } catch (err) { next(err); }
+});
 router.patch('/users/:id', auth.requireSession, auth.requireActive, auth.allowRoles('Admin'), async (req, res, next) => {
   try {
     req.body.role = req.body.role === 'Yard Manager' ? 'YardManager' : req.body.role;
@@ -203,7 +215,7 @@ router.post('/forgot-password', auth.authLimit, async (req, res, next) => {
     }
     
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
+    if (!user || !user.active) {
       return res.json({ ok: true });
     }
     
@@ -221,7 +233,7 @@ router.post('/forgot-password', auth.authLimit, async (req, res, next) => {
     const appOrigin = process.env.APP_ORIGIN || `${req.protocol}://${req.get('host') || 'localhost:5000'}`;
     const resetUrl = `${appOrigin}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
     
-    const settings = await prisma.masterSettings.findUnique({ where: { id: user.organizationId } });
+    const settings = await prisma.masterSettings.findUnique({ where: { id: user.organizationId }, select: { businessName: true } });
     
     try {
       await sendPasswordResetEmail(email, resetUrl, settings?.businessName);
@@ -250,7 +262,7 @@ router.post('/reset-password', auth.authLimit, async (req, res, next) => {
       include: { user: true }
     });
     
-    if (!resetToken || resetToken.user.email !== email) {
+    if (!resetToken || !resetToken.user.active || resetToken.user.email !== email) {
       return res.status(400).json({ error: 'Invalid or expired reset token' });
     }
     

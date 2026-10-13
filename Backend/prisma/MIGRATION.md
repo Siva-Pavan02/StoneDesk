@@ -1,21 +1,19 @@
-# Supabase backend migration
+# Supabase backend schema operations
 
-The Express API uses Prisma Client with the server-only DATABASE_URL (Supabase session pooler, port 5432, with `?pgbouncer=true`). Local email/password sessions remain managed by Express.
+The Express API uses Prisma 6 and server-only database credentials. Run commands from `Backend/`.
 
-## Apply and run
+## Existing installations
 
-From server/: npm install, npx prisma db push, node scripts/protectDatabase.js, npm run dev.
+The repository has no Prisma Migrate baseline. Review and apply the additive `prisma/changes/20261012_invitations.sql` once, with a backup and explicit operator approval. It creates and protects the invitation table without rewriting existing records. See [backend rollout instructions](../VERCEL.md) for ordering, connection modes and rollback limitations. Do not run `migrate deploy` as though a baseline exists.
 
-Do not use --accept-data-loss without reviewing affected tables and taking a backup. db push creates schema.
+For a new, disposable database, `npx prisma db push` creates the schema. Never use `--accept-data-loss` against a populated database without reviewing the changes and taking a backup.
+
+After an approved schema change, run `npx prisma generate` and `node scripts/protectDatabase.js`. Protection covers every model in the generated client, enables RLS and revokes PUBLIC, anon and authenticated grants. Prisma's server role remains privileged; Express must enforce organization and role boundaries.
 
 ## Compatibility
 
-YardManager is stored in PostgreSQL and serialized as Yard Manager. Inventory, measurements, frozen totals, and branding remain JSON objects. Legacy piece-shaped records are supported by calculation and export code.
+YardManager is stored in PostgreSQL and serialized as Yard Manager. Inventory, measurements, frozen totals and branding remain JSON. Legacy piece-shaped records remain readable.
 
 ## Tests
 
-npm test provisions isolated stonedesk_test_<random UUID> schemas and cleans each up after its suite. TEST_DATABASE_URL can select a dedicated test project; otherwise DATABASE_URL is used with a temporary schema override. Integration tests require network connectivity and schema creation privileges. Never point manual cleanup at public.
-
-## Security
-
-protectDatabase.js enables RLS and revokes anon/authenticated access on the five application tables. Prisma uses the privileged server role; Express enforces sessions and staff roles. Keep DATABASE_URL out of the browser and source control.
+`npm test` requires explicit `TEST_DATABASE_URL` in `Backend/.env.test`; it never falls back to production DATABASE_URL. Optional `TEST_DIRECT_URL` selects the administrative test connection. Tests create isolated `stonedesk_test_<random UUID>` schemas and remove only their own schema. Use a disposable PostgreSQL database with schema-creation privileges. Keep all credentials out of source control and browser bundles.

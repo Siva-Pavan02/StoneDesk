@@ -7,8 +7,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { randomUUID, randomBytes, createHash } = require("node:crypto");
 const zxcvbn = require("zxcvbn");
+const { Prisma } = require("@prisma/client");
 const calc = require("../utils/pilotCalculations");
 const { round2 } = require("../utils/dispatchCalculations");
+// Shared with the real controller so money rounding and status cannot drift.
+const { derivePaymentSummary } = require("../utils/paymentSummary");
 const { organizationCode } = require("../utils/organizationCode");
 const { buildAnalytics, windows } = require("../utils/dispatchAnalytics");
 
@@ -115,6 +118,7 @@ function load() {
 }
 const db = load();
 db.invitations ||= [];
+db.payments ||= [];
 const inviteHash = token => createHash("sha256").update(token).digest("hex");
 function save() {
   fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
@@ -633,6 +637,83 @@ dispatches.get(
     const d = findDispatch(req.params.id);
     if (!d) fail(404, "Not found");
     res.json(d);
+  }),
+);
+// Newest first, matching the real controller's orderBy createdAt desc.
+const dispatchPayments = (dispatchId) =>
+  db.payments
+    .filter((p) => p.dispatchId === dispatchId)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+const formatPayment = (p) => ({
+  id: p.id,
+  amount: Number(new Prisma.Decimal(p.amount).toFixed(2)),
+  note: p.note ?? null,
+  createdAt: p.createdAt,
+  createdBy: p.createdBy ?? null,
+});
+const paymentsResponse = (dispatch) => {
+  const payments = dispatchPayments(dispatch.id);
+  return {
+    ...derivePaymentSummary(dispatch.summary?.netBillableAmount, payments),
+    payments: payments.map(formatPayment),
+  };
+};
+dispatches.get(
+  "/:id/payments",
+  wrap((req, res) => {
+    const d = findDispatch(req.params.id);
+    if (!d) fail(404, "Not found");
+    res.json(paymentsResponse(d));
+  }),
+);
+dispatches.post(
+  "/:id/payments",
+  allow("Admin", "Dispatcher"),
+  wrap((req, res) => {
+    const d = findDispatch(req.params.id);
+    // Amount and note are validated before the lookup, mirroring the real
+    // controller, which only reads the dispatch inside its transaction.
+    const rawAmount = req.body.amount;
+    if (
+      typeof rawAmount !== "number" ||
+      !Number.isFinite(rawAmount) ||
+      rawAmount <= 0
+    )
+      fail(400, "Invalid payment amount");
+    if (rawAmount > 10000000) fail(400, "Payment amount exceeds limit");
+    const payDecimal = new Prisma.Decimal(round2(rawAmount).toFixed(2));
+    if (payDecimal.lessThanOrEqualTo(0)) fail(400, "Invalid payment amount");
+    let note = null;
+    if (req.body.note !== undefined && req.body.note !== null) {
+      if (typeof req.body.note !== "string") fail(400, "Invalid note");
+      const trimmed = req.body.note.trim();
+      if (trimmed.length > 255)
+        fail(400, "Note must be at most 255 characters");
+      note = trimmed || null;
+    }
+    if (!d) fail(404, "Not found");
+    if (d.status === "Draft")
+      fail(400, "Payments can only be recorded on finalized dispatches");
+    const current = derivePaymentSummary(
+      d.summary?.netBillableAmount,
+      dispatchPayments(d.id),
+    );
+    if (payDecimal.greaterThan(current.balance))
+      fail(
+        400,
+        `Payment exceeds remaining balance of ₹${current.balance.toFixed(2)}`,
+      );
+    db.payments.unshift({
+      id: "payment_" + randomUUID().slice(0, 8),
+      organizationId: ORG,
+      dispatchId: d.id,
+      amount: Number(payDecimal.toFixed(2)),
+      note,
+      createdBy: currentUser().name,
+      createdAt: now(),
+    });
+    save();
+    res.status(201).json(paymentsResponse(d));
   }),
 );
 dispatches.put(

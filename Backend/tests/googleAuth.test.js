@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const database = require('./database');
-const app = require('../server');
+const app = require('../app');
 
 test('Google identities require verification, explicit linking and tenant-safe onboarding', async t => {
   await database.setup(t);

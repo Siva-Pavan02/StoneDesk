@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const database = require('./database');
 const prisma = database.prisma;
 const http = require('node:http');
-const app = require('../server');
+const app = require('../app');
 const API_PREFIX = '/api';
 
 test('Multi-tenancy: Organization isolation', async (t) => {

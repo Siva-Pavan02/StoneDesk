@@ -4,7 +4,15 @@ Production still uses Render. This change does not switch the frontend rewrite, 
 
 ## Project
 
-Create a separate Vercel project with root `Backend`, Express framework, install command `npm ci`, and Node 24.x in project settings. `server.js` exports the app; importing it does not start a listener or eagerly connect to PostgreSQL. Local/Render `npm start` still starts the listener. Do not set an output directory or add legacy `@vercel/node` builds. The repository test run uses Node 24.15.0; the Render Node setting is unchanged.
+Create a separate Vercel project with root `Backend`, Express framework, install command `npm ci`, and Node 24.x in project settings. `app.js` exports the app; importing it does not start a listener or eagerly connect to PostgreSQL. `server.js` holds the listener and process lifecycle, so local/Render `npm start` still starts a traditional server. Vercel's Express runtime resolves the first match among `app`, `index`, `server` (also under `src/`) and requires either a default export or a port listener. `Backend/app.js` is the first candidate and exports the app, so it is the entrypoint; `server.js` is never selected. `package.json` `main` points at `app.js` for consistency. `vercel.json` declares `{"framework":"express"}` only. Do not set an output directory or add legacy `@vercel/node` builds.
+
+Two platform constraints apply. First, `express.static()` is ignored on Vercel; static assets would have to live in `public/**`. Both static mounts in `app.js` are already unreachable there, because the startup check rejects `SERVE_FRONTEND=true` and requires `LOGO_STORAGE=supabase`, which routes logo reads through Supabase Storage instead of the local directory. Second, an Express app that renders its own error page leaves the function in an undefined state, so `utils/errorHandler.js` must stay registered last and must keep answering with JSON. The app is deployed as a single function on Fluid compute.
+
+`package.json` declares `engines.node` as `>=22`. That range exists for compatibility, not for runtime selection: it is wide enough to accept the Node 22.22.0 that `render.yaml` pins for the rollback deployment, so one declaration serves both hosts and `render.yaml` needs no edit.
+
+The Vercel project selects its runtime explicitly. Set **Node.js 24.x** in project settings rather than leaving the version to range resolution. Vercel does read `engines.node` in preference to that dropdown, and a `>=22.0.0` range resolves to the latest 24.x, so the two agree here — but agreement is not the same as confirmation. Treat the build log as the only authority and record the reported version at check C1.
+
+The floor is set by dependencies, not preference: `@supabase/supabase-js` requires Node 22 or newer, followed by `sharp` at 20.9 and `nodemailer` at 20, so anything below 22 is refused. The repository test run uses Node 24.16.0.
 
 ## Server-only environment
 
@@ -16,6 +24,46 @@ Create a separate Vercel project with root `Backend`, Express framework, install
 - Configure the existing SMTP variables for reset email. Use staging accounts/database/bucket for preview checks.
 
 Keep browser calls same-origin through frontend `/api` and `/uploads` rewrites so secure, HttpOnly, SameSite=Strict cookies stay on the frontend host. Configure the preview origin in Supabase's OAuth redirect allow-list. Verify actual client IP forwarding before enabling `TRUST_PROXY=1`; do not blindly trust arbitrary forwarded headers or broaden `APP_ORIGIN` to all previews.
+
+## Environment variable matrix
+
+Every variable the backend reads, taken from the code rather than from documentation. Set names only in the Vercel dashboard; values come from Supabase, Upstash and your SMTP provider. There is no session or JWT secret to configure: sessions are random 32-byte tokens stored as SHA-256 hashes in the `Session` table, so the database is the only thing that can validate one.
+
+| Variable | Class | Needed on Vercel | Notes |
+|---|---|---|---|
+| `NODE_ENV` | Runtime configuration | Production and Preview | Must be exactly `production`. Gates the cookie `Secure` flag and strict origin rejection. |
+| `APP_ORIGIN` | Runtime configuration | Production and Preview | The exact frontend origin, scheme included. Startup fails without it in production. Scope a separate value to the Preview environment. |
+| `TRUST_PROXY` | Runtime configuration | Production and Preview | `1` behind the Vercel edge, so `req.ip` is the caller and not the proxy. Rate limits key on `req.ip`. |
+| `DATABASE_URL` | Runtime secret | Production and Preview | Transaction pooler, port 6543. See the connection notes above. |
+| `DIRECT_URL` | Runtime secret | Production and Preview | Direct or session connection for schema work only. Read by the Prisma schema, so it must be present even when unused at runtime. |
+| `SUPABASE_URL` | Runtime configuration | Production and Preview | Required for Storage and Google sign-in. Validated as an HTTPS origin with no path, query or credentials. |
+| `SUPABASE_SECRET_KEY` | Runtime secret | Production and Preview | Server-only. Private logo reads and auth-user deletion. Never expose it to the frontend project. |
+| `SUPABASE_PUBLISHABLE_KEY` | Runtime configuration | Production and Preview | Google sign-in. Must carry the `sb_publishable_` prefix. |
+| `LOGO_STORAGE` | Runtime configuration | Production and Preview | Must be `supabase`. Startup rejects anything else here. |
+| `SUPABASE_LOGO_BUCKET` | Runtime configuration | Optional | Defaults to `stonedesk-logos`. Keep the bucket private. |
+| `UPSTASH_REDIS_REST_URL` | Runtime secret | Production and Preview | Without it, every authentication attempt returns 503 by design. |
+| `UPSTASH_REDIS_REST_TOKEN` | Runtime secret | Production and Preview | As above. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Runtime secret | Optional | Password reset only. Absent credentials log a warning at first use and fail the reset request; nothing else degrades. |
+| `SERVE_FRONTEND` | Runtime configuration | Must be unset or false | Startup rejects `true`. |
+| `UPLOAD_DIR` | Local only | No | Ignored while `LOGO_STORAGE=supabase`. |
+| `PORT`, `HOST` | Local only | No | Consumed by `server.js`, which the serverless entrypoint never loads. |
+| `TEST_DATABASE_URL`, `TEST_DIRECT_URL` | Local only | No | Read by `tests/database.js` from `.env.test`. |
+| `MOCK_PORT` | Local only | No | `mock/server.js` only. |
+| `VERCEL` | Build-time configuration | Set by the platform | Never set it by hand. Drives the storage and frontend startup checks and forces distributed rate limiting. |
+
+Preview deployments need their own `APP_ORIGIN`, because `NODE_ENV=production` means any origin that is not an exact match gets a 403. A per-deployment preview hostname changes on every push, so point `APP_ORIGIN` at a stable preview alias rather than a one-off deployment URL, and add that same origin to the Supabase OAuth redirect allow-list. Google sign-in is brokered by Supabase Auth over PKCE, so there is no Google client ID or secret in this backend; the redirect targets the frontend origin, not the API.
+
+## Process state
+
+No request outcome depends on a single long-lived process. The only module-level mutable values are lazy per-instance clients and immutable constants: the Nodemailer transporter in `utils/email.js`, the Upstash client and its one-time warning flag in `utils/rateLimiter.js`, and the frozen action and status sets in `utils/auditLog.js` and `utils/dispatchAnalytics.js`. The analytics `Map`s are request-scoped locals inside `buildAnalytics`, not shared state. The in-memory `attempts` map in `utils/rateLimiter.js` is the one piece that would be wrong across instances, and it is unreachable in production: the limiter throws a 503 rather than falling back whenever `NODE_ENV=production` or `VERCEL` is set, so Upstash stays authoritative. There are no timers, intervals or background jobs, and every audit write is awaited before its response is sent, so nothing is left in flight when an invocation freezes.
+
+## Transaction compatibility with transaction-mode pooling
+
+Transaction mode returns a connection to the pool after each transaction, not after each statement, so a `BEGIN … COMMIT` block keeps one backend connection for its whole duration. The payment path in `controllers/paymentController.js` depends on that: inside a single `prisma.$transaction`, it takes `SELECT … FOR UPDATE` on the `Dispatch` row (scoped to the caller's organization), reads the existing `InvoicePayment` rows, recomputes the balance, rejects an amount above that balance, and only then inserts. A second concurrent request blocks on the row lock, then reads the first payment once it commits and is rejected, so total received cannot exceed the invoice total.
+
+The documented limitations of transaction mode do not apply to this codebase: prepared statements are disabled through `pgbouncer=true`; there are no cursors, no `LISTEN`/`NOTIFY`, no temporary tables and no session-level advisory locks; and Prisma awaits statements sequentially rather than pipelining. The only `SET LOCAL` is in `scripts/addGoogleIdentity.js`, which runs on the direct connection and is transaction-scoped regardless.
+
+Two operational consequences follow from `connection_limit=1`. A payment transaction holds the instance's single connection while it runs, so concurrent invocations on the same warm instance queue behind it, bounded by `pool_timeout`; exhaustion surfaces as `P2024`, which `utils/errorHandler.js` already maps to a 503 retry response. Interactive transactions also keep Prisma's defaults for `maxWait` and `timeout`, and a breach raises `P2028`, which is not specifically mapped and therefore returns a generic 500. Watch for both in the preview deployment before tuning either value.
 
 ## Schema rollout
 

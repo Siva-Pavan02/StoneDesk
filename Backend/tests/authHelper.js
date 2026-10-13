@@ -6,4 +6,9 @@ async function adminCookie(base) {
   if (response.status !== 201) throw new Error(`Test signup failed: ${response.status}`);
   return response.headers.getSetCookie().find(value => value.startsWith('stonedesk_session=') && !value.startsWith('stonedesk_session=;')).split(';')[0];
 }
-module.exports = { adminCookie };
+async function invite(base, cookie, email, role = 'Dispatcher') {
+  const response = await fetch(`${base}/api/auth/invitations`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify({ email, role }) });
+  if (response.status !== 201) throw new Error(`Test invitation failed: ${response.status}`);
+  return (await response.json()).token;
+}
+module.exports = { adminCookie, invite };

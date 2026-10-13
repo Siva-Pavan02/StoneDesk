@@ -53,7 +53,7 @@ test('Google identities require verification, explicit linking and tenant-safe o
   provider = { ...provider, id: 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb', email: 'member@example.test', identities: [{ provider: 'google', identity_data: { email: 'member@example.test', email_verified: true } }] };
   result = await exchange();
   assert.equal(result.body.needsSignup, true);
-  const joined = await call('/signup', { googleAccessToken: result.body.accessToken, name: 'Member', organizationId: owner.body.organizationCode, email: 'forged@example.test', role: 'Admin' });
+  const joined = await call('/signup', { googleAccessToken: result.body.accessToken, name: 'Member', invitationToken: await require('./authHelper').invite(`http://127.0.0.1:${server.address().port}`, linked.cookie.split(', ').find(c=>c.startsWith('stonedesk_session=')&&!c.startsWith('stonedesk_session=;'))?.split(';')[0], 'member@example.test'), email: 'forged@example.test', role: 'Admin' });
   assert.equal(joined.status, 201);
   assert.equal(joined.body.user.email, 'member@example.test');
   assert.equal(joined.body.user.role, 'Dispatcher');

@@ -32,7 +32,8 @@ test('accounts protect all business data, activate staff, enforce roles and revo
   assert.equal((await call(`${API_PREFIX}/auth/signup`, 'POST', { email: 'owner@example.test', password, name: 'Owner' }, null, 'https://untrusted.example')).status, 403);
   const owner = await call(`${API_PREFIX}/auth/signup`, 'POST', {email:'one@example.test',name:'Owner',password,createOrganization:true,businessName:'Test Yard'});
   assert.equal(owner.status,201);
-  const staff = await call(`${API_PREFIX}/auth/signup`, 'POST', {email:'two@example.test',name:'Staff',password,organizationId:owner.data.organizationCode,role:'Admin'});
+  const invite = await require('./authHelper').invite(base, cookieOf(owner), 'two@example.test');
+  const staff = await call(`${API_PREFIX}/auth/signup`, 'POST', {email:'two@example.test',name:'Staff',password,invitationToken:invite,role:'Admin'});
   assert.equal(staff.status,201);
   assert.equal(staff.data.user.role,'Dispatcher');
   assert.equal(await prisma.user.count({where:{role:'Admin'}}),1);
@@ -62,6 +63,14 @@ test('accounts protect all business data, activate staff, enforce roles and revo
   const changed = await call(`${API_PREFIX}/auth/password`, 'POST', { currentPassword: password, password: newPassword }, staffCookie);
   assert.equal(changed.status, 200); staffCookie = cookieOf(changed);
   assert.equal((await call(`${API_PREFIX}/auth/me`, 'GET', undefined, otherSession)).status, 401);
+  await prisma.user.update({ where: { id: staff.data.user.id }, data: { active: false } });
+  assert.equal((await call(API_PREFIX + '/auth/session', 'GET', undefined, staffCookie)).data.user, null);
+  for (const [path, method, body] of [['/me','GET'], ['/password','POST',{currentPassword:newPassword,password}], ['/account','DELETE',{confirm:staff.data.user.email}]]) {
+    assert.equal((await call(API_PREFIX + '/auth' + path, method, body, staffCookie)).status, 403);
+  }
+  assert.equal((await call(API_PREFIX + '/auth/login', 'POST', {email:staff.data.user.email,password:newPassword})).status, 403);
+  assert.equal((await call(API_PREFIX + '/auth/forgot-password', 'POST', {email:staff.data.user.email})).status, 200);
+  assert.equal(await prisma.passwordResetToken.count(), 0);
   await call(`${API_PREFIX}/auth/users/` + staff.data.user.id, 'PATCH', { role: 'Dispatcher', active: false }, ownerCookie);
   assert.equal((await call(`${API_PREFIX}/dispatches`, 'GET', undefined, staffCookie)).status, 401);
   await prisma.session.updateMany({ where: { userId: owner.data.user.id }, data: { expiresAt: new Date(0) } });

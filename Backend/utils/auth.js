@@ -24,6 +24,7 @@ async function endSession(req, res) {
   res.clearCookie(cookieName, cookieOptions());
 }
 async function startSession(req, res, user) {
+  if (!user.active) throw Object.assign(new Error('Your account access has been paused. Contact your administrator.'), { status: 403 });
   await endSession(req, res);
   const token = randomBytes(32).toString('hex');
   await prisma.session.create({ data: { tokenHash: hash(token), userId: user.id, expiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000) } });
@@ -40,6 +41,7 @@ async function requireSession(req, res, next) {
   try {
     const user = await readSession(req);
     if (!user) return res.status(401).json({ error: 'Please sign in to continue' });
+    if (!user.active) return res.status(403).json({ error: 'Your account access has been paused. Contact your administrator.' });
     req.user = user;
     next();
   } catch (err) { next(err); }

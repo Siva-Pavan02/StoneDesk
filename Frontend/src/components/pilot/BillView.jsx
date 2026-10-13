@@ -10,6 +10,7 @@ import { paginateA4Invoice } from '../../utils/a4InvoicePagination.js';
 import { renderA4Invoice, renderStandaloneA4Invoice } from '../../utils/a4InvoiceRender.js';
 import invoiceCss from '../../styles/a4Invoice.css?raw';
 import Icon from './Icon.jsx';
+import PaymentSection from './PaymentSection.jsx';
 export default function BillView({ record, onBack, onResume, onChanged, canFinalize = true }) {
   const { pick } = useLanguage();
   const [error, setError] = useState('');
@@ -110,6 +111,7 @@ export default function BillView({ record, onBack, onResume, onChanged, canFinal
       <span className="delivery-bar-dot" aria-hidden="true" />
       <div className="delivery-bar-text"><strong>{pick('Delivered', 'డెలివరీ అయింది')}</strong>{destination && <span>{pick(`Reached ${destination}`, `${destination}కు చేరింది`)}</span>}</div>
     </section>}
+    {finalized && <PaymentSection dispatchId={record.id} canRecordPayment={canFinalize} />}
     <div className="invoice-paper-shell a4-preview-shell" aria-live="polite">
       {!finalized ? <p className="a4-preview-feedback">{pick('Complete this draft to see the final A4 invoice. Missing data is never replaced with sample values.', 'చివరి A4 బిల్లు చూడటానికి డ్రాఫ్ట్‌ను పూర్తి చేయండి. లేని సమాచారాన్ని నమూనా విలువలతో నింపము.')}</p>
         : previewIssue ? <p className="a4-preview-feedback" role="alert">{previewIssue}</p>

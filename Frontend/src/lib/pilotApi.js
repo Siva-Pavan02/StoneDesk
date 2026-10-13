@@ -48,3 +48,14 @@ export function settingsPath(organizationId) {
 export function uploadsPath(organizationId) {
   return `/uploads/${encodeURIComponent(organizationId)}`;
 }
+
+export function getInvoicePayments(dispatchId) {
+  return request(`/dispatches/${encodeURIComponent(dispatchId)}/payments`);
+}
+
+export function createInvoicePayment(dispatchId, payload) {
+  return request(`/dispatches/${encodeURIComponent(dispatchId)}/payments`, {
+    method: 'POST',
+    body: payload
+  });
+}

@@ -3,11 +3,16 @@ import assert from 'node:assert/strict';
 import { contentPolicy, securityHeaders } from '../securityPolicy.js';
 import { readFileSync } from 'node:fs';
 
-test('Vercel response headers match the shared policy and retain Render rewrites', () => {
+test('Vercel response headers match the shared policy and use Vercel backend rewrites', () => {
   const config = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url)));
   assert.deepEqual(Object.fromEntries(config.headers[0].headers.map(h => [h.key,h.value])), securityHeaders('/api'));
   assert.equal(config.headers[0].source, '/(.*)');
-  assert.equal(config.rewrites[0].destination, 'https://stonedesk-api.onrender.com/api/$1');
+  assert.deepEqual(config.rewrites, [
+    { source: '/api/(.*)', destination: 'https://stonedesk-api.vercel.app/api/$1' },
+    { source: '/uploads/(.*)', destination: 'https://stonedesk-api.vercel.app/uploads/$1' },
+    { source: '/(.*)', destination: '/index.html' },
+  ]);
+  assert.ok(!JSON.stringify(config.rewrites).includes('onrender.com'));
 });
 
 test('production CSP constrains scripts while retaining fonts, logos and the configured API', () => {

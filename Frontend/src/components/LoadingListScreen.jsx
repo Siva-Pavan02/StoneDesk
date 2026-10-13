@@ -191,7 +191,7 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
   };
 
   const handleSaveList = async () => {
-    if (savingLock.current) return;
+    if (savingLock.current || opening) return;
     if (!supervisor || !buyerDestination || !stoneType || !finish) {
       alert('Please fill out all basic details');
       return;
@@ -226,6 +226,7 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
   };
 
   const handleGeneratePdf = () => {
+    if (opening) return;
     const listData = {
       loadingListNumber: loadingListNumber || `LL-${Date.now()}`,
       date: exportDate(),
@@ -239,6 +240,7 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
   };
 
   const handleGenerateExcel = () => {
+    if (opening) return;
     const listData = {
       loadingListNumber: loadingListNumber || `LL-${Date.now()}`,
       date: exportDate(),
@@ -270,7 +272,7 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
             <h1 className="truncate font-bold text-lg text-slate-800">{t('loadingList') || 'Loading List'}</h1>
           </div>
           <div className="flex items-center gap-2">
-          <button className="px-4 py-1.5 bg-teal-700 text-white rounded-lg font-semibold text-sm" disabled={saving} onClick={handleSaveList}>
+          <button className="px-4 py-1.5 bg-teal-700 text-white rounded-lg font-semibold text-sm" disabled={saving || opening} onClick={handleSaveList}>
             {t('save') || 'Save'}
           </button></div>
         </div>
@@ -278,6 +280,8 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
 
       <Content className={embedded ? 'space-y-4' : 'pt-20 px-4 max-w-xl mx-auto space-y-4'}>
         {error && <p role="alert" className="mb-4 rounded-xl border-2 border-red-300 bg-white p-4 text-red-800">{error}</p>}
+        {opening && <p role="status">{pick('Opening loading list…', 'లోడింగ్ జాబితా తెరుస్తోంది…')}</p>}
+        <fieldset disabled={opening} className="space-y-4 min-w-0">
         <Field en="Search loading lists" te="లోడింగ్ జాబితాలు వెతకండి" type="search" maxLength={120} value={historySearch} onChange={e => setHistorySearch(e.target.value)} />
         <Field en="Saved loading lists" te="సేవ్ చేసిన లోడింగ్ జాబితాలు">
           <select className="input rounded-xl" disabled={saving || opening || historyBusy} value={activeListId || ''} onChange={async event => {
@@ -455,13 +459,14 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
             {loadingListNumber && <span className="text-sm text-gray-600 break-all">{loadingListNumber}</span>}
           </div>
           <div className="action-row flex flex-wrap gap-2">
-            {embedded && <Button primary en={saving ? pick('Saving…', 'సేవ్ అవుతోంది…') : t('save')} te={saving ? pick('Saving…', 'సేవ్ అవుతోంది…') : t('save')} disabled={saving} onClick={handleSaveList} />}
+            {embedded && <Button primary en={saving ? pick('Saving…', 'సేవ్ అవుతోంది…') : t('save')} te={saving ? pick('Saving…', 'సేవ్ అవుతోంది…') : t('save')} disabled={saving || opening} onClick={handleSaveList} />}
             {requirements.length > 0 && <>
               <Button en="Download PDF" te="PDF డౌన్‌లోడ్" onClick={handleGeneratePdf} />
               <Button en="Download Excel" te="Excel డౌన్‌లోడ్" onClick={handleGenerateExcel} />
             </>}
           </div>
         </Card>}
+        </fieldset>
       </Content>
     </div>
   );

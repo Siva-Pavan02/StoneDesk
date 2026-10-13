@@ -35,6 +35,9 @@ try {
       if (url.pathname === '/api/auth/session') body = { user };
       else if (url.pathname.startsWith('/api/master-settings/')) body = settings;
       else if (url.pathname === '/api/auth/users') body = [user];
+      else if (url.pathname === '/api/auth/invitations') body = [];
+      else if (url.pathname === '/api/loading-lists') body = { data: [{ id: '11111111-1111-4111-8111-111111111111', loadingListNumber: 'LL-ONE', buyerDestination: 'Kadapa' }], nextCursor: null };
+      else if (url.pathname.startsWith('/api/loading-lists/')) { await new Promise(resolve => setTimeout(resolve, 700)); body = { id: '11111111-1111-4111-8111-111111111111', loadingListNumber: 'LL-ONE', supervisor: 'Loaded supervisor', buyerDestination: 'Kadapa', stoneType: 'Stone', finish: 'Polished', requirements: [] }; }
       else if (url.pathname === '/api/dispatches/analytics') body = buildAnalytics([], new Date());
       else if (url.pathname === '/api/dispatches') {
         const q = url.searchParams.get('q') || 'recent';
@@ -71,6 +74,20 @@ try {
     await expect.poll(() => requests.slice(beforeBill).includes('/api/dispatches/saved')).toBe(true);
     await page.waitForTimeout(200);
     assert.deepEqual(requests.slice(beforeBill), ['/api/dispatches/saved']);
+    const beforeLists = requests.length;
+    await page.evaluate(() => { location.hash = 'requirements'; });
+    await expect(page.getByLabel('Saved loading lists', { exact:true })).toBeVisible();
+    await expect.poll(()=>requests.slice(beforeLists).some(p=>p === '/api/loading-lists' || p.startsWith('/api/loading-lists?'))).toBe(true);
+    assert.equal(requests.slice(beforeLists).filter(p=>p.startsWith('/api/loading-lists/')).length,0);
+    page.once('dialog', dialog=>dialog.accept());
+    await page.getByLabel('Saved loading lists', { exact:true }).selectOption('11111111-1111-4111-8111-111111111111');
+    await expect(page.getByRole('status').filter({hasText:'Opening loading list'})).toBeVisible();
+    await expect(page.getByLabel('Search loading lists', {exact:true})).toBeDisabled();
+    await expect(page.locator('input[value="Loaded supervisor"]')).toBeVisible();
+    await expect.poll(()=>requests.slice(beforeLists).filter(p=>p.startsWith('/api/loading-lists/')).length).toBe(1);
+    await page.getByLabel('Search loading lists', { exact:true }).fill('old');
+    await expect.poll(()=>requests.some(p=>p==='/api/loading-lists?q=old')).toBe(true);
+    assert.equal(requests.slice(beforeLists).filter(p=>p.startsWith('/api/master-settings/')).length,0);
     assert.deepEqual(errors, []);
     console.log(`PASS ${width}px: settings requests, lazy lists, debounced search, stale-response protection, bill-only fetch`);
     await context.close();

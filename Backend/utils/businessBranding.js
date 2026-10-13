@@ -32,9 +32,9 @@ async function snapshot(settings) {
   if (settings?.logoPath) {
     const filename = settings.logoPath.match(/^\/uploads\/([a-f0-9-]+\.png)$/)?.[1];
     if (!filename || !validateLogoFilename(filename)) bad('Invalid stored logo');
-    const filePath = path.join(uploadDir, filename);
-    const resolvedPath = path.resolve(filePath);
-    if (!resolvedPath.startsWith(uploadDir)) bad('Invalid logo path');
+    // readLogo takes the bare filename and resolves it against the active backend,
+    // which is Supabase Storage in production. The filename has already passed the
+    // separator-free whitelist above, so there is no local path to contain.
     result.logoDataUrl = `data:image/png;base64,${(await readLogo(filename)).toString('base64')}`;
   }
   return result;

@@ -26,7 +26,7 @@ test('HTTP boundaries protect logs, browser responses and organization logos', a
     masterSettings: { findUnique: async ({ where }) => { assert.equal(where.id, 'org-a'); return { logoPath: `/uploads/${logo}` }; } },
   };
   require.cache[require.resolve('../utils/prisma')] = { exports: database };
-  const server = http.createServer(require('../server'));
+  const server = http.createServer(require('../app'));
   t.after(async () => { await new Promise(resolve => server.close(resolve)); await fs.rm(directory, { recursive: true, force: true }); });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;

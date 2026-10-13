@@ -11,7 +11,7 @@ const cleanup = [];
   const uploadDir = await fs.mkdtemp(path.join(os.tmpdir(), 'stonedesk-e2e-'));
   process.env.UPLOAD_DIR = uploadDir;
   process.env.APP_ORIGIN = 'http://127.0.0.1:5180';
-  const app = require('../server');
+  const app = require('../app');
   const server = app.listen(5001, '127.0.0.1', () => console.log('Isolated E2E backend ready on 5001'));
   async function close() {
     await new Promise(resolve => server.close(resolve));

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const database = require('./database');
-const app = require('../server');
+const app = require('../app');
 
 test('dispatch search covers older records and retains tenant, status and pagination filters', async t => {
   await database.setup(t);

@@ -7,7 +7,8 @@ StoneDesk is a multi-tenant web app: a React + Vite single-page client talks to 
 ```text
 StoneDesk/
   Backend/                      Node.js + Express 5 API
-    server.js                   App bootstrap, middleware pipeline, route mounting
+    app.js                      Express app: middleware pipeline, route mounting, error handler
+    server.js                   Listener and process lifecycle only (local/Render startup)
     controllers/
       dispatchController.js     Loads (dispatches): drafts, finalize, status, list, analytics
       loadingListController.js  Loading requirement lists
@@ -67,7 +68,7 @@ StoneDesk/
 
 ## 2. Runtime and Request Pipeline
 
-`Backend/server.js` applies middleware in this order:
+`Backend/app.js` applies middleware in this order:
 
 1. Security headers (`utils/securityHeaders.js`).
 2. Origin check: any request with an `Origin` header not allowed by `auth.allowedOrigin` (based on `APP_ORIGIN`, required in production) gets 403.

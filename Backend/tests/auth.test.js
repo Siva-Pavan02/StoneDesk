@@ -9,7 +9,7 @@ const API_PREFIX = '/api';
 
 test('accounts protect all business data, activate staff, enforce roles and revoke sessions', async t => {
   process.env.NODE_ENV = 'test';
-  const app = require('../server');
+  const app = require('../app');
   await database.setup(t);
 
   const server = http.createServer(app);

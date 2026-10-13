@@ -13,7 +13,7 @@ test('pilot setup, upload, draft retries, finalization and historical bills', as
   process.env.NODE_ENV = 'test';
   const uploadDir = await fs.mkdtemp(path.join(os.tmpdir(), 'stonedesk-logos-'));
   process.env.UPLOAD_DIR = uploadDir;
-  const app = require('../server');
+  const app = require('../app');
   await database.setup(t);
   const server = http.createServer(app);
   t.after(async () => { await new Promise(resolve => server.close(resolve));  await fs.rm(uploadDir, { recursive: true, force: true }); });

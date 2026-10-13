@@ -10,7 +10,7 @@ const getOrCreateSettings = async (organizationId) => {
 
 async function updateWithVersion(settings, data) {
   for (let attempt = 0; attempt < 4; attempt++) {
-    const current = await prisma.masterSettings.findUnique({ where: { id: settings.id } });
+    const current = await prisma.masterSettings.findUnique({ where: { id: settings.id }, select: { version: true } });
     const result = await prisma.masterSettings.updateMany({
       where: { id: settings.id, version: current.version },
       data: { ...data, version: { increment: 1 } }

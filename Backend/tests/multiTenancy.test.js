@@ -61,7 +61,7 @@ test('Multi-tenancy: Organization isolation', async (t) => {
     email: 'staffA@example.test', 
     password, 
     name: 'Staff A', 
-    invitationToken: await require('./authHelper').invite(baseUrl, orgAOwnerCookie, 'staffA@example.test') 
+    invitationToken: await require('./authHelper').invite(baseUrl, orgAOwnerCookie, 'staffA@example.test')
   });
   assert.equal(orgAStaff.status, 201);
   const orgAStaffCookie = cookieOf(orgAStaff);
@@ -71,7 +71,7 @@ test('Multi-tenancy: Organization isolation', async (t) => {
     email: 'staffB@example.test', 
     password, 
     name: 'Staff B', 
-    invitationToken: await require('./authHelper').invite(baseUrl, orgBOwnerCookie, 'staffB@example.test') 
+    invitationToken: await require('./authHelper').invite(baseUrl, orgBOwnerCookie, 'staffB@example.test')
   });
   assert.equal(orgBStaff.status, 201);
   const orgBStaffCookie = cookieOf(orgBStaff);

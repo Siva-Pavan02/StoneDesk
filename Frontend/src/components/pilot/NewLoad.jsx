@@ -10,6 +10,8 @@ import {
   hasDraftContent,
   makeRow,
   payload,
+  detailErrors,
+  entryErrors,
   previewRows,
   summarize,
   money,
@@ -77,7 +79,13 @@ export default function NewLoad({
         : base;
   });
   const [review, setReview] = useState(false);
+  // error: server and other non-field problems, shown at the top.
+  // fieldErrors / entryFieldErrors / notice: shown next to the inputs they belong to.
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [entryFieldErrors, setEntryFieldErrors] = useState({});
+  const [notice, setNotice] = useState("");
+  const root = useRef(null);
   const [storageError, setStorageError] = useState("");
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
@@ -126,14 +134,55 @@ export default function NewLoad({
     if (!reviseOf) await flushDraft(settings.id);
     onBack();
   }
+  // Move focus to the first field with an inline error (the browser scrolls it
+  // into view). With no invalid field, bring the measurements message into view.
+  function focusFirstProblem() {
+    requestAnimationFrame(() => {
+      const field = root.current?.querySelector('[aria-invalid="true"]');
+      if (field) field.focus();
+      else
+        root.current
+          ?.querySelector(".field-error-block")
+          ?.scrollIntoView({ block: "center" });
+    });
+  }
+  // Checks the load details and measurements before review or save. Problems are
+  // shown under their fields, and review mode closes so those fields are visible.
+  function checkLoad(pendingMessage) {
+    const details = detailErrors(draft);
+    const measurements =
+      entry.length || entry.width
+        ? pendingMessage
+        : !draft.rows.length
+          ? "Add at least one measurement row"
+          : "";
+    setFieldErrors(details);
+    setNotice(measurements);
+    const ok = !Object.keys(details).length && !measurements;
+    if (!ok) {
+      setError("");
+      setReview(false);
+      focusFirstProblem();
+    }
+    return ok;
+  }
+  function updateEntry(next) {
+    setEntry(next);
+    // Clear the message of each measurement field the user just changed.
+    setEntryFieldErrors((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([key]) => next[key] === entry[key]),
+      ),
+    );
+    if (!next.length && !next.width && draft.rows.length) setNotice("");
+  }
   async function revise() {
     if (lock.current) return;
+    if (!checkLoad("Add the current measurement row before saving")) return;
     lock.current = true;
     setBusy(true);
     setError("");
     try {
-      if (entry.length || entry.width)
-        throw new Error("Add the current measurement row before saving");
       // Same body shape as a draft update; the server keeps slip number and status.
       const { clientRequestId: _clientRequestId, ...body } = payload(draft);
       const record = await reviseDispatch(reviseOf.id, {
@@ -162,46 +211,48 @@ export default function NewLoad({
   }
   const rows = previewRows(draft.rows);
   const summary = summarize(draft.rows, draft.fee);
-  const change = (key) => (e) => setDraft({ ...draft, [key]: e.target.value });
+  const change = (key) => (e) => {
+    setDraft({ ...draft, [key]: e.target.value });
+    if (fieldErrors[key])
+      setFieldErrors(({ [key]: _cleared, ...rest }) => rest);
+  };
   function add() {
     setError("");
+    const product = settings.stoneRates.find((p) => p.id === entry.productId);
+    const errors = entryErrors(entry, product);
+    setEntryFieldErrors(errors);
+    if (Object.keys(errors).length) {
+      focusFirstProblem();
+      return false;
+    }
     try {
-      const row = makeRow(
-        entry,
-        settings.stoneRates.find((p) => p.id === entry.productId),
-      );
+      const row = makeRow(entry, product);
       setDraft({ ...draft, rows: [...draft.rows, row] });
       setEntry({ ...entry, length: "", width: "", quantity: "1" });
+      setNotice("");
       return true;
     } catch (err) {
+      // Only the row number can still fail here; it has no input of its own.
       setError(err.message);
       return false;
     }
   }
   function openReview() {
-    try {
-      if (entry.length || entry.width)
-        throw new Error(
-          "Add the measurement row you are entering before reviewing",
-        );
-      payload(draft);
-      setError("");
-      setReview(true);
-      window.scrollTo(0, 0);
-    } catch (err) {
-      setError(err.message);
-    }
+    if (!checkLoad("Add the measurement row you are entering before reviewing"))
+      return;
+    setError("");
+    setReview(true);
+    window.scrollTo(0, 0);
   }
   async function save(finalize) {
     // A revision must never create or finalize a separate dispatch.
     if (reviseOf) return revise();
     if (lock.current) return;
+    if (!checkLoad("Add the current measurement row before saving")) return;
     lock.current = true;
     setBusy(true);
     setError("");
     try {
-      if (entry.length || entry.width)
-        throw new Error("Add the current measurement row before saving");
       const body = payload(draft);
       const sentBody = JSON.stringify(body);
       let record;
@@ -256,7 +307,7 @@ export default function NewLoad({
       </p>
     );
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" ref={root}>
       <div className="screen-heading">
         <h1>
           {review
@@ -310,6 +361,7 @@ export default function NewLoad({
               required
               maxLength={120}
               options={choices("partyName")}
+              error={fieldErrors.partyName}
               value={draft.partyName}
               onValue={(value) => change("partyName")({ target: { value } })}
             />
@@ -320,6 +372,7 @@ export default function NewLoad({
               maxLength={40}
               autoCapitalize="characters"
               options={choices("truckNumber", settings.savedTrucks)}
+              error={fieldErrors.truckNumber}
               value={draft.truckNumber}
               onValue={(value) => change("truckNumber")({ target: { value } })}
             />
@@ -327,6 +380,7 @@ export default function NewLoad({
               en="Load date"
               te="తేదీ"
               required
+              error={fieldErrors.date}
               value={draft.date}
               onValue={(value) => change("date")({ target: { value } })}
             />
@@ -336,6 +390,7 @@ export default function NewLoad({
               required
               maxLength={200}
               options={choices("buyerDestination", settings.savedDestinations)}
+              error={fieldErrors.buyerDestination}
               value={draft.buyerDestination}
               onValue={(value) =>
                 change("buyerDestination")({ target: { value } })
@@ -346,6 +401,7 @@ export default function NewLoad({
               te="సూపర్‌వైజర్"
               required
               maxLength={120}
+              error={fieldErrors.supervisor}
               value={draft.supervisor}
               onChange={change("supervisor")}
             />
@@ -353,8 +409,10 @@ export default function NewLoad({
           <MeasurementEntry
             products={settings.stoneRates}
             entry={entry}
-            onChange={setEntry}
+            onChange={updateEntry}
             onAdd={add}
+            errors={entryFieldErrors}
+            notice={notice}
           />
         </div>
       ) : (
@@ -423,11 +481,13 @@ export default function NewLoad({
                         te="కొలత మార్చండి"
                         onClick={() => {
                           if (entry.length || entry.width) {
-                            setError(
+                            setNotice(
                               "Add your current row before editing another",
                             );
+                            focusFirstProblem();
                             return;
                           }
+                          setEntryFieldErrors({});
                           const product = settings.stoneRates.find(
                             (p) =>
                               p.stoneType === r.stoneType &&
@@ -473,6 +533,7 @@ export default function NewLoad({
             type="number"
             min="0"
             step="0.01"
+            error={fieldErrors.fee}
             value={draft.fee}
             onChange={change("fee")}
           />

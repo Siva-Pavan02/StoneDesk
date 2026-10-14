@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import Icon from './Icon.jsx';
+import BrandLogo from './BrandLogo.jsx';
 import ProductShowcase, { SampleInvoice } from './ProductShowcase.jsx';
 import { MagneticCTA, Reveal } from './MarketingMotion.jsx';
 
@@ -74,7 +75,7 @@ export default function LandingPage({ onStart, onLogin, user, onWorkspace }) {
     <a className="mk-skip-link" href="#marketing-main" onClick={event => anchor(event, 'marketing-main')}>{pick('Skip to content', 'విషయానికి వెళ్ళండి')}</a>
     <header className="mk-public-header sticky top-3 z-20 mx-auto w-[calc(100%-24px)] max-w-[1160px] sm:top-4 sm:w-[calc(100%-48px)]">
       <nav aria-label={pick('Public navigation', 'పబ్లిక్ నావిగేషన్')} className="mk-nav flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[28px] border border-white px-3 py-2 sm:gap-x-5 sm:rounded-full sm:px-5">
-        <a href="#marketing-main" onClick={event => anchor(event, 'marketing-main')} className="flex min-h-11 shrink-0 items-center gap-2.5" aria-label={pick('StoneDesk home', 'StoneDesk హోమ్')}><span className="mk-brand flex h-8 w-8 items-center justify-center rounded-xl bg-[#17645d] text-white" aria-hidden="true"><Icon name="loads" className="h-4 w-4" /></span><span className="text-lg font-semibold tracking-[-0.045em]">StoneDesk</span></a>
+        <a href="#marketing-main" onClick={event => anchor(event, 'marketing-main')} className="flex min-h-11 shrink-0 items-center gap-2.5" aria-label={pick('StoneDesk home', 'StoneDesk హోమ్')}><BrandLogo size={32} className="mk-brand h-8 w-8" /><span className="text-lg font-semibold tracking-[-0.045em]">StoneDesk</span></a>
         <div className="mk-nav-links flex items-center gap-1 sm:gap-3">
           <a href="#product" onClick={event => anchor(event, 'product')} className="mk-nav-link flex min-h-11 items-center rounded-full px-3 text-sm">{pick('Product', 'ఉత్పత్తి')}</a>
           <a href="#how-it-works" onClick={event => anchor(event, 'how-it-works')} className="mk-nav-link flex min-h-11 items-center rounded-full px-3 text-sm">{pick('How it works', 'ఎలా పనిచేస్తుంది')}</a>

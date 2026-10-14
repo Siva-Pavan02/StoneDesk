@@ -169,6 +169,21 @@ const publicUser = (u) => ({
 
 const app = express();
 app.disable("x-powered-by");
+// Same rule as utils/auth.allowedOrigin (not imported: it loads Prisma). Browsers
+// send Origin on every cross-origin and state-changing request, so rejecting
+// unknown origins before cors() is the CSRF check, together with SameSite=strict.
+const allowedOrigin = (origin, req) => {
+  if (!origin || origin === process.env.APP_ORIGIN) return true;
+  try {
+    const url = new URL(origin);
+    if (url.origin !== origin || !["http:", "https:"].includes(url.protocol)) return false;
+    return ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) || origin === `${req.protocol || "http"}://${req.get("host")}`;
+  } catch { return false; }
+};
+app.use((req, res, next) => {
+  if (req.headers.origin && !allowedOrigin(req.headers.origin, req)) return res.status(403).json({ error: "Origin not allowed" });
+  next();
+});
 app.use(cors({ origin: true, credentials: true, maxAge: 600 }));
 app.use(express.json({ limit: "100kb" }));
 

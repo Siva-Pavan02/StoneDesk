@@ -2,12 +2,13 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Button, ErrorMessage } from './Controls.jsx';
 import { deleteDispatch, request } from '../../lib/pilotApi.js';
-import { buyerPdf, buyerExcel, driverPdf } from '../../utils/pilotExports.js';
+import { buyerExcel, driverPdf } from '../../utils/pilotExports.js';
 import { runExclusive, shareOrDownload } from '../../utils/shareFiles.js';
 import { billFilename } from '../../utils/ledgerPdf.js';
 import { a4InvoiceFromDispatch } from '../../utils/a4InvoiceModel.js';
 import { paginateA4Invoice } from '../../utils/a4InvoicePagination.js';
 import { renderA4Invoice, renderStandaloneA4Invoice } from '../../utils/a4InvoiceRender.js';
+import { a4InvoicePdf } from '../../utils/a4InvoicePdf.js';
 import { startPrint, printToWindow } from '../../utils/printInvoice.js';
 import invoiceCss from '../../styles/a4Invoice.css?raw';
 import Icon from './Icon.jsx';
@@ -16,7 +17,7 @@ export default function BillView({ record, onBack, onResume, onEdit, onChanged, 
   const { pick, language } = useLanguage();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [documentType, setDocumentType] = useState('html');
+  const [documentType, setDocumentType] = useState('invoice');
   const [confirming, setConfirming] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteError, setDeleteError] = useState('');
@@ -130,13 +131,20 @@ export default function BillView({ record, onBack, onResume, onEdit, onChanged, 
       try {
         const data = record;
         let output;
-        if (kind === 'html') {
+        if (kind === 'invoice') {
+          // Same prepared model and row packing as the A4 preview, drawn as a vector PDF.
+          const model = a4InvoiceFromDispatch(data);
+          if (model.warnings.length) { setExportWarnings(model.warnings); return; }
+          output = a4InvoicePdf(model, billFilename(data, 'Invoice', 'pdf'));
+        } else if (kind === 'html') {
           const model = a4InvoiceFromDispatch(data);
           if (model.warnings.length) { setExportWarnings(model.warnings); return; }
           const paginated = await paginateA4Invoice(model, document, pick);
           const html = renderStandaloneA4Invoice(paginated.model, paginated.pages, invoiceCss, pick);
           output = { blob: new Blob([html], { type: 'text/html;charset=utf-8' }), filename: billFilename(data, 'Invoice', 'html') };
-        } else output = kind === 'excel' ? buyerExcel(data) : kind === 'driver' ? driverPdf(data) : buyerPdf(data);
+        } else if (kind === 'excel') output = buyerExcel(data);
+        else if (kind === 'driver') output = driverPdf(data);
+        else throw new Error(`Unknown export type: ${kind}`);
         if (!share) { download(output); return; }
         const title = record.businessSnapshot?.businessName || pick('Load bill', 'లోడ్ బిల్లు');
         const outcome = await shareOrDownload(output, { title, text: pick('Load bill', 'లోడ్ బిల్లు'), download });
@@ -204,8 +212,8 @@ export default function BillView({ record, onBack, onResume, onEdit, onChanged, 
         <fieldset className="invoice-export-options" disabled={busy}>
           <legend className="sr-only">{pick('Document', 'పత్రం')}</legend>
           {[
-            ['html', pick('Buyer invoice', 'కొనుగోలుదారు బిల్లు'), pick('Approved A4 layout · portable offline file', 'ఆమోదిత A4 నమూనా · ఆఫ్‌లైన్ ఫైల్'), 'HTML', ''],
-            ['pdf', pick('Previous buyer PDF', 'మునుపటి కొనుగోలుదారు PDF'), pick('Legacy layout for existing downloads', 'పాత డౌన్‌లోడ్ లేఅవుట్'), 'PDF', ''],
+            ['invoice', pick('Buyer invoice', 'కొనుగోలుదారు బిల్లు'), pick('Approved A4 layout', 'ఆమోదిత A4 నమూనా'), 'PDF', ''],
+            ['html', pick('Buyer invoice · web copy', 'కొనుగోలుదారు బిల్లు · వెబ్ కాపీ'), pick('Opens offline in any browser', 'ఏ బ్రౌజర్‌లోనైనా ఆఫ్‌లైన్‌లో తెరుచుకుంటుంది'), 'HTML', ''],
             ['excel', pick('Buyer bill', 'కొనుగోలుదారు బిల్లు'), pick('Editable spreadsheet', 'మార్చగల స్ప్రెడ్‌షీట్'), 'XLSX', ''],
             ['driver', pick('Driver slip', 'డ్రైవర్ స్లిప్'), pick('Measurements only', 'కొలతలు మాత్రమే'), 'PDF', pick('No prices', 'ధరలు లేవు')],
           ].map(([value, title, meta, format, tag]) => (
@@ -217,7 +225,7 @@ export default function BillView({ record, onBack, onResume, onEdit, onChanged, 
           ))}
         </fieldset>
         <footer className="invoice-export-footer">
-          <p className="invoice-export-help">{pick('Print / PDF uses the approved A4 layout. The older PDF option keeps its previous layout. HTML works offline and includes the saved logo.', 'ప్రింట్ / PDF ఆమోదిత A4 నమూనాను వాడుతుంది. పాత PDF ఎంపిక పాత నమూనాలోనే ఉంటుంది. HTML ఆఫ్‌లైన్‌లో పని చేస్తుంది, సేవ్ చేసిన లోగో ఉంటుంది.')}</p>
+          <p className="invoice-export-help">{pick('The buyer invoice PDF and Print / PDF both use the approved A4 layout. The web copy works offline and includes the saved logo.', 'కొనుగోలుదారు బిల్లు PDF మరియు ప్రింట్ / PDF రెండూ ఆమోదిత A4 నమూనాను వాడతాయి. వెబ్ కాపీ ఆఫ్‌లైన్‌లో పని చేస్తుంది, సేవ్ చేసిన లోగో ఉంటుంది.')}</p>
           <div className="invoice-export-feedback" aria-live="polite">
             {exportWarnings.length > 0 && <div role="alert" className="control-error"><strong>{pick('Export is paused. Review these invoice values first:', 'ఎగుమతి ఆపబడింది. ముందుగా ఈ బిల్లు విలువలను తనిఖీ చేయండి:')}</strong><ul>{exportWarnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></div>}
             {exportError ? <ErrorMessage error={exportError} /> : exportNotice && <p className="invoice-export-notice">{exportNotice}</p>}

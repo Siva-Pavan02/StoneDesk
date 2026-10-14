@@ -87,3 +87,31 @@ test('An abandoned Google attempt never redirects or stores pending state', asyn
   assert.equal(window.location.assigned, undefined);
   assert.equal(storage.has('stonedesk.google.pending'), false);
 });
+
+test('in-app browsers are detected; regular mobile and desktop browsers are not', async () => {
+  const { isEmbeddedBrowser } = await import('../src/lib/googleSignIn.js?embedded');
+  const embedded = [
+    'Mozilla/5.0 (Linux; Android 13; Pixel 7 Build/TQ3A; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/120.0 Mobile Safari/537.36',
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 [FBAN/FBIOS;FBAV/440.0]',
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Instagram 300.0',
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
+    'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0 Mobile Safari/537.36 WhatsApp/2.24',
+  ];
+  const regular = [
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/121.0 Mobile/15E148 Safari/604.1',
+    'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0 Mobile Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0 Safari/537.36',
+  ];
+  for (const ua of embedded) assert.equal(isEmbeddedBrowser(ua), true, ua);
+  for (const ua of regular) assert.equal(isEmbeddedBrowser(ua), false, ua);
+});
+
+test('Google start in an in-app browser explains next steps without contacting the server or redirecting', async t => {
+  const storage = browser(t);
+  globalThis.fetch = () => { throw new Error('Must not call'); };
+  const { beginGoogleSignIn, EMBEDDED_BROWSER_MESSAGE } = await import('../src/lib/googleSignIn.js?embedded-start');
+  await assert.rejects(beginGoogleSignIn({ userAgent: 'Mozilla/5.0 (Linux; Android 13; wv) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36' }), { message: EMBEDDED_BROWSER_MESSAGE });
+  assert.equal(window.location.assigned, undefined);
+  assert.equal(storage.size, 0);
+});

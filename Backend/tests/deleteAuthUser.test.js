@@ -4,14 +4,16 @@ const deleteAuthUser = require('../utils/deleteAuthUser');
 
 test('Auth deletion is scoped, retryable and fails closed', async t => {
   const originalFetch = global.fetch;
-  const oldUrl = process.env.SUPABASE_URL, oldKey = process.env.SUPABASE_SECRET_KEY;
+  const names = ['SUPABASE_URL', 'SUPABASE_SECRET_KEY', 'SUPABASE_ADMIN_SECRET_KEY'];
+  const saved = Object.fromEntries(names.map(name => [name, process.env[name]]));
   t.after(() => {
     global.fetch = originalFetch;
-    for (const [key, value] of Object.entries({ SUPABASE_URL: oldUrl, SUPABASE_SECRET_KEY: oldKey })) {
+    for (const [key, value] of Object.entries(saved)) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
     }
   });
   delete process.env.SUPABASE_SECRET_KEY;
+  delete process.env.SUPABASE_ADMIN_SECRET_KEY;
   global.fetch = () => { throw new Error('Unexpected network request'); };
   await deleteAuthUser({ supabaseUserId: null });
   const user = { supabaseUserId: 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa' };

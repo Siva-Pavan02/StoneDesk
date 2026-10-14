@@ -39,8 +39,27 @@ async function verifiedGoogleUser(token) {
 async function exchange(code, verifier) {
   if (typeof code !== 'string' || !code || code.length > 2048 || typeof verifier !== 'string' || !/^[A-Za-z0-9_-]{43,128}$/.test(verifier)) throw failure('Invalid Google sign-in response.', 400);
   const result = await authRequest('/token?grant_type=pkce', { method: 'POST', body: JSON.stringify({ auth_code: code, code_verifier: verifier }) });
-  const identity = await verifiedGoogleUser(result.access_token);
-  return { ...identity, accessToken: result.access_token };
+  try {
+    return await verifiedGoogleUser(result.access_token);
+  } finally {
+    // StoneDesk runs its own session; the Supabase one is only an identity check.
+    await endSupabaseSession(result.access_token);
+  }
 }
 
-module.exports = { configuration, verifiedGoogleUser, exchange };
+// Revokes the Supabase session created by the code exchange (scope=local: only
+// this session, never the user's other devices). Best effort: the refresh token
+// never leaves the server, so a failed call only leaves an idle session to expire.
+async function endSupabaseSession(token) {
+  if (typeof token !== 'string' || !token) return;
+  try {
+    const { url, key } = configuration();
+    const response = await fetch(`${url}/auth/v1/logout?scope=local`, {
+      method: 'POST', headers: { apikey: key, Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(5000), redirect: 'error'
+    });
+    if (!response.ok && ![401, 403, 404].includes(response.status)) console.warn(JSON.stringify({ event: 'supabase_logout_failed', status: response.status }));
+  } catch { console.warn(JSON.stringify({ event: 'supabase_logout_failed' })); }
+}
+
+module.exports = { configuration, verifiedGoogleUser, exchange, endSupabaseSession };

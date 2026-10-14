@@ -5,6 +5,23 @@ import { authView } from '../../lib/authFlow.js';
 import { Button, Field, ErrorMessage } from './Controls.jsx';
 import { beginGoogleSignIn } from '../../lib/googleSignIn';
 
+// Follows Google's sign-in branding guidelines: the standard multicolour "G" mark,
+// approved "Continue with Google" wording, neutral light theme. The flow itself is
+// Supabase's OAuth redirect, so this is a branded link-style button rather than
+// the Identity Services rendered button.
+function GoogleButton({ busy, onClick }) {
+  const { pick } = useLanguage();
+  return <button type="button" className="google-signin-button" disabled={busy} aria-busy={busy || undefined} onClick={onClick}>
+    <svg className="google-signin-mark" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+    </svg>
+    <span>{busy ? pick('Please wait…', 'దయచేసి వేచి ఉండండి…') : pick('Continue with Google', 'Googleతో కొనసాగించండి')}</span>
+  </button>;
+}
+
 // Method-first auth (Fix 5): chooser → Google or email & password.
 // Local state (method, forgot, sent, createOrganization, showPassword, error, busy)
 // is reset by App's <AuthDialog key={authMode || 'closed'} …>: every close and
@@ -36,7 +53,8 @@ export default function AuthDialog({ mode, initialMethod = null, onClose, onSign
     setBusy(true); setError(''); onClearError?.();
     const values = Object.fromEntries(new FormData(e.currentTarget));
     if (signup) values.createOrganization = createOrganization;
-    if (googleSignup) values.googleAccessToken = googleSignup.accessToken;
+    // An opaque server-side ticket; the browser never holds Supabase tokens.
+    if (googleSignup) values.googleTicket = googleSignup.ticket;
     try {
       const data = await request(googleSignup?.needsLink ? '/auth/google/link' : `/auth/${mode}`, { method: 'POST', body: values });
       e.target.reset();
@@ -107,7 +125,7 @@ export default function AuthDialog({ mode, initialMethod = null, onClose, onSign
       {view === 'chooser' && <>
         <p className="auth-intro">{signup ? pick('Choose how you want to create your account.', 'మీ ఖాతాను ఎలా సృష్టించాలో ఎంచుకోండి.') : pick('Sign in to your business workspace.', 'మీ వ్యాపార వర్క్‌స్పేస్‌లో లాగిన్ అవ్వండి.')}</p>
         <ErrorMessage error={error || initialError} />
-        <div className="action-row mt-4"><Button primary className="w-full" style={{ minHeight: 48 }} disabled={busy} en={busy ? 'Please wait…' : 'Continue with Google'} te={busy ? 'దయచేసి వేచి ఉండండి…' : 'Googleతో కొనసాగించండి'} onClick={continueWithGoogle} /></div>
+        <div className="action-row mt-4"><GoogleButton busy={busy} onClick={continueWithGoogle} /></div>
         <div className="action-row mt-3"><Button className="w-full" disabled={busy} en="Use email & password" te="ఇమెయిల్ & పాస్‌వర్డ్ ఉపయోగించండి" onClick={() => { setMethod('email'); setError(''); }} /></div>
         {modeSwitch}
       </>}

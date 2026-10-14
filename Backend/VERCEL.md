@@ -37,7 +37,9 @@ Every variable the backend reads, taken from the code rather than from documenta
 | `DATABASE_URL` | Runtime secret | Production and Preview | Transaction pooler, port 6543. See the connection notes above. |
 | `DIRECT_URL` | Runtime secret | Production and Preview | Direct or session connection for schema work only. Read by the Prisma schema, so it must be present even when unused at runtime. |
 | `SUPABASE_URL` | Runtime configuration | Production and Preview | Required for Storage and Google sign-in. Validated as an HTTPS origin with no path, query or credentials. |
-| `SUPABASE_SECRET_KEY` | Runtime secret | Production and Preview | Server-only. Private logo reads and auth-user deletion. Never expose it to the frontend project. |
+| `SUPABASE_STORAGE_SECRET_KEY` | Runtime secret | Production and Preview | Server-only. Private logo storage. Falls back to `SUPABASE_SECRET_KEY`. Never expose it to the frontend project. |
+| `SUPABASE_ADMIN_SECRET_KEY` | Runtime secret | Production and Preview | Server-only. Auth-user deletion. Falls back to `SUPABASE_SECRET_KEY`. Use a different key from storage so each can be rotated alone. |
+| `SUPABASE_SECRET_KEY` | Runtime secret | Production and Preview | Server-only shared fallback for the two keys above. Never expose it to the frontend project. |
 | `SUPABASE_PUBLISHABLE_KEY` | Runtime configuration | Production and Preview | Google sign-in. Must carry the `sb_publishable_` prefix. |
 | `LOGO_STORAGE` | Runtime configuration | Production and Preview | Must be `supabase`. Startup rejects anything else here. |
 | `SUPABASE_LOGO_BUCKET` | Runtime configuration | Optional | Defaults to `stonedesk-logos`. Keep the bucket private. |

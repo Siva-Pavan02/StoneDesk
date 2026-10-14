@@ -11,7 +11,7 @@ test('distributed requests across IPs share a hashed normalized account budget',
   const keys = new Map();
   const limiter = isolated({ UPSTASH_REDIS_REST_URL: 'https://example.upstash.io', UPSTASH_REDIS_REST_TOKEN: 'test' }, key => { const n = (keys.get(key) || 0) + 1; keys.set(key,n); return { success:n<=20,limit:20,remaining:20-n,reset:Date.now() }; });
   let passed=0, blocked=0;
-  for(let i=0;i<23;i++) await limiter.authLimit({ip:`192.0.2.${i}`,path:'/login',body:{email:i%2?' Victim@Example.test ':'victim@example.test', googleAccessToken: 'attacker-controlled-extra-field'}}, {set(){},status(code){assert.equal(code,429);blocked++;return this;},json(){}},()=>passed++);
+  for(let i=0;i<23;i++) await limiter.authLimit({ip:`192.0.2.${i}`,path:'/login',body:{email:i%2?' Victim@Example.test ':'victim@example.test', googleTicket: 'attacker-controlled-extra-field'}}, {set(){},status(code){assert.equal(code,429);blocked++;return this;},json(){}},()=>passed++);
   assert.equal(passed,20);assert.equal(blocked,3);
   assert.equal([...keys.keys()].filter(k=>k.startsWith('account:')).length,1);
   assert.ok([...keys.keys()].every(k=>!k.includes('victim')&&!k.includes('@')));

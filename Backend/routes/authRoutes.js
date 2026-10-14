@@ -9,6 +9,7 @@ const { sendPasswordResetEmail } = require('../utils/email');
 const { auditLog } = require('../utils/auditLog');
 const router = express.Router();
 const googleAuth = require('../utils/googleAuth');
+const googleTickets = require('../utils/googleTickets');
 const deleteAuthUser = require('../utils/deleteAuthUser');
 const invitations = require('../utils/invitations');
 const { limitAccount } = require('../utils/rateLimiter');
@@ -27,7 +28,9 @@ router.post('/google/exchange', auth.authLimit, async (req, res, next) => {
       // A replacement Supabase identity needs account recovery, not a password
       // prompt: Google-only accounts do not have a user-chosen local password.
       if (existing?.supabaseUserId) return res.status(409).json({ error: 'Your Google account link needs recovery. Contact your administrator to restore the existing StoneDesk account.' });
-      return res.json({ needsSignup: !existing, needsLink: Boolean(existing), accessToken: identity.accessToken, email: identity.email });
+      // The verified identity stays on the server; the browser gets an opaque, short-lived ticket.
+      const ticket = await googleTickets.issue(identity);
+      return res.json({ needsSignup: !existing, needsLink: Boolean(existing), ticket, email: identity.email });
     }
     if (!user.active) return res.status(403).json({ error: 'Your account access has been paused. Contact your administrator.' });
     await auth.startSession(req, res, user);
@@ -37,7 +40,7 @@ router.post('/google/exchange', auth.authLimit, async (req, res, next) => {
 });
 router.post('/google/link', auth.authLimit, async (req, res, next) => {
   try {
-    const identity = await googleAuth.verifiedGoogleUser(req.body.googleAccessToken);
+    const identity = await googleTickets.read(req.body.googleTicket);
     await limitAccount(identity.email);
     const user = await prisma.user.findUnique({ where: { email: identity.email } });
     const password = req.body.password;
@@ -48,6 +51,7 @@ router.post('/google/link', auth.authLimit, async (req, res, next) => {
       prisma.user.update({ where: { id: user.id }, data: { supabaseUserId: identity.supabaseUserId } }),
       prisma.session.deleteMany({ where: { userId: user.id } })
     ]);
+    await googleTickets.consume(req.body.googleTicket);
     await auth.startSession(req, res, user);
     await auditLog('user.google_link', req, { userId: user.id });
     res.json({ user: auth.publicUser(user) });
@@ -75,7 +79,7 @@ function hashToken(token) {
 }
 router.post('/signup', auth.authLimit, async (req, res, next) => {
   try {
-    const google = req.body.googleAccessToken ? await googleAuth.verifiedGoogleUser(req.body.googleAccessToken) : null;
+    const google = req.body.googleTicket ? await googleTickets.read(req.body.googleTicket) : null;
     if (google) await limitAccount(google.email);
     const { email, password } = google
       ? { email: google.email, password: randomBytes(48).toString('base64url') }
@@ -114,6 +118,7 @@ router.post('/signup', auth.authLimit, async (req, res, next) => {
       user = await invitations.redeem(req.body.invitationToken, fields);
     }
 
+    if (google) await googleTickets.consume(req.body.googleTicket);
     await auth.startSession(req, res, user);
     const organization = await prisma.masterSettings.findUnique({ where: { id: user.organizationId }, select: { organizationId: true } });
     res.status(201).json({ user: auth.publicUser(user), organizationCode: organization.organizationId });

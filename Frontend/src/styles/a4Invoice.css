@@ -73,9 +73,9 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
 .a4-invoice .row-table .dim, .a4-invoice .row-table .qty { text-align: center; white-space: nowrap; }
 .a4-invoice .row-table .type { white-space: nowrap; font-size: .9em; }
 .a4-invoice .row-table .top { color: var(--accent); }
-.a4-invoice .total > * { color: var(--ink); font-size: 1em; font-weight: 600; background: var(--total-bg); border-bottom: 0; }
-.a4-invoice .total > th { text-align: start; }
-.a4-invoice .total .qty { text-align: center; }
+.a4-invoice .subtotal > * { color: var(--ink); font-size: 1em; font-weight: 600; background: var(--total-bg); border-bottom: 0; white-space: nowrap; }
+.a4-invoice .subtotal > th { text-align: start; }
+.a4-invoice .subtotal .qty { text-align: center; }
 /* Five columns: Type, L, W, Qty, Sq ft (sums to 100%). */
 .a4-invoice .col-type { width: 16%; }
 .a4-invoice .col-l, .a4-invoice .col-w { width: 20%; }
@@ -155,7 +155,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   .a4-invoice .row-table .num { white-space: nowrap; font-variant-numeric: tabular-nums; }
   .a4-invoice .col-type { width: 16%; } .a4-invoice .col-l, .a4-invoice .col-w { width: 20%; } .a4-invoice .col-qty { width: 16%; } .a4-invoice .col-area { width: 28%; }
   .a4-invoice .row-table thead :is(th, th.dim, th.qty) { white-space: normal; line-height: 1.15; vertical-align: bottom; }
-  .a4-invoice .total > th { white-space: nowrap; }
+  .a4-invoice .subtotal > th { white-space: nowrap; }
 }
 @container invoice (max-width: 340px) {
   .a4-invoice .row-table { font-size: 11px; }

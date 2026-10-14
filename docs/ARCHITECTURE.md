@@ -51,17 +51,19 @@ StoneDesk/
       index.css                 Design tokens and shared controls
       styles/                   workspace.css, landing.css, invoice.css, a4Invoice.css
       components/
-        pilot/                  Active application (see section 5)
+        pilot/                  Active application (see section 5), incl. ProductsAndPlaces.jsx and SavedReferences.jsx
         LoadingListScreen.jsx   Loading requirements screen (lazy loaded at #requirements)
-        SettingsScreen.jsx      Saved trucks and destinations (lazy loaded at #references)
+        SettingsScreen.jsx      Old saved trucks and destinations screen; no longer imported by the app
         DispatchTracker.jsx, DispatchHistory.jsx, LanguageToggle.jsx   Legacy, not imported by the app
         dispatch/               Legacy dispatch form parts; FractionChips is still used by LoadingListScreen
       i18n/                     LanguageContext, translations, pilotMessages
       lib/
         pilotApi.js             Fetch wrapper used by the pilot app
-        api.js, loadingListApi.js   Clients used by LoadingListScreen / SettingsScreen
+        api.js, loadingListApi.js   Clients used by LoadingListScreen / SavedReferences
         googleSignIn.js         Google PKCE redirect helpers
       utils/                    Calculations, drafts and document exports (see section 6)
+        workspaceRoutes.js      Hash route, tab and navigation helpers
+        truckPlate.js           Truck plate formatting and validation
     tests/                      node:test suites (invoice exports, calculation parity, CSP, ...)
   docs/                         PRD, architecture, workflows, design and UX notes
 ```
@@ -119,9 +121,9 @@ Every query on tenant data is scoped by the caller's `organizationId`.
 | `#entries` | `LoadHub` | Load list, `?status=` filter, cursor pagination |
 | `#load` | `NewLoad` + `MeasurementEntry` + `LoadSummary` | Create or edit a draft load |
 | `#bill/:id` | `BillView` | Bill preview, finalize, PDF/Excel/share |
-| `#products` | `ProductSettings` | Admin only; stone rates and royalty |
-| `#profile` | `BusinessSetup` | Admin only; business profile and logo |
-| `#references` | `SettingsScreen` | Admin only; saved trucks and destinations |
+| `#products`, `#products/trucks`, `#products/destinations` | `ProductsAndPlaces` (`ProductSettings` + `SavedReferences`) | Admin only; Products, Trucks and Destinations tabs |
+| `#profile` | `BusinessSetup` | Admin only; Profile settings (sidebar item): business profile, logo and default charges |
+| `#references` | (redirect) | Legacy alias; redirects to `#products/trucks` |
 | `#requirements` | `LoadingListScreen` | Loading requirement lists |
 | `#settings/...` | `AccountSettings` | Account, team members, password, delete |
 

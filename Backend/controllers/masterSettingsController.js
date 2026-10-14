@@ -30,13 +30,16 @@ exports.updateProfile = async (req, res, next) => {
     if (gstNumber && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(gstNumber)) return res.status(400).json({ error: 'Enter a valid 15-character GST number, or leave it blank' });
     if (tradeLicense.length > 80) return res.status(400).json({ error: 'Trade license is too long' });
     if (address.length > 300 || phone.length > 30) return res.status(400).json({ error: 'Address or phone is too long' });
+    // Same semantics as address/phone: trimmed, blank or omitted persists '', limit measured after trimming.
+    const bankDetails = typeof req.body.bankDetails === 'string' ? req.body.bankDetails.trim() : '';
+    if (bankDetails.length > 300) return res.status(400).json({ error: 'Bank details must be at most 300 characters' });
 
     let settings = await getOrCreateSettings(req.user.organizationId);
     const logoChange = req.body.removeLogo === true ? { logoPath: null } : {};
 
     const feeChange = req.body.defaultRoyaltyFee === undefined ? {} : { defaultRoyaltyFee: number(req.body.defaultRoyaltyFee, 'charges') };
 
-    settings = await updateWithVersion(settings, { businessName, address, phone, gstNumber, tradeLicense, ...logoChange, ...feeChange });
+    settings = await updateWithVersion(settings, { businessName, address, phone, bankDetails, gstNumber, tradeLicense, ...logoChange, ...feeChange });
     res.json(settings);
   } catch (err) { next(err); }
 };

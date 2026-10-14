@@ -45,14 +45,20 @@ test('the sample columns are explicit and the final summary appears only once', 
   assert.equal((html.match(/class="invoice-summary"/g) || []).length, 1);
   assert.equal((html.match(/class="closing"/g) || []).length, 1);
   assert.equal((html.match(/class="total"/g) || []).length, 24);
-  assert.equal((html.match(/Reg\. subtotal/g) || []).length, 24);
-  assert.equal((html.match(/Top subtotal/g) || []).length, 24);
+  assert.doesNotMatch(html, /subtotal|col-amount|scope="col">Amount</);
+  assert.equal((html.match(/<col class=/g) || []).length, 24 * 5);
   assert.equal((html.match(/class="type" scope="row" aria-label="Regular material"><\/th>/g) || []).length, 96);
   assert.equal((html.match(/class="type top" scope="row">Top<\/th>/g) || []).length, 72);
   assert.match(html, /Fictional data — not for payment/);
   assert.match(html, /5,537\.88/);
   assert.match(html, /₹222,015\.00/);
   assert.match(html, /Page 3 of 3/);
+  assert.equal((html.match(/<dt>Material amount<\/dt><dd data-amount="material">₹221,515\.00<\/dd>/g) || []).length, 1);
+  assert.match(html, /<dd data-total="area">5,537\.88<\/dd>/);
+  assert.match(html, /<dt>Loading \/ royalty<\/dt>/);
+  assert.match(html, /<dt>Net payable<\/dt><dd data-total="net">₹222,015\.00<\/dd>/);
+  assert.doesNotMatch(html, /Top material amount|Regular sq ft|Top sq ft|area-breakdown|data-total="(regular|top)"/);
+  assert.doesNotMatch(html, /Bank \/ UPI details|class="bank-details"/);
   assert.doesNotMatch(html, /Measurement details|24 rows|<h3[^>]*>Row /);
   const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(([, id]) => id);
   assert.equal(new Set(ids).size, ids.length);
@@ -127,11 +133,11 @@ test('historical piece-only records, Top-only and Regular-only groups retain ent
   const model = prepareA4Invoice(raw);
   assert.equal(formatA4Dimension(model.groups[0].entries[0].lengthFt), '3.125');
   assert.equal(formatA4Dimension(model.groups[1].entries[0].lengthFt), '3½');
-  assert.equal((renderA4Group(model.groups[0]).match(/subtotal/g) || []).length, 1);
-  assert.match(renderA4Group(model.groups[0]), /Top subtotal/);
-  assert.doesNotMatch(renderA4Group(model.groups[0]), /Reg\. subtotal/);
-  assert.match(renderA4Group(model.groups[1]), /Reg\. subtotal/);
-  assert.doesNotMatch(renderA4Group(model.groups[1]), /Top subtotal/);
+  for (const group of model.groups) {
+    const html = renderA4Group(group);
+    assert.doesNotMatch(html, /subtotal/);
+    assert.equal((html.match(/class="total"/g) || []).length, 1);
+  }
   assert.equal(amountInWords('12345678.90'), 'Rupees One Crore Twenty-three Lakh Forty-five Thousand Six Hundred Seventy-eight and Ninety Paise Only.');
   assert.equal(formatA4Money('12345678.90'), '₹12,345,678.90');
 
@@ -194,4 +200,52 @@ test('a separate summary page is used when one intact group cannot share its pag
   assert.deepEqual(groupsOn(pages[0]), [[1], [], []]);
   assert.deepEqual(groupsOn(pages[1]), [[], [], []]);
   assert.equal(pages[1].summary, true);
+});
+
+test('seller bank details pass through from the snapshot, trimmed, and ignore non-strings', () => {
+  const record = (bankDetails) => ({
+    status: 'Dispatched', date: '2026-10-11', dispatchSlipNumber: 'BANK-1', partyName: 'Client', supervisor: 'S',
+    logistics: { truckNumber: 'AP 01', buyerDestination: 'Town' },
+    businessSnapshot: { businessName: 'Stone Works', bankDetails },
+    inventory: [{ ratePerSqFt: 10, measurementRows: [{ rowNo: 1, lengthFt: 2, widthFt: 2, quantity: 1, category: 'Regular', lineTotal: 40 }] }],
+    summary: { loadingAndRoyaltyFees: 0 },
+  });
+  assert.equal(a4InvoiceFromDispatch(record('  SBI A/C 123, IFSC SBIN0001  ')).seller.bankDetails, 'SBI A/C 123, IFSC SBIN0001');
+  for (const value of [undefined, null, '', '   ', 42, { a: 1 }]) assert.equal(a4InvoiceFromDispatch(record(value)).seller.bankDetails, '');
+  const model = prepared();
+  assert.equal(model.seller.bankDetails, '');
+  assert.ok(model.totals.materialTotal && model.totals.area, 'Combined figures stay in the model.');
+});
+
+test('measurement tables show five columns, no money, and one pieces + area total on the final fragment', () => {
+  const model = prepared(), group = model.groups[0];
+  const html = renderA4Group(group);
+  const cells = row => (row.match(/<t[hd][\s>]/g) || []).length;
+  for (const row of html.match(/<tr data-kind=[^]*?<\/tr>/g)) assert.equal(cells(row), 5);
+  assert.equal(cells(html.match(/<thead>[^]*?<\/thead>/)[0]), 5);
+  assert.equal((html.match(/<col class=/g) || []).length, 5);
+  const total = html.match(/<tfoot>([^]*?)<\/tfoot>/)[1];
+  assert.equal(total, `<tr class="total"><th colspan="3" scope="row">Total</th><td class="qty">${group.total.pieces}</td><td class="num">${formatA4Number(group.total.area)}</td></tr>`);
+  assert.doesNotMatch(html, /₹|Amount|subtotal/);
+  const first = renderA4Group(group, 0, 4), last = renderA4Group(group, 4, group.entries.length);
+  assert.doesNotMatch(first, /<tfoot>|class="total"/);
+  assert.equal((last.match(/class="total"/g) || []).length, 1);
+  assert.throws(() => renderA4Group({ ...group, entries: [] }));
+});
+
+test('summary shows a zero material amount and the closing shows escaped bank details only when present', () => {
+  const record = (bankDetails, lineTotal = 40) => ({
+    status: 'Dispatched', date: '2026-10-11', dispatchSlipNumber: 'BANK-2', partyName: 'Client', supervisor: 'S',
+    logistics: { truckNumber: 'AP 01', buyerDestination: 'Town' },
+    businessSnapshot: { businessName: 'Stone Works', bankDetails },
+    inventory: [{ ratePerSqFt: lineTotal ? 10 : 0, measurementRows: [{ rowNo: 1, lengthFt: 2, widthFt: 2, quantity: 1, category: 'Regular', lineTotal }] }],
+    summary: { loadingAndRoyaltyFees: 0 },
+  });
+  const render = model => renderA4Invoice(model, [{ columns: [[{ group: model.groups[0], from: 0, to: model.groups[0].entries.length }], [], []], summary: true }]);
+  const withBank = render(a4InvoiceFromDispatch(record('SBI <A/C> 123\nUPI: works@sbi')));
+  assert.match(withBank, /<p class="label bank-label">Bank \/ UPI details<\/p><p class="bank-details">SBI &lt;A\/C&gt; 123\nUPI: works@sbi<\/p>/);
+  assert.match(withBank, /<dd data-amount="material">₹40\.00<\/dd>/);
+  for (const value of ['', '   ', undefined]) assert.doesNotMatch(render(a4InvoiceFromDispatch(record(value))), /Bank \/ UPI details|bank-details/);
+  const zero = render(a4InvoiceFromDispatch(record('', 0)));
+  assert.match(zero, /<dt>Material amount<\/dt><dd data-amount="material">₹0\.00<\/dd>/);
 });

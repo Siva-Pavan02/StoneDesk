@@ -87,7 +87,7 @@ const analyticsMock = empty => {
     previous: empty ? totals : { finalizedLoads: 4, billed: 73536, areaSqFt: 1074, pieces: 172, averageBilled: 18384 }, daily,
     topDestinations: empty ? [] : [{ name: 'Sample North Yard', billed: 55152, loads: 3 }, { name: 'Sample South Yard', billed: 36768, loads: 2 }], unreadable: 0 };
 };
-const navigation = [['home', 'Dashboard', 'డ్యాష్‌బోర్డ్'], ['entries', 'Loading entries', 'లోడ్ వివరాలు'], ['products', 'Products & rates', 'రకాలు మరియు ధరలు'], ['references', 'Trucks & places', 'లారీలు మరియు ప్రదేశాలు'], ['settings', 'Settings', 'సెట్టింగ్స్']];
+const navigation = [['home', 'Dashboard', 'డ్యాష్‌బోర్డ్'], ['entries', 'Loading entries', 'లోడ్ వివరాలు'], ['products', 'Products & places', 'రకాలు మరియు ప్రదేశాలు'], ['profile', 'Profile settings', 'ప్రొఫైల్ సెట్టింగ్స్'], ['settings', 'Settings', 'సెట్టింగ్స్']];
 const results = { base, browser: executable, startedAt: new Date().toISOString(), cases: [], productionFilesUnchanged: null };
 let browser;
 let shotNumber = 0;
@@ -461,31 +461,55 @@ async function workspace(language, width) {
     await expect(main().locator('input[name="currentPassword"]')).toHaveValue(''); await expect(main().locator('input[name="password"]')).toHaveAttribute('minlength', '12'); await expect(main().getByRole('button', { name: t('Log out', 'లాగ్ అవుట్'), exact: true })).toHaveCount(0);
   });
   await check('Business profile opens; wizard navigation never submits to the API', async () => {
-    await main().getByRole('link', { name: t('Business profile & default charges', 'వ్యాపార వివరాలు మరియు డిఫాల్ట్ ఛార్జీలు') }).click(); await view('profile');
-    await expect(page.locator('.sidebar-subnav')).toHaveCount(0);
+    await expect(main().getByRole('link', { name: t('Business profile & default charges', 'వ్యాపార వివరాలు మరియు డిఫాల్ట్ ఛార్జీలు') })).toHaveCount(0);
+    await nav('profile');
+    const navLinks = page.locator(width >= 1024 ? '.workspace-sidebar nav' : '#workspace-navigation-dialog nav');
+    await expect(navLinks.getByRole('link', { name: t('Profile settings', 'ప్రొఫైల్ సెట్టింగ్స్'), exact: true, includeHidden: true })).toHaveAttribute('aria-current', 'page');
+    await expect(navLinks.getByRole('link', { name: t('Settings', 'సెట్టింగ్స్'), exact: true, includeHidden: true })).not.toHaveAttribute('aria-current', 'page');
+    await expect(main().getByRole('button', { name: t('Back', 'వెనక్కి'), exact: true })).toHaveCount(0);
     await expect(page.locator('.sidebar-subnav')).toHaveCount(0);
     await expect(main().locator('.setup-progress [aria-current="step"]')).toHaveCount(1);
     const continueBox = await main().locator('.setup-continue').boundingBox(); assert.ok(continueBox.height <= 56, `Setup Continue button is ${continueBox.height}px tall`);
     await main().getByRole('button', { name: t('Continue', 'కొనసాగించండి'), exact: true }).click(); await expect(main().locator('input[type="tel"]')).toBeVisible();
-    await main().getByRole('button', { name: t('Continue', 'కొనసాగించండి'), exact: true }).click(); await expect(main().getByRole('button', { name: t('Save and continue', 'సేవ్ చేసి కొనసాగించండి'), exact: true })).toBeEnabled();
+    await main().getByRole('button', { name: t('Continue', 'కొనసాగించండి'), exact: true }).click(); await expect(main().getByRole('button', { name: t('Save and continue', 'సేవ్ చేసి కొనసాగించండి'), exact: true })).toHaveCount(0);
+    await expect(main().getByRole('button', { name: t('Save profile', 'ప్రొఫైల్ సేవ్ చేయండి'), exact: true })).toBeEnabled();
     await overflow('business-profile-defaults'); await main().getByRole('button', { name: t('Previous step', 'మునుపటి దశ'), exact: true }).click();
-    await main().getByRole('button', { name: t('Back', 'వెనక్కి'), exact: true }).click(); await view('settings');
+    await nav('settings');
   });
+  const productsTab = (en, te) => main().getByRole('group', { name: t('Products & places sections', 'రకాలు మరియు ప్రదేశాల విభాగాలు'), exact: true }).getByRole('button', { name: t(en, te), exact: true });
   await check('Products edit/cancel and saved-reference tabs are local; remove is canceled', async () => {
     await nav('products');
+    assert.equal(new URL(page.url()).hash, '#products');
+    await expect(productsTab('Products', 'రకాలు')).toHaveAttribute('aria-pressed', 'true');
+    await expect(main().getByLabel(t('Default loading / royalty charges (₹)', 'లోడింగ్ / రాయల్టీ ఛార్జీలు'))).toHaveCount(0);
     await main().getByRole('button', { name: t('Edit', 'మార్చండి'), exact: true }).first().click(); await expect(main().getByRole('button', { name: t('Update product', 'రకాన్ని మార్చండి'), exact: true })).toBeVisible();
     await main().getByRole('button', { name: t('Cancel edit', 'రద్దు చేయండి'), exact: true }).click();
     await main().getByRole('button', { name: t('Remove', 'తొలగించండి'), exact: true }).first().click(); await expect(main().locator('.product-record')).toHaveCount(2);
     await overflow('products'); await expect(main().getByRole('button', { name: t('Back', 'వెనక్కి'), exact: true })).toHaveCount(0);
-    await nav('references');
+    await productsTab('Trucks', 'లారీలు').click(); await view('products');
+    await expect.poll(() => new URL(page.url()).hash).toBe('#products/trucks');
+    await expect(productsTab('Trucks', 'లారీలు')).toHaveAttribute('aria-pressed', 'true');
     await expect(main().getByText('MOCK-LORRY-01', { exact: true })).toBeVisible();
     const plate = main().locator('.references-add input');
     await plate.fill('abc'); await plate.blur(); await expect(plate).toHaveValue('ABC'); await expect(plate).toHaveAttribute('aria-invalid', 'true');
     await expect(main().locator('.references-error')).toBeVisible(); await capture('saved-references-invalid');
     await plate.fill('tn01ab1234'); await expect(plate).not.toHaveAttribute('aria-invalid', 'true'); await expect(main().locator('.references-error')).toHaveCount(0);
     await plate.fill('');
-    await main().getByRole('button', { name: language === 'en' ? 'Destinations' : 'గమ్యస్థానాలు', exact: true }).click(); await expect(main().getByText('Sample North Yard', { exact: true })).toBeVisible();
-    await overflow('saved-references'); await nav('settings');
+    await productsTab('Destinations', 'గమ్యస్థానాలు').click(); await expect(main().getByText('Sample North Yard', { exact: true })).toBeVisible();
+    await expect.poll(() => new URL(page.url()).hash).toBe('#products/destinations');
+    await expect(productsTab('Destinations', 'గమ్యస్థానాలు')).toHaveAttribute('aria-pressed', 'true');
+    await overflow('saved-references');
+    await page.goBack();
+    await expect.poll(() => new URL(page.url()).hash).toBe('#products/trucks');
+    await expect(productsTab('Trucks', 'లారీలు')).toHaveAttribute('aria-pressed', 'true');
+    await nav('settings');
+  });
+  await check('Legacy #references route is replaced by the Trucks tab', async () => {
+    await page.goto(`${base}/#references`, { waitUntil: 'domcontentloaded' });
+    await expect.poll(() => new URL(page.url()).hash).toBe('#products/trucks');
+    await view('products');
+    await expect(productsTab('Trucks', 'లారీలు')).toHaveAttribute('aria-pressed', 'true');
+    await nav('settings');
   });
   await check('New load route hides global creation; local review/back actions are usable', async () => {
     result.acceptConfirm = true; await page.locator('.workspace-create-load').click();

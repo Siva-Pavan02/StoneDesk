@@ -1,6 +1,6 @@
 import { useLanguage } from "../../i18n/LanguageContext";
 import React, { useEffect, useRef, useState } from "react";
-import { request } from "../../lib/pilotApi.js";
+import { request, reviseDispatch } from "../../lib/pilotApi.js";
 import {
   newDraft,
   readDraft,
@@ -82,6 +82,9 @@ export default function NewLoad({
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const [recoveryReady, setRecoveryReady] = useState(Boolean(initialDraft));
+  // Revising a finalized invoice (admin): never touches the phone's draft
+  // recovery copy and saves through PUT /dispatches/:id/revise instead.
+  const reviseOf = draft.reviseOf || null;
 
   useEffect(() => {
     if (initialDraft) return;
@@ -101,7 +104,7 @@ export default function NewLoad({
   }, [settings.id, initialDraft]);
 
   useEffect(() => {
-    if (!recoveryReady || lock.current) return;
+    if (!recoveryReady || lock.current || reviseOf) return;
     const value = { ...draft, entry };
     const operation = hasDraftContent(value)
       ? writeDraft(value, settings.id)
@@ -118,10 +121,44 @@ export default function NewLoad({
     return () => {
       cancelled = true;
     };
-  }, [draft, entry, settings.id, recoveryReady]);
+  }, [draft, entry, settings.id, recoveryReady, reviseOf]);
   async function goBack() {
-    await flushDraft(settings.id);
+    if (!reviseOf) await flushDraft(settings.id);
     onBack();
+  }
+  async function revise() {
+    if (lock.current) return;
+    lock.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      if (entry.length || entry.width)
+        throw new Error("Add the current measurement row before saving");
+      // Same body shape as a draft update; the server keeps slip number and status.
+      const { clientRequestId: _clientRequestId, ...body } = payload(draft);
+      const record = await reviseDispatch(reviseOf.id, {
+        ...body,
+        updatedAt: reviseOf.updatedAt,
+      });
+      onSaved(record);
+    } catch (err) {
+      setError(
+        err.status === 409
+          ? pick(
+              "This invoice changed since you opened it. Cancel to reload the latest bill, then try again.",
+              "మీరు తెరిచిన తర్వాత ఈ బిల్లు మారింది. తాజా బిల్లు కోసం రద్దు చేసి, మళ్ళీ ప్రయత్నించండి.",
+            )
+          : err.status === 403
+            ? pick(
+                "You are not permitted to edit this invoice.",
+                "ఈ బిల్లును మార్చడానికి మీకు అనుమతి లేదు.",
+              )
+            : err.message,
+      );
+    } finally {
+      lock.current = false;
+      setBusy(false);
+    }
   }
   const rows = previewRows(draft.rows);
   const summary = summarize(draft.rows, draft.fee);
@@ -156,6 +193,8 @@ export default function NewLoad({
     }
   }
   async function save(finalize) {
+    // A revision must never create or finalize a separate dispatch.
+    if (reviseOf) return revise();
     if (lock.current) return;
     lock.current = true;
     setBusy(true);
@@ -221,8 +260,12 @@ export default function NewLoad({
       <div className="screen-heading">
         <h1>
           {review
-            ? pick("Review load", "లోడ్ వివరాలు తనిఖీ చేయండి")
-            : pick("New load", "కొత్త లోడ్")}
+            ? reviseOf
+              ? pick("Review changes", "మార్పులు తనిఖీ చేయండి")
+              : pick("Review load", "లోడ్ వివరాలు తనిఖీ చేయండి")
+            : reviseOf
+              ? pick("Edit invoice", "బిల్లు మార్చండి")
+              : pick("New load", "కొత్త లోడ్")}
         </h1>
         <button
           type="button"
@@ -232,9 +275,29 @@ export default function NewLoad({
         >
           {review
             ? pick("Back to edit", "వివరాలు మార్చండి")
-            : pick("Back to dashboard", "డ్యాష్‌బోర్డ్‌కు వెళ్ళండి")}
+            : reviseOf
+              ? pick("Cancel and back to bill", "రద్దు చేసి బిల్లుకు వెళ్ళండి")
+              : pick("Back to dashboard", "డ్యాష్‌బోర్డ్‌కు వెళ్ళండి")}
         </button>
       </div>
+      {reviseOf && (
+        <section
+          className="flex flex-col gap-1 border-l-2 border-base-content/30 pl-3 text-sm"
+          aria-label={pick("Editing a finalized invoice", "ఖరారైన బిల్లును మారుస్తున్నారు")}
+        >
+          <strong className="font-semibold">
+            {reviseOf.slip
+              ? pick(`Editing finalized invoice ${reviseOf.slip}`, `ఖరారైన బిల్లు ${reviseOf.slip} మారుస్తున్నారు`)
+              : pick("Editing finalized invoice", "ఖరారైన బిల్లును మారుస్తున్నారు")}
+          </strong>
+          <span className="opacity-70">
+            {pick(
+              "The slip number and status stay the same. The current version is kept in the invoice history.",
+              "స్లిప్ నంబర్ మరియు స్థితి మారవు. ప్రస్తుత వెర్షన్ బిల్లు చరిత్రలో భద్రపరచబడుతుంది.",
+            )}
+          </span>
+        </section>
+      )}
       <ErrorMessage error={error} />
       <ErrorMessage error={storageError} />
       {!review ? (
@@ -416,7 +479,7 @@ export default function NewLoad({
         </Card>
       )}
       <LoadSummary rows={rows} summary={summary} />
-      {review && (
+      {review && !reviseOf && (
         <p className="text-sm text-gray-700">
           {pick(
             "Finalizing locks this bill’s quantities, prices, totals, and business branding.",
@@ -427,7 +490,16 @@ export default function NewLoad({
       <div className="workflow-actions">
         {review ? (
           <>
-            {canFinalize ? (
+            {reviseOf ? (
+              <Button
+                className="w-full"
+                primary
+                disabled={busy}
+                en={busy ? "Saving…" : "Save invoice changes"}
+                te={busy ? "సేవ్ అవుతోంది…" : "బిల్లు మార్పులు సేవ్ చేయండి"}
+                onClick={revise}
+              />
+            ) : canFinalize ? (
               <Button
                 className="w-full"
                 primary
@@ -454,13 +526,15 @@ export default function NewLoad({
             onClick={openReview}
           />
         )}
-        <Button
-          className="w-full"
-          disabled={busy}
-          en="Save draft"
-          te="డ్రాఫ్ట్ సేవ్ చేయండి"
-          onClick={() => save(false)}
-        />
+        {!reviseOf && (
+          <Button
+            className="w-full"
+            disabled={busy}
+            en="Save draft"
+            te="డ్రాఫ్ట్ సేవ్ చేయండి"
+            onClick={() => save(false)}
+          />
+        )}
       </div>
     </div>
   );

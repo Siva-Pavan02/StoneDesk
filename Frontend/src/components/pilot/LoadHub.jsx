@@ -23,6 +23,8 @@ export default function LoadHub({
   updatedAt,
   analytics,
   onRetryAnalytics,
+  admin = false,
+  onDelete,
 }) {
   const { pick, language } = useLanguage();
   const locale = language === "te" ? "te-IN" : "en-IN";
@@ -68,6 +70,102 @@ export default function LoadHub({
     setRefreshPhase("done");
     doneTimer.current = setTimeout(() => setRefreshPhase("idle"), 1800);
   }
+  // Admin-only delete of finalized rows: per-row confirm toggle, one in flight.
+  const [confirmId, setConfirmId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+  const [deleteError, setDeleteError] = useState(null);
+  const canDelete = (item) =>
+    admin && typeof onDelete === "function" && item.status !== "Draft";
+  async function confirmDelete(id) {
+    setDeletingId(id);
+    setDeleteError(null);
+    try {
+      await onDelete(id);
+      setConfirmId(null);
+    } catch (err) {
+      const message =
+        err?.status === 409
+          ? pick(
+              "This invoice has recorded payments. Remove the payments before deleting.",
+              "ఈ బిల్లుకు చెల్లింపులు నమోదయ్యాయి. తొలగించే ముందు చెల్లింపులను తీసివేయండి.",
+            )
+          : err?.status === 403
+            ? pick(
+                "You are not permitted to delete invoices.",
+                "బిల్లులను తొలగించడానికి మీకు అనుమతి లేదు.",
+              )
+            : err?.message ||
+              pick("Could not delete the invoice.", "బిల్లును తొలగించలేకపోయాము.");
+      setDeleteError({ id, message });
+    } finally {
+      setDeletingId(null);
+    }
+  }
+  const deleteControl = (item) => {
+    if (!canDelete(item)) return null;
+    const busy = deletingId === item.id;
+    const lorry = item.logistics?.truckNumber || "";
+    const error = deleteError?.id === item.id ? deleteError.message : "";
+    return (
+      <div className="load-delete flex flex-wrap items-center justify-end gap-2 text-sm">
+        {confirmId === item.id ? (
+          <>
+            <span className="text-gray-700">
+              {pick("Delete this invoice?", "ఈ బిల్లును తొలగించాలా?")}
+            </span>
+            <button
+              type="button"
+              className="text-button text-red-700"
+              disabled={busy}
+              aria-busy={busy}
+              onClick={(event) => {
+                event.stopPropagation();
+                confirmDelete(item.id);
+              }}
+            >
+              {busy
+                ? pick("Deleting…", "తొలగిస్తోంది…")
+                : pick("Yes, delete", "అవును, తొలగించండి")}
+            </button>
+            <button
+              type="button"
+              className="text-button"
+              disabled={busy}
+              onClick={(event) => {
+                event.stopPropagation();
+                setConfirmId(null);
+                setDeleteError(null);
+              }}
+            >
+              {pick("Cancel", "రద్దు")}
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="text-button text-red-700"
+            disabled={deletingId !== null}
+            aria-label={pick(
+              `Delete invoice ${lorry}`,
+              `${lorry} బిల్లును తొలగించండి`,
+            )}
+            onClick={(event) => {
+              event.stopPropagation();
+              setConfirmId(item.id);
+              setDeleteError(null);
+            }}
+          >
+            {pick("Delete", "తొలగించు")}
+          </button>
+        )}
+        {error && (
+          <p role="alert" className="control-error w-full text-right">
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  };
   const refreshBusy =
     refreshPhase === "refreshing" ||
     (loading && refreshPhase === "idle" && !loads.length);
@@ -489,7 +587,9 @@ export default function LoadHub({
                   </th>
                   <th scope="col">
                     <span className="sr-only">
-                      {pick("Open load", "లోడ్ తెరవండి")}
+                      {admin
+                        ? pick("Actions", "చర్యలు")
+                        : pick("Open load", "లోడ్ తెరవండి")}
                     </span>
                   </th>
                 </tr>
@@ -529,6 +629,7 @@ export default function LoadHub({
                       >
                         <Icon name="arrow" />
                       </button>
+                      {deleteControl(item)}
                     </td>
                   </tr>
                 ))}
@@ -578,6 +679,7 @@ export default function LoadHub({
               >
                 <Icon name="arrow" />
               </Button>
+              {deleteControl(item)}
             </Card>
           );
         })}

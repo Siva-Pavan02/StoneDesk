@@ -2,19 +2,13 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useLanguage } from "../../i18n/LanguageContext";
 import { logoUrl } from "../../lib/pilotApi.js";
 import Icon from "./Icon.jsx";
+import BrandLogo from "./BrandLogo.jsx";
 import LogoutDialog from "./LogoutDialog.jsx";
+import { navigationKey, visibleNavigation } from "../../utils/workspaceRoutes.js";
 
 // Hash links: let Cmd/Ctrl/Shift/middle-click open a new tab, handle plain clicks in-app.
 const isPlainClick = (e) =>
   e.button === 0 && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey);
-
-const allNavigation = [
-  ["home", "home", "Dashboard", "డ్యాష్‌బోర్డ్"],
-  ["entries", "loads", "Loading entries", "లోడ్ వివరాలు"],
-  ["products", "products", "Products & rates", "రకాలు మరియు ధరలు", true],
-  ["references", "places", "Trucks & places", "లారీలు మరియు ప్రదేశాలు", true],
-  ["settings", "settings", "Settings", "సెట్టింగ్స్"],
-];
 
 function LanguageSwitch({ className }) {
   const { pick, language, setLanguage } = useLanguage();
@@ -83,15 +77,23 @@ export default function WorkspaceShell({
     .map((part) => part[0])
     .join("")
     .toUpperCase();
-  const navigation = allNavigation.filter(
-    ([, , , , adminOnly]) => !adminOnly || user.role === "Admin",
+  // Stand-in for the business's own logo until one is uploaded. Deliberately not
+  // the StoneDesk logo: this spot belongs to the customer's business.
+  const businessInitials =
+    (settings?.businessName || "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join("")
+      .toUpperCase() || null;
+  const businessMark = businessInitials ? (
+    <span className="business-initials" aria-hidden="true">{businessInitials}</span>
+  ) : (
+    <Icon name="products" />
   );
-  const navigationView =
-    view === "profile"
-      ? "settings"
-      : view === "requirements"
-        ? "entries"
-        : view;
+  const navigation = visibleNavigation(user.role);
+  const navigationView = navigationKey(view);
   function openDrawer() {
     drawer.current.showModal();
     setDrawerOpen(true);
@@ -127,9 +129,7 @@ export default function WorkspaceShell({
         aria-label={pick("Workspace", "వర్క్‌స్పేస్")}
       >
         <div className="sidebar-brand">
-          <span className="brand-mark">
-            <Icon name="loads" />
-          </span>
+          <BrandLogo size={44} className="brand-mark" />
           <div>
             <strong>StoneDesk</strong>
             <p className="text-xs text-gray-600">
@@ -207,7 +207,7 @@ export default function WorkspaceShell({
                 {settings?.logoPath ? (
                   <img src={logoUrl(settings.logoPath)} alt="" width={26} height={26} />
                 ) : (
-                  <Icon name="loads" />
+                  businessMark
                 )}
               </span>
               <div className="workspace-organization-text">
@@ -344,8 +344,8 @@ export default function WorkspaceShell({
                 alt=""
               />
             ) : (
-              <span className="brand-mark">
-                <Icon name="loads" />
+              <span className="workspace-organization-mark nav-drawer-business-mark">
+                {businessMark}
               </span>
             )}
             <strong id="nav-title" className="nav-drawer-title">

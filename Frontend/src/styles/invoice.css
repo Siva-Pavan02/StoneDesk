@@ -130,6 +130,8 @@
 .invoice-export-footer .action-row { flex-wrap: nowrap; justify-content: flex-end; }
 .invoice-export-help { flex: 1 1 260px; margin: 0; }
 .invoice-export-feedback { flex: 1 1 100%; }
+/* Stays mounted as a live region; takes no space (but stays in the a11y tree) while empty. */
+.invoice-export-feedback:empty { display: contents; }
 .invoice-export-notice { padding: 10px 14px; border: 1px solid #cfe3da; border-radius: var(--ui-radius-sm); background: #f1f8f4; color: var(--ui-ink); font-size: 13px; line-height: 1.6; }
 /* Delivery status sits above the bill: one quiet line with a status dot, confirmed inline. */
 .delivery-bar { --tone: #c28a12; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 10px 10px 10px 16px; border: 1px solid var(--workspace-border); border-radius: var(--ui-radius-md); background: var(--ui-surface); }

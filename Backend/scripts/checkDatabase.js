@@ -9,6 +9,15 @@ const { Client } = require('pg');
     try {
       await client.connect(); await client.query('SELECT 1');
       console.log(`${setting}: connected (${url.hostname}:${url.port || '5432'})`);
+      // Read-only presence check on the same client; never changes exitCode.
+      try {
+        const { rowCount } = await client.query(
+          `SELECT 1 FROM information_schema.columns
+           WHERE table_schema = current_schema() AND table_name = 'User' AND column_name = 'passwordLogin'`);
+        console.log(`${setting}: "passwordLogin" column ${rowCount ? 'present' : 'missing (apply prisma/changes/20261020_password_login.sql before deploying)'}`);
+      } catch (error) {
+        console.error(`${setting}: "passwordLogin" column unknown (${error.code || 'QUERY_ERROR'})`);
+      }
     } catch (error) {
       console.error(`${setting}: connection failed (${error.code || 'CONNECTION_ERROR'})`); process.exitCode = 1;
     } finally { await client.end().catch(() => {}); }

@@ -6,12 +6,13 @@ import Icon from './Icon.jsx';
 
 export default function BusinessSetup({ settings, user, onSaved, onBack }) {
   const { pick } = useLanguage();
-  const [form, setForm] = useState({ businessName: settings.businessName || '', address: settings.address || '', phone: settings.phone || '', gstNumber: settings.gstNumber || '', tradeLicense: settings.tradeLicense || '', defaultRoyaltyFee: String(settings.defaultRoyaltyFee ?? 0) });
+  const [form, setForm] = useState({ businessName: settings.businessName || '', address: settings.address || '', phone: settings.phone || '', gstNumber: settings.gstNumber || '', tradeLicense: settings.tradeLicense || '', bankDetails: settings.bankDetails || '', defaultRoyaltyFee: String(settings.defaultRoyaltyFee ?? 0) });
   const [step, setStep] = useState(0);
   const [file, setFile] = useState(null);
   const [removeLogo, setRemoveLogo] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [preview, setPreview] = useState('');
   const stepTitle = useRef(null);
   const previousStep = useRef(step);
@@ -23,6 +24,7 @@ export default function BusinessSetup({ settings, user, onSaved, onBack }) {
   }, [step]);
   function chooseLogo(e) {
     const selected = e.target.files[0];
+    setNotice('');
     if (!selected) return;
     if (!['image/png', 'image/jpeg'].includes(selected.type) || selected.size > 2 * 1024 * 1024) {
       setError(pick('Choose a JPEG or PNG logo up to 2 MB', '2 MB వరకు JPEG లేదా PNG లోగో ఎంచుకోండి'));
@@ -30,11 +32,11 @@ export default function BusinessSetup({ settings, user, onSaved, onBack }) {
     }
     setError(''); setFile(selected); setPreview(URL.createObjectURL(selected)); setRemoveLogo(false);
   }
-  const update = key => e => setForm({ ...form, [key]: e.target.value });
+  const update = key => e => { setNotice(''); setForm({ ...form, [key]: e.target.value }); };
   async function save(e) {
     e.preventDefault();
     if (busy) return;
-    if (step < 2) { setStep(step + 1); window.scrollTo(0, 0); return; }
+    if (step < 2) { setNotice(''); setStep(step + 1); window.scrollTo(0, 0); return; }
     setBusy(true); setError('');
 try {
         if (file && (!['image/png', 'image/jpeg'].includes(file.type) || file.size > 2 * 1024 * 1024)) throw new Error('Choose a JPEG or PNG logo up to 2 MB');
@@ -42,11 +44,15 @@ try {
         let result = await request(`${orgPath}/profile`, { method: 'PUT', body: { ...form, defaultRoyaltyFee: Number(form.defaultRoyaltyFee), removeLogo } });
         if (file) result = await request(`${orgPath}/logo`, { method: 'POST', file });
         onSaved(result);
+        setNotice(pick('Profile saved', 'ప్రొఫైల్ సేవ్ అయింది'));
+        setFile(null); setPreview(''); setRemoveLogo(false);
+        if (logoInput.current) logoInput.current.value = '';
       } catch (err) { setError(err.message); } finally { setBusy(false); }
   }
   return <form onSubmit={save} className="setup-form business-setup space-y-5 text-sm">
     {onBack && <button type="button" className="text-button inline-flex items-center gap-1.5" disabled={busy} onClick={onBack}><Icon name="back" className="h-4 w-4" />{pick('Back', 'వెనక్కి')}</button>}
     <div className="setup-heading screen-heading"><p className="eyebrow mb-2">{pick('BUSINESS SETUP', 'వ్యాపార నమోదు')} · {step + 1} / 3</p><h1 ref={stepTitle} tabIndex={-1} className="text-2xl font-semibold">{pick('Your business', 'మీ వ్యాపార వివరాలు')}</h1><p className="mt-3 text-sm text-gray-600">{pick('Set up once. Your name and logo appear on every new bill.', 'ఒకసారి నమోదు చేయండి. ప్రతి కొత్త బిల్లులో మీ పేరు మరియు లోగో కనిపిస్తాయి.')}</p></div>
+    {notice && <p role="status" className="success-message">{notice}</p>}
     <ErrorMessage error={error} />
     <ol className="setup-progress" aria-label={pick('Setup progress', 'నమోదు పురోగతి')}>{[['Business', 'వ్యాపారం'], ['Contact', 'సంప్రదింపు'], ['Defaults', 'డిఫాల్ట్‌లు']].map(([en, te], index) => <li key={en} aria-current={step === index ? 'step' : undefined} data-complete={index < step}><span className="step-number" aria-hidden="true">{index < step ? <Icon name="check" /> : index + 1}</span><span>{pick(en, te)}{index < step && <span className="sr-only"> {pick('completed', 'పూర్తయింది')}</span>}</span></li>)}</ol>
     {step === 0 && <div className="setup-business-grid">
@@ -71,11 +77,11 @@ try {
       {(file || settings.logoPath) && <Button en={removeLogo ? 'Keep logo' : 'Remove logo'} te={removeLogo ? 'లోగో ఉంచండి' : 'లోగో తొలగించండి'} onClick={() => { setRemoveLogo(!removeLogo); setFile(null); setPreview(''); if (logoInput.current) logoInput.current.value = ''; }} />}
     </Card>
     </div>}
-    {step === 1 && <Card className="gap-4"><Field en="Yard / office address (optional)" te="యార్డ్ / ఆఫీస్ చిరునామా" maxLength={300} value={form.address} onChange={update('address')} /><Field en="Primary phone (optional)" te="ప్రధాన ఫోన్ నంబర్" type="tel" maxLength={30} value={form.phone} onChange={update('phone')} /><p className="text-sm text-gray-700">{pick('Account contact', 'ఖాతా సంప్రదింపు')}: {user?.email}</p></Card>}
+    {step === 1 && <Card className="gap-4"><Field en="Yard / office address (optional)" te="యార్డ్ / ఆఫీస్ చిరునామా" maxLength={300} value={form.address} onChange={update('address')} /><Field en="Primary phone (optional)" te="ప్రధాన ఫోన్ నంబర్" type="tel" maxLength={30} value={form.phone} onChange={update('phone')} /><div><Field en="Bank / UPI details (optional)" te="బ్యాంక్ / UPI వివరాలు (ఐచ్ఛికం)" maxLength={300} value={form.bankDetails} onChange={update('bankDetails')} /><p className="text-xs text-gray-600 mt-1">{pick('Printed on finalized invoices so buyers can pay you.', 'కొనుగోలుదారులు చెల్లించడానికి ఖరారైన ఇన్వాయిస్‌లపై ముద్రించబడుతుంది.')}</p></div><p className="text-sm text-gray-700">{pick('Account contact', 'ఖాతా సంప్రదింపు')}: {user?.email}</p></Card>}
     {step === 2 && <Card className="gap-4"><h2 className="font-bold">{pick('Ready for your yard', 'మీ యార్డ్ కోసం సిద్ధం')}</h2><p className="break-words">{form.businessName}</p><dl className="space-y-3 text-sm"><div className="flex justify-between gap-3"><dt>{pick('Measurements', 'కొలతలు')}</dt><dd>{pick('Feet / square feet', 'అడుగులు / చదరపు అడుగులు')}</dd></div><div className="flex justify-between"><dt>{pick('Currency', 'కరెన్సీ')}</dt><dd>₹ INR</dd></div><div className="flex justify-between"><dt>{pick('Your role', 'మీ పాత్ర')}</dt><dd>{pick('Administrator', 'అడ్మిన్')}</dd></div></dl><Field en="Default loading / royalty charges (₹)" te="లోడింగ్ / రాయల్టీ ఛార్జీలు" type="number" min="0" step="0.01" required value={form.defaultRoyaltyFee} onChange={update('defaultRoyaltyFee')} /><p className="text-sm text-gray-700">{pick('GST details are for your business profile. No tax is added to bills. Staff roles are managed in Settings.', 'GST వివరాలు వ్యాపార ప్రొఫైల్ కోసం మాత్రమే. బిల్లులకు పన్ను జోడించబడదు. సిబ్బంది పాత్రలు సెట్టింగ్స్‌లో నిర్వహించండి.')}</p></Card>}
     <div className="setup-actions action-row">
-    <Button type="submit" primary disabled={busy} en={busy ? 'Saving…' : step < 2 ? 'Continue' : 'Save and continue'} te={busy ? 'సేవ్ అవుతోంది…' : step < 2 ? 'కొనసాగించండి' : 'సేవ్ చేసి కొనసాగించండి'} className="setup-continue" ><Icon name="arrow" /></Button>
-    {step > 0 && <Button disabled={busy} en="Previous step" te="మునుపటి దశ" onClick={() => setStep(step - 1)} />}
+    <Button type="submit" primary disabled={busy} en={busy ? 'Saving…' : step < 2 ? 'Continue' : settings.businessName ? 'Save profile' : 'Save and continue'} te={busy ? 'సేవ్ అవుతోంది…' : step < 2 ? 'కొనసాగించండి' : settings.businessName ? 'ప్రొఫైల్ సేవ్ చేయండి' : 'సేవ్ చేసి కొనసాగించండి'} className="setup-continue" ><Icon name="arrow" /></Button>
+    {step > 0 && <Button disabled={busy} en="Previous step" te="మునుపటి దశ" onClick={() => { setNotice(''); setStep(step - 1); }} />}
     </div>
   </form>;
 }

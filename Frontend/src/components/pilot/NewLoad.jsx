@@ -1,6 +1,6 @@
 import { useLanguage } from "../../i18n/LanguageContext";
 import React, { useEffect, useRef, useState } from "react";
-import { request } from "../../lib/pilotApi.js";
+import { request, reviseDispatch } from "../../lib/pilotApi.js";
 import {
   newDraft,
   readDraft,
@@ -10,6 +10,8 @@ import {
   hasDraftContent,
   makeRow,
   payload,
+  detailErrors,
+  entryErrors,
   previewRows,
   summarize,
   money,
@@ -77,11 +79,20 @@ export default function NewLoad({
         : base;
   });
   const [review, setReview] = useState(false);
+  // error: server and other non-field problems, shown at the top.
+  // fieldErrors / entryFieldErrors / notice: shown next to the inputs they belong to.
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [entryFieldErrors, setEntryFieldErrors] = useState({});
+  const [notice, setNotice] = useState("");
+  const root = useRef(null);
   const [storageError, setStorageError] = useState("");
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const [recoveryReady, setRecoveryReady] = useState(Boolean(initialDraft));
+  // Revising a finalized invoice (admin): never touches the phone's draft
+  // recovery copy and saves through PUT /dispatches/:id/revise instead.
+  const reviseOf = draft.reviseOf || null;
 
   useEffect(() => {
     if (initialDraft) return;
@@ -101,7 +112,7 @@ export default function NewLoad({
   }, [settings.id, initialDraft]);
 
   useEffect(() => {
-    if (!recoveryReady || lock.current) return;
+    if (!recoveryReady || lock.current || reviseOf) return;
     const value = { ...draft, entry };
     const operation = hasDraftContent(value)
       ? writeDraft(value, settings.id)
@@ -118,51 +129,130 @@ export default function NewLoad({
     return () => {
       cancelled = true;
     };
-  }, [draft, entry, settings.id, recoveryReady]);
+  }, [draft, entry, settings.id, recoveryReady, reviseOf]);
   async function goBack() {
-    await flushDraft(settings.id);
+    if (!reviseOf) await flushDraft(settings.id);
     onBack();
+  }
+  // Move focus to the first field with an inline error (the browser scrolls it
+  // into view). With no invalid field, bring the measurements message into view.
+  function focusFirstProblem() {
+    requestAnimationFrame(() => {
+      const field = root.current?.querySelector('[aria-invalid="true"]');
+      if (field) field.focus();
+      else
+        root.current
+          ?.querySelector(".field-error-block")
+          ?.scrollIntoView({ block: "center" });
+    });
+  }
+  // Checks the load details and measurements before review or save. Problems are
+  // shown under their fields, and review mode closes so those fields are visible.
+  function checkLoad(pendingMessage) {
+    const details = detailErrors(draft);
+    const measurements =
+      entry.length || entry.width
+        ? pendingMessage
+        : !draft.rows.length
+          ? "Add at least one measurement row"
+          : "";
+    setFieldErrors(details);
+    setNotice(measurements);
+    const ok = !Object.keys(details).length && !measurements;
+    if (!ok) {
+      setError("");
+      setReview(false);
+      focusFirstProblem();
+    }
+    return ok;
+  }
+  function updateEntry(next) {
+    setEntry(next);
+    // Clear the message of each measurement field the user just changed.
+    setEntryFieldErrors((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([key]) => next[key] === entry[key]),
+      ),
+    );
+    if (!next.length && !next.width && draft.rows.length) setNotice("");
+  }
+  async function revise() {
+    if (lock.current) return;
+    if (!checkLoad("Add the current measurement row before saving")) return;
+    lock.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      // Same body shape as a draft update; the server keeps slip number and status.
+      const { clientRequestId: _clientRequestId, ...body } = payload(draft);
+      const record = await reviseDispatch(reviseOf.id, {
+        ...body,
+        updatedAt: reviseOf.updatedAt,
+      });
+      onSaved(record);
+    } catch (err) {
+      setError(
+        err.status === 409
+          ? pick(
+              "This invoice changed since you opened it. Cancel to reload the latest bill, then try again.",
+              "మీరు తెరిచిన తర్వాత ఈ బిల్లు మారింది. తాజా బిల్లు కోసం రద్దు చేసి, మళ్ళీ ప్రయత్నించండి.",
+            )
+          : err.status === 403
+            ? pick(
+                "You are not permitted to edit this invoice.",
+                "ఈ బిల్లును మార్చడానికి మీకు అనుమతి లేదు.",
+              )
+            : err.message,
+      );
+    } finally {
+      lock.current = false;
+      setBusy(false);
+    }
   }
   const rows = previewRows(draft.rows);
   const summary = summarize(draft.rows, draft.fee);
-  const change = (key) => (e) => setDraft({ ...draft, [key]: e.target.value });
+  const change = (key) => (e) => {
+    setDraft({ ...draft, [key]: e.target.value });
+    if (fieldErrors[key])
+      setFieldErrors(({ [key]: _cleared, ...rest }) => rest);
+  };
   function add() {
     setError("");
+    const product = settings.stoneRates.find((p) => p.id === entry.productId);
+    const errors = entryErrors(entry, product);
+    setEntryFieldErrors(errors);
+    if (Object.keys(errors).length) {
+      focusFirstProblem();
+      return false;
+    }
     try {
-      const row = makeRow(
-        entry,
-        settings.stoneRates.find((p) => p.id === entry.productId),
-      );
+      const row = makeRow(entry, product);
       setDraft({ ...draft, rows: [...draft.rows, row] });
       setEntry({ ...entry, length: "", width: "", quantity: "1" });
+      setNotice("");
       return true;
     } catch (err) {
+      // Only the row number can still fail here; it has no input of its own.
       setError(err.message);
       return false;
     }
   }
   function openReview() {
-    try {
-      if (entry.length || entry.width)
-        throw new Error(
-          "Add the measurement row you are entering before reviewing",
-        );
-      payload(draft);
-      setError("");
-      setReview(true);
-      window.scrollTo(0, 0);
-    } catch (err) {
-      setError(err.message);
-    }
+    if (!checkLoad("Add the measurement row you are entering before reviewing"))
+      return;
+    setError("");
+    setReview(true);
+    window.scrollTo(0, 0);
   }
   async function save(finalize) {
+    // A revision must never create or finalize a separate dispatch.
+    if (reviseOf) return revise();
     if (lock.current) return;
+    if (!checkLoad("Add the current measurement row before saving")) return;
     lock.current = true;
     setBusy(true);
     setError("");
     try {
-      if (entry.length || entry.width)
-        throw new Error("Add the current measurement row before saving");
       const body = payload(draft);
       const sentBody = JSON.stringify(body);
       let record;
@@ -217,12 +307,16 @@ export default function NewLoad({
       </p>
     );
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" ref={root}>
       <div className="screen-heading">
         <h1>
           {review
-            ? pick("Review load", "లోడ్ వివరాలు తనిఖీ చేయండి")
-            : pick("New load", "కొత్త లోడ్")}
+            ? reviseOf
+              ? pick("Review changes", "మార్పులు తనిఖీ చేయండి")
+              : pick("Review load", "లోడ్ వివరాలు తనిఖీ చేయండి")
+            : reviseOf
+              ? pick("Edit invoice", "బిల్లు మార్చండి")
+              : pick("New load", "కొత్త లోడ్")}
         </h1>
         <button
           type="button"
@@ -232,9 +326,29 @@ export default function NewLoad({
         >
           {review
             ? pick("Back to edit", "వివరాలు మార్చండి")
-            : pick("Back to dashboard", "డ్యాష్‌బోర్డ్‌కు వెళ్ళండి")}
+            : reviseOf
+              ? pick("Cancel and back to bill", "రద్దు చేసి బిల్లుకు వెళ్ళండి")
+              : pick("Back to dashboard", "డ్యాష్‌బోర్డ్‌కు వెళ్ళండి")}
         </button>
       </div>
+      {reviseOf && (
+        <section
+          className="flex flex-col gap-1 border-l-2 border-base-content/30 pl-3 text-sm"
+          aria-label={pick("Editing a finalized invoice", "ఖరారైన బిల్లును మారుస్తున్నారు")}
+        >
+          <strong className="font-semibold">
+            {reviseOf.slip
+              ? pick(`Editing finalized invoice ${reviseOf.slip}`, `ఖరారైన బిల్లు ${reviseOf.slip} మారుస్తున్నారు`)
+              : pick("Editing finalized invoice", "ఖరారైన బిల్లును మారుస్తున్నారు")}
+          </strong>
+          <span className="opacity-70">
+            {pick(
+              "The slip number and status stay the same. The current version is kept in the invoice history.",
+              "స్లిప్ నంబర్ మరియు స్థితి మారవు. ప్రస్తుత వెర్షన్ బిల్లు చరిత్రలో భద్రపరచబడుతుంది.",
+            )}
+          </span>
+        </section>
+      )}
       <ErrorMessage error={error} />
       <ErrorMessage error={storageError} />
       {!review ? (
@@ -247,6 +361,7 @@ export default function NewLoad({
               required
               maxLength={120}
               options={choices("partyName")}
+              error={fieldErrors.partyName}
               value={draft.partyName}
               onValue={(value) => change("partyName")({ target: { value } })}
             />
@@ -257,6 +372,7 @@ export default function NewLoad({
               maxLength={40}
               autoCapitalize="characters"
               options={choices("truckNumber", settings.savedTrucks)}
+              error={fieldErrors.truckNumber}
               value={draft.truckNumber}
               onValue={(value) => change("truckNumber")({ target: { value } })}
             />
@@ -264,6 +380,7 @@ export default function NewLoad({
               en="Load date"
               te="తేదీ"
               required
+              error={fieldErrors.date}
               value={draft.date}
               onValue={(value) => change("date")({ target: { value } })}
             />
@@ -273,6 +390,7 @@ export default function NewLoad({
               required
               maxLength={200}
               options={choices("buyerDestination", settings.savedDestinations)}
+              error={fieldErrors.buyerDestination}
               value={draft.buyerDestination}
               onValue={(value) =>
                 change("buyerDestination")({ target: { value } })
@@ -283,6 +401,7 @@ export default function NewLoad({
               te="సూపర్‌వైజర్"
               required
               maxLength={120}
+              error={fieldErrors.supervisor}
               value={draft.supervisor}
               onChange={change("supervisor")}
             />
@@ -290,8 +409,10 @@ export default function NewLoad({
           <MeasurementEntry
             products={settings.stoneRates}
             entry={entry}
-            onChange={setEntry}
+            onChange={updateEntry}
             onAdd={add}
+            errors={entryFieldErrors}
+            notice={notice}
           />
         </div>
       ) : (
@@ -360,11 +481,13 @@ export default function NewLoad({
                         te="కొలత మార్చండి"
                         onClick={() => {
                           if (entry.length || entry.width) {
-                            setError(
+                            setNotice(
                               "Add your current row before editing another",
                             );
+                            focusFirstProblem();
                             return;
                           }
+                          setEntryFieldErrors({});
                           const product = settings.stoneRates.find(
                             (p) =>
                               p.stoneType === r.stoneType &&
@@ -410,13 +533,14 @@ export default function NewLoad({
             type="number"
             min="0"
             step="0.01"
+            error={fieldErrors.fee}
             value={draft.fee}
             onChange={change("fee")}
           />
         </Card>
       )}
       <LoadSummary rows={rows} summary={summary} />
-      {review && (
+      {review && !reviseOf && (
         <p className="text-sm text-gray-700">
           {pick(
             "Finalizing locks this bill’s quantities, prices, totals, and business branding.",
@@ -427,7 +551,16 @@ export default function NewLoad({
       <div className="workflow-actions">
         {review ? (
           <>
-            {canFinalize ? (
+            {reviseOf ? (
+              <Button
+                className="w-full"
+                primary
+                disabled={busy}
+                en={busy ? "Saving…" : "Save invoice changes"}
+                te={busy ? "సేవ్ అవుతోంది…" : "బిల్లు మార్పులు సేవ్ చేయండి"}
+                onClick={revise}
+              />
+            ) : canFinalize ? (
               <Button
                 className="w-full"
                 primary
@@ -454,13 +587,15 @@ export default function NewLoad({
             onClick={openReview}
           />
         )}
-        <Button
-          className="w-full"
-          disabled={busy}
-          en="Save draft"
-          te="డ్రాఫ్ట్ సేవ్ చేయండి"
-          onClick={() => save(false)}
-        />
+        {!reviseOf && (
+          <Button
+            className="w-full"
+            disabled={busy}
+            en="Save draft"
+            te="డ్రాఫ్ట్ సేవ్ చేయండి"
+            onClick={() => save(false)}
+          />
+        )}
       </div>
     </div>
   );

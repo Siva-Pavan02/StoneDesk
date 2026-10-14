@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const database = require('./database');
-const app = require('../server');
+const app = require('../app');
 const { organizationCode } = require('../utils/organizationCode');
 const API_PREFIX = '/api';
 

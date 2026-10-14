@@ -7,15 +7,33 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { randomUUID, randomBytes, createHash } = require("node:crypto");
 const zxcvbn = require("zxcvbn");
+const { Prisma } = require("@prisma/client");
 const calc = require("../utils/pilotCalculations");
 const { round2 } = require("../utils/dispatchCalculations");
+// Shared with the real controller so money rounding and status cannot drift.
+const { derivePaymentSummary } = require("../utils/paymentSummary");
 const { organizationCode } = require("../utils/organizationCode");
 const { buildAnalytics, windows } = require("../utils/dispatchAnalytics");
+const { authFlags, requiresCurrentPassword, buildResetUrl } = require("../utils/authFlags");
 
 const PORT = process.env.MOCK_PORT || 5001;
 const DATA_FILE = path.join(__dirname, "mock-data.json");
 const ORG = "unit_04";
 const now = () => new Date().toISOString();
+
+// A Password_Free_Account (Google-linked, passwordLogin false) that stands in
+// for a user created through Google /signup, which the mock has no routes for.
+const googleSeedUser = () => ({
+  id: "user_003",
+  name: "Mock Google User",
+  email: "google@example.test",
+  role: "Dispatcher",
+  active: true,
+  organizationId: ORG,
+  supabaseUserId: "00000000-0000-4000-8000-000000000003",
+  passwordLogin: false,
+  createdAt: now(),
+});
 
 function seed() {
   const inventory = calc.processInventory([
@@ -49,7 +67,9 @@ function seed() {
         organizationId: ORG,
         createdAt: now(),
       },
+      googleSeedUser(),
     ],
+    googleUserSeeded: true,
     settings: {
       id: ORG,
       organizationId: organizationCode("Original Stone Works"),
@@ -57,6 +77,7 @@ function seed() {
       businessName: "Original Stone Works",
       address: "Kadapa, Andhra Pradesh",
       phone: "+91 98765 43210",
+      bankDetails: "UPI: originalstone@upi",
       gstNumber: "",
       tradeLicense: "",
       defaultRoyaltyFee: 2500,
@@ -98,6 +119,7 @@ function seed() {
         inventory,
         summary: calc.totals(inventory, 2500),
         businessSnapshot: null,
+        revisions: [],
         createdAt: now(),
         updatedAt: now(),
       },
@@ -115,7 +137,16 @@ function load() {
 }
 const db = load();
 db.invitations ||= [];
+db.payments ||= [];
+// Older mock-data.json files predate the revisions column (default [] in Postgres).
+for (const d of db.dispatches) if (!Array.isArray(d.revisions)) d.revisions = [];
+// Older mock-data.json files predate the bankDetails column (default '' in Postgres).
+db.settings.bankDetails ??= "";
+db.googleUserSeeded ||= (db.users.some(u => u.id === "user_003") || db.users.push(googleSeedUser()), true);
 const inviteHash = token => createHash("sha256").update(token).digest("hex");
+// Reset tokens live only in memory for the mock process: never persisted to
+// mock-data.json and never returned to a client. Keyed by sha256(token).
+const resetTokens = new Map();
 function save() {
   fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
 }
@@ -132,11 +163,27 @@ const publicUser = (u) => ({
   active: u.active,
   organizationId: u.organizationId,
   isOwner: u.role === "Admin",
+  ...authFlags(u),
   createdAt: u.createdAt,
 });
 
 const app = express();
 app.disable("x-powered-by");
+// Same rule as utils/auth.allowedOrigin (not imported: it loads Prisma). Browsers
+// send Origin on every cross-origin and state-changing request, so rejecting
+// unknown origins before cors() is the CSRF check, together with SameSite=strict.
+const allowedOrigin = (origin, req) => {
+  if (!origin || origin === process.env.APP_ORIGIN) return true;
+  try {
+    const url = new URL(origin);
+    if (url.origin !== origin || !["http:", "https:"].includes(url.protocol)) return false;
+    return ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) || origin === `${req.protocol || "http"}://${req.get("host")}`;
+  } catch { return false; }
+};
+app.use((req, res, next) => {
+  if (req.headers.origin && !allowedOrigin(req.headers.origin, req)) return res.status(403).json({ error: "Origin not allowed" });
+  next();
+});
 app.use(cors({ origin: true, credentials: true, maxAge: 600 }));
 app.use(express.json({ limit: "100kb" }));
 
@@ -278,12 +325,17 @@ api.post(
   "/auth/password",
   requireSession,
   wrap((req, res) => {
-    credentials({ email: currentUser().email, password: req.body.password });
-    if (
-      typeof req.body.currentPassword !== "string" ||
-      req.body.currentPassword.length > 128
-    )
-      fail(400, "Enter your current password");
+    const user = currentUser();
+    credentials({ email: user.email, password: req.body.password });
+    if (requiresCurrentPassword(user)) {
+      if (
+        typeof req.body.currentPassword !== "string" ||
+        req.body.currentPassword.length > 128
+      )
+        fail(400, "Enter your current password");
+    }
+    user.passwordLogin = true;
+    save();
     res.json({ ok: true });
   }),
 );
@@ -310,6 +362,70 @@ api.delete(
 api.get("/auth/users", requireSession, requireAdmin, (req, res) =>
   res.json(db.users.map(publicUser)),
 );
+// ---- invitations (mirror routes/authRoutes.js + utils/invitations.js) ----
+// Same fields as invitations.select; tokenHash and issuedById never leave the server.
+const publicInvitation = (i) => ({
+  id: i.id,
+  email: i.email,
+  role: i.role,
+  createdAt: i.createdAt,
+  expiresAt: i.expiresAt,
+  usedAt: i.usedAt ?? null,
+  revokedAt: i.revokedAt ?? null,
+});
+api.get("/auth/invitations", requireSession, requireAdmin, (req, res) =>
+  res.json(
+    db.invitations
+      .filter((i) => !i.usedAt && !i.revokedAt && new Date(i.expiresAt) > new Date())
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 50)
+      .map(publicInvitation),
+  ),
+);
+api.post(
+  "/auth/invitations",
+  requireSession,
+  requireAdmin,
+  wrap((req, res) => {
+    const email =
+      typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    const role = req.body.role === "Yard Manager" ? "YardManager" : req.body.role;
+    if (
+      email.length > 254 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+      !["Dispatcher", "YardManager"].includes(role)
+    )
+      fail(400, "Enter a valid email and staff role.");
+    const token = randomBytes(32).toString("base64url");
+    const invitation = {
+      id: randomUUID(),
+      email,
+      role,
+      tokenHash: inviteHash(token),
+      organizationId: ORG,
+      issuedById: currentUser().id,
+      createdAt: now(),
+      expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+      usedAt: null,
+      revokedAt: null,
+    };
+    db.invitations.push(invitation);
+    save();
+    // The plain token is returned once, at issue time, like the real route.
+    res.status(201).json({ ...publicInvitation(invitation), token });
+  }),
+);
+api.delete("/auth/invitations/:id", requireSession, requireAdmin, (req, res) => {
+  if (!/^[a-f0-9-]{36}$/i.test(req.params.id))
+    return res.status(404).json({ error: "Not found" });
+  const invitation = db.invitations.find(
+    (i) => i.id === req.params.id && !i.usedAt && !i.revokedAt,
+  );
+  if (!invitation) return res.status(404).json({ error: "Not found" });
+  invitation.revokedAt = now();
+  save();
+  res.json({ ok: true });
+});
 api.patch(
   "/auth/users/:id",
   requireSession,
@@ -340,6 +456,25 @@ api.post(
         : "";
     if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       fail(400, "Enter a valid email address");
+    const user = db.users.find((u) => u.email === email && u.active);
+    if (user) {
+      const token = randomBytes(32).toString("hex");
+      resetTokens.set(inviteHash(token), {
+        userId: user.id,
+        email,
+        expiresAt: Date.now() + 3600000,
+        used: false,
+      });
+      // Same expression as the real route, defaulting to the mock port.
+      const appOrigin =
+        process.env.APP_ORIGIN ||
+        `${req.protocol}://${req.get("host") || "localhost:5001"}`;
+      console.log(
+        "[mock] Password reset link:",
+        buildResetUrl(appOrigin, token, email),
+      );
+    }
+    // Always identical for valid emails, so the response never reveals existence.
     res.json({ ok: true });
   }),
 );
@@ -347,7 +482,29 @@ api.post(
   "/auth/reset-password",
   wrap((req, res) => {
     credentials({ email: req.body.email, password: req.body.password });
-    fail(400, "Invalid or expired reset token"); // no emails are sent in mock mode, so no valid token exists
+    const token = req.body.token;
+    const email =
+      typeof req.body.email === "string"
+        ? req.body.email.trim().toLowerCase()
+        : "";
+    const entry =
+      typeof token === "string" && /^[a-f0-9]{64}$/.test(token)
+        ? resetTokens.get(inviteHash(token))
+        : undefined;
+    const user = entry && db.users.find((u) => u.id === entry.userId && u.active);
+    if (
+      !entry ||
+      entry.used ||
+      entry.expiresAt <= Date.now() ||
+      entry.email !== email ||
+      !user
+    )
+      fail(400, "Invalid or expired reset token");
+    entry.used = true;
+    user.passwordLogin = true;
+    if (session === user.id) session = null;
+    save();
+    res.json({ ok: true });
   }),
 );
 
@@ -400,7 +557,8 @@ settingsRoute("put", "/", (s, req) => {
     }
 });
 settingsRoute("put", "/profile", (s, req) => {
-  s.businessName = calc.text(req.body.businessName, "business name");
+  // Validate everything before mutating db.settings, so a rejected save changes nothing.
+  const businessName = calc.text(req.body.businessName, "business name");
   const str = (key) =>
     typeof req.body[key] === "string" ? req.body[key].trim() : "";
   const gstNumber = str("gstNumber").toUpperCase();
@@ -412,15 +570,24 @@ settingsRoute("put", "/profile", (s, req) => {
   if (str("tradeLicense").length > 80) fail(400, "Trade license is too long");
   if (str("address").length > 300 || str("phone").length > 30)
     fail(400, "Address or phone is too long");
+  // Mirrors masterSettingsController.updateProfile: trimmed, blank/omitted → '', limit after trim.
+  const bankDetails = str("bankDetails");
+  if (bankDetails.length > 300)
+    fail(400, "Bank details must be at most 300 characters");
+  const feeChange =
+    req.body.defaultRoyaltyFee === undefined
+      ? {}
+      : { defaultRoyaltyFee: calc.number(req.body.defaultRoyaltyFee, "charges") };
   Object.assign(s, {
+    businessName,
     address: str("address"),
     phone: str("phone"),
+    bankDetails,
     gstNumber,
     tradeLicense: str("tradeLicense"),
+    ...feeChange,
   });
   if (req.body.removeLogo === true) s.logoPath = null;
-  if (req.body.defaultRoyaltyFee !== undefined)
-    s.defaultRoyaltyFee = calc.number(req.body.defaultRoyaltyFee, "charges");
 });
 settingsRoute("post", "/trucks", (s, req) => {
   const v = calc.text(req.body.truckNumber, "truck number", 40).toUpperCase();
@@ -527,14 +694,17 @@ const LIST_FIELDS = [
   "updatedAt",
 ];
 const dispatches = express.Router();
+// Same role normalization and 403 body as the real allowRoles (utils/auth.js).
 const allow =
   (...roles) =>
   (req, res, next) =>
-    roles.includes(currentUser().role)
+    roles
+      .map((role) => role.replace("Yard Manager", "YardManager"))
+      .includes(currentUser().role)
       ? next()
       : res
           .status(403)
-          .json({ error: "You do not have access to this action" });
+          .json({ error: "Your role does not allow this action" });
 
 dispatches.post(
   "/",
@@ -568,6 +738,7 @@ dispatches.post(
       dispatchSlipNumber: "GS-" + randomUUID(),
       summary: calc.totals(inventory, fee),
       businessSnapshot: null,
+      revisions: [],
       status: "Draft",
       createdAt: now(),
       updatedAt: now(),
@@ -635,6 +806,144 @@ dispatches.get(
     res.json(d);
   }),
 );
+// Newest first, matching the real controller's orderBy createdAt desc.
+const dispatchPayments = (dispatchId) =>
+  db.payments
+    .filter((p) => p.dispatchId === dispatchId)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+const formatPayment = (p) => ({
+  id: p.id,
+  amount: Number(new Prisma.Decimal(p.amount).toFixed(2)),
+  note: p.note ?? null,
+  createdAt: p.createdAt,
+  createdBy: p.createdBy ?? null,
+});
+const paymentsResponse = (dispatch) => {
+  const payments = dispatchPayments(dispatch.id);
+  return {
+    ...derivePaymentSummary(dispatch.summary?.netBillableAmount, payments),
+    payments: payments.map(formatPayment),
+  };
+};
+dispatches.get(
+  "/:id/payments",
+  wrap((req, res) => {
+    const d = findDispatch(req.params.id);
+    if (!d) fail(404, "Not found");
+    res.json(paymentsResponse(d));
+  }),
+);
+dispatches.post(
+  "/:id/payments",
+  allow("Admin", "Dispatcher"),
+  wrap((req, res) => {
+    const d = findDispatch(req.params.id);
+    // Amount and note are validated before the lookup, mirroring the real
+    // controller, which only reads the dispatch inside its transaction.
+    const rawAmount = req.body.amount;
+    if (
+      typeof rawAmount !== "number" ||
+      !Number.isFinite(rawAmount) ||
+      rawAmount <= 0
+    )
+      fail(400, "Invalid payment amount");
+    if (rawAmount > 10000000) fail(400, "Payment amount exceeds limit");
+    const payDecimal = new Prisma.Decimal(round2(rawAmount).toFixed(2));
+    if (payDecimal.lessThanOrEqualTo(0)) fail(400, "Invalid payment amount");
+    let note = null;
+    if (req.body.note !== undefined && req.body.note !== null) {
+      if (typeof req.body.note !== "string") fail(400, "Invalid note");
+      const trimmed = req.body.note.trim();
+      if (trimmed.length > 255)
+        fail(400, "Note must be at most 255 characters");
+      note = trimmed || null;
+    }
+    if (!d) fail(404, "Not found");
+    if (d.status === "Draft")
+      fail(400, "Payments can only be recorded on finalized dispatches");
+    const current = derivePaymentSummary(
+      d.summary?.netBillableAmount,
+      dispatchPayments(d.id),
+    );
+    if (payDecimal.greaterThan(current.balance))
+      fail(
+        400,
+        `Payment exceeds remaining balance of ₹${current.balance.toFixed(2)}`,
+      );
+    db.payments.unshift({
+      id: "payment_" + randomUUID().slice(0, 8),
+      organizationId: ORG,
+      dispatchId: d.id,
+      amount: Number(payDecimal.toFixed(2)),
+      note,
+      createdBy: currentUser().name,
+      createdAt: now(),
+    });
+    save();
+    res.status(201).json(paymentsResponse(d));
+  }),
+);
+// Mirrors dispatchController.reviseDispatch. Registered before put('/:id').
+const FINALIZED_STATUSES = ["Dispatched", "Delivered"];
+dispatches.put(
+  "/:id/revise",
+  allow("Admin"),
+  wrap((req, res) => {
+    const d = findDispatch(req.params.id);
+    if (!d) fail(404, "Not found");
+    if (!FINALIZED_STATUSES.includes(d.status))
+      fail(409, "Only a finalized invoice can be revised.");
+    // Client's last-read timestamp: a stale edit must not overwrite a newer revision.
+    if (req.body.updatedAt !== undefined) {
+      const clientTime = new Date(req.body.updatedAt).getTime();
+      if (clientTime !== new Date(d.updatedAt).getTime())
+        fail(409, "Load changed. Refresh and try again.");
+    }
+    const { updatedAt: _clientUpdatedAt, ...body } = req.body;
+    const merged = { ...d, ...body };
+    if (d.partyName == null && !Object.hasOwn(body, "partyName"))
+      delete merged.partyName;
+    const meta = details(merged);
+    const inventory = calc.processInventory(merged.inventory);
+    const fee = body.loadingAndRoyaltyFees ?? d.summary?.loadingAndRoyaltyFees;
+    const summary = calc.totals(inventory, fee);
+    // Snapshot of the currently committed version, taken before applying new values.
+    const revisionSnapshot = {
+      inventory: d.inventory,
+      summary: d.summary,
+      logistics: d.logistics,
+      supervisor: d.supervisor,
+      partyName: d.partyName,
+      date: d.date,
+      businessSnapshot: d.businessSnapshot,
+      revisedAt: new Date().toISOString(),
+      revisedByUserId: currentUser().id,
+    };
+    const revisions = [
+      ...(Array.isArray(d.revisions) ? d.revisions : []),
+      revisionSnapshot,
+    ];
+    // dispatchSlipNumber and status are intentionally left unchanged.
+    Object.assign(d, meta, { inventory, summary, revisions, updatedAt: now() });
+    save();
+    res.json(d);
+  }),
+);
+// Mirrors dispatchController.deleteDispatch.
+dispatches.delete(
+  "/:id",
+  allow("Admin"),
+  wrap((req, res) => {
+    const id = req.params.id;
+    const index = db.dispatches.findIndex((d) => d.id === id);
+    if (index < 0) fail(404, "Not found");
+    if (db.payments.some((p) => p.dispatchId === id))
+      fail(409, "Remove the recorded payments before deleting this invoice.");
+    db.dispatches.splice(index, 1);
+    save();
+    res.json({ ok: true, id });
+  }),
+);
 dispatches.put(
   "/:id",
   wrap((req, res) => {
@@ -671,6 +980,7 @@ dispatches.post(
       businessName: s.businessName,
       address: s.address,
       phone: s.phone,
+      bankDetails: s.bankDetails || "",
       gstNumber: s.gstNumber,
       tradeLicense: s.tradeLicense,
       logoDataUrl: null,

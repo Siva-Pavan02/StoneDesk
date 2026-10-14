@@ -33,7 +33,7 @@ desktop.ini
 .vercel/
 test-results/
 playwright-report/
-
+.kiro
 # Local agent skills and files
 .agents/
 .claude/

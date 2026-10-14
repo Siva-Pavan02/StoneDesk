@@ -3,6 +3,7 @@ import { useId, useRef, useState } from 'react';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { money } from '../../utils/pilotDraft.js';
 import Icon from './Icon.jsx';
+import BrandLogo from './BrandLogo.jsx';
 import { SampleMotionBadge } from './MarketingMotion.jsx';
 import InvoiceDocument from './InvoiceDocument.jsx';
 
@@ -117,7 +118,7 @@ export default function ProductShowcase({ initialTab = 'overview', animateStatus
 
   return <div className={`mk-double-bezel min-w-0 rounded-[28px] border border-[#cfdfd8] p-2 sm:p-2.5 ${className}`}>
     <div className="mk-product-window overflow-hidden rounded-[20px] border border-[#d9e4df] bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e0eae7] px-4 py-3 sm:px-5"><span className="flex items-center gap-2 text-sm font-semibold"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#17645d] text-white" aria-hidden="true"><Icon name="loads" className="h-4 w-4" /></span>StoneDesk</span><SampleLabel /></div>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e0eae7] px-4 py-3 sm:px-5"><span className="flex items-center gap-2 text-sm font-semibold"><BrandLogo size={28} className="h-7 w-7" />StoneDesk</span><SampleLabel /></div>
       <div className="border-b border-[#e0eae7] px-3 py-3 sm:px-4"><div className="mk-showcase-tabs grid grid-cols-4" role="tablist" aria-label={pick('Explore the sample workspace', 'నమూనా వర్క్‌స్పేస్ చూడండి')}>
         {screens.map(([key, en, te], index) => <button type="button" key={key} ref={node => { tabs.current[index] = node; }} id={`${id}-tab-${key}`} role="tab" aria-selected={active === key} aria-controls={`${id}-panel`} tabIndex={active === key ? 0 : -1} onClick={() => setActive(key)} onKeyDown={event => keyboard(event, index)} className="min-w-0 px-1 sm:px-2">{pick(en, te)}</button>)}
       </div></div>

@@ -2,6 +2,7 @@ const { randomBytes, scrypt, timingSafeEqual, createHash } = require('node:crypt
 const { promisify } = require('node:util');
 const prisma = require('./prisma');
 const { authLimit } = require('./rateLimiter');
+const { authFlags } = require('./authFlags');
 const derive = promisify(scrypt);
 const cookieName = 'stonedesk_session';
 const cookieOptions = () => ({ httpOnly: true, sameSite: 'strict', secure: process.env.NODE_ENV === 'production', path: '/' });
@@ -55,7 +56,7 @@ const allowRoles = (...roles) => (req, res, next) => {
   next();
 };
 function publicUser(user) {
-  return { id: user.id, name: user.name, email: user.email, role: user.role === 'YardManager' ? 'Yard Manager' : user.role, active: user.active, organizationId: user.organizationId, isOwner: user.role === 'Admin' };
+  return { id: user.id, name: user.name, email: user.email, role: user.role === 'YardManager' ? 'Yard Manager' : user.role, active: user.active, organizationId: user.organizationId, isOwner: user.role === 'Admin', ...authFlags(user) };
 }
 function allowedOrigin(origin, req) {
   if (!origin) return true;

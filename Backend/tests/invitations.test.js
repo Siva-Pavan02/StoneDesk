@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createHash } = require('node:crypto');
 const database = require('./database');
-const app = require('../server');
+const app = require('../app');
 test('invitations enforce issuer, email, role, expiry, revocation and atomic one-time use', async t => {
   await database.setup(t);
   const server = app.listen(0, '127.0.0.1'); await new Promise(r => server.once('listening', r));

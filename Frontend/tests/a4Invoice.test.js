@@ -5,6 +5,7 @@ import { a4InvoiceFromDispatch, amountInWords, formatA4Dimension, formatA4Money,
   prepareA4Invoice, sampleA4Invoice } from '../src/utils/a4InvoiceModel.js';
 import { fixedSampleA4Pages, renderA4Invoice, renderA4Group, renderStandaloneA4Invoice } from '../src/utils/a4InvoiceRender.js';
 import { packA4Groups, planA4Invoice } from '../src/utils/a4InvoicePagination.js';
+import { a4InvoicePdf } from '../src/utils/a4InvoicePdf.js';
 
 const prepared = () => prepareA4Invoice(sampleA4Invoice());
 const groupsOn = page => page.columns.map(column => column.map(fragment => fragment.group.id));
@@ -44,15 +45,23 @@ test('the sample columns are explicit and the final summary appears only once', 
   assert.equal((html.match(/data-entry-id=/g) || []).length, 168);
   assert.equal((html.match(/class="invoice-summary"/g) || []).length, 1);
   assert.equal((html.match(/class="closing"/g) || []).length, 1);
-  assert.equal((html.match(/class="total"/g) || []).length, 24);
-  assert.equal((html.match(/Reg\. subtotal/g) || []).length, 24);
-  assert.equal((html.match(/Top subtotal/g) || []).length, 24);
+  assert.doesNotMatch(html, /class="total"|>Total<\/th>/);
+  assert.equal((html.match(/data-subtotal="regular"/g) || []).length, 24);
+  assert.equal((html.match(/data-subtotal="top"/g) || []).length, 24);
+  assert.doesNotMatch(html, /col-amount|scope="col">Amount</);
+  assert.equal((html.match(/<col class=/g) || []).length, 24 * 5);
   assert.equal((html.match(/class="type" scope="row" aria-label="Regular material"><\/th>/g) || []).length, 96);
   assert.equal((html.match(/class="type top" scope="row">Top<\/th>/g) || []).length, 72);
   assert.match(html, /Fictional data — not for payment/);
   assert.match(html, /5,537\.88/);
   assert.match(html, /₹222,015\.00/);
   assert.match(html, /Page 3 of 3/);
+  assert.equal((html.match(/<dt>Material amount<\/dt><dd data-amount="material">₹221,515\.00<\/dd>/g) || []).length, 1);
+  assert.match(html, /<dd data-total="area">5,537\.88<\/dd>/);
+  assert.match(html, /<dt>Loading \/ royalty<\/dt>/);
+  assert.match(html, /<dt>Net payable<\/dt><dd data-total="net">₹222,015\.00<\/dd>/);
+  assert.doesNotMatch(html, /Top material amount|Regular sq ft|Top sq ft|area-breakdown|data-total="(regular|top)"/);
+  assert.doesNotMatch(html, /Bank \/ UPI details|class="bank-details"/);
   assert.doesNotMatch(html, /Measurement details|24 rows|<h3[^>]*>Row /);
   const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(([, id]) => id);
   assert.equal(new Set(ids).size, ids.length);
@@ -127,11 +136,10 @@ test('historical piece-only records, Top-only and Regular-only groups retain ent
   const model = prepareA4Invoice(raw);
   assert.equal(formatA4Dimension(model.groups[0].entries[0].lengthFt), '3.125');
   assert.equal(formatA4Dimension(model.groups[1].entries[0].lengthFt), '3½');
-  assert.equal((renderA4Group(model.groups[0]).match(/subtotal/g) || []).length, 1);
-  assert.match(renderA4Group(model.groups[0]), /Top subtotal/);
-  assert.doesNotMatch(renderA4Group(model.groups[0]), /Reg\. subtotal/);
-  assert.match(renderA4Group(model.groups[1]), /Reg\. subtotal/);
-  assert.doesNotMatch(renderA4Group(model.groups[1]), /Top subtotal/);
+  const [topOnly, regularOnly] = model.groups.map(group => renderA4Group(group));
+  assert.match(topOnly, /data-subtotal="top"/); assert.doesNotMatch(topOnly, /data-subtotal="regular"/);
+  assert.match(regularOnly, /data-subtotal="regular"/); assert.doesNotMatch(regularOnly, /data-subtotal="top"/);
+  for (const html of [topOnly, regularOnly]) assert.doesNotMatch(html, /class="total"/);
   assert.equal(amountInWords('12345678.90'), 'Rupees One Crore Twenty-three Lakh Forty-five Thousand Six Hundred Seventy-eight and Ninety Paise Only.');
   assert.equal(formatA4Money('12345678.90'), '₹12,345,678.90');
 
@@ -182,7 +190,8 @@ test('height packing keeps whole groups together; oversized groups split only be
   const giantGroup = { ...sample.groups[0], id: 80,
     entries: Array.from({ length: 20 }, (_, index) => ({ ...sample.groups[0].entries[index % 7], id: `oversized-${index}` })) };
   const html = parts.map(part => renderA4Group(giantGroup, part.from, part.to)).join('');
-  assert.equal((html.match(/class="total"/g) || []).length, 1);
+  assert.equal((html.match(/data-subtotal="regular"/g) || []).length, 1);
+  assert.equal((html.match(/data-subtotal="top"/g) || []).length, 1);
   assert.equal((html.match(/class="continuation-marker"/g) || []).length, parts.length - 1);
 });
 
@@ -194,4 +203,113 @@ test('a separate summary page is used when one intact group cannot share its pag
   assert.deepEqual(groupsOn(pages[0]), [[1], [], []]);
   assert.deepEqual(groupsOn(pages[1]), [[], [], []]);
   assert.equal(pages[1].summary, true);
+});
+
+test('seller bank details pass through from the snapshot, trimmed, and ignore non-strings', () => {
+  const record = (bankDetails) => ({
+    status: 'Dispatched', date: '2026-10-11', dispatchSlipNumber: 'BANK-1', partyName: 'Client', supervisor: 'S',
+    logistics: { truckNumber: 'AP 01', buyerDestination: 'Town' },
+    businessSnapshot: { businessName: 'Stone Works', bankDetails },
+    inventory: [{ ratePerSqFt: 10, measurementRows: [{ rowNo: 1, lengthFt: 2, widthFt: 2, quantity: 1, category: 'Regular', lineTotal: 40 }] }],
+    summary: { loadingAndRoyaltyFees: 0 },
+  });
+  assert.equal(a4InvoiceFromDispatch(record('  SBI A/C 123, IFSC SBIN0001  ')).seller.bankDetails, 'SBI A/C 123, IFSC SBIN0001');
+  for (const value of [undefined, null, '', '   ', 42, { a: 1 }]) assert.equal(a4InvoiceFromDispatch(record(value)).seller.bankDetails, '');
+  const model = prepared();
+  assert.equal(model.seller.bankDetails, '');
+  assert.ok(model.totals.materialTotal && model.totals.area, 'Combined figures stay in the model.');
+});
+
+test('measurement tables show five columns, no money, and Regular / Top subtotals instead of a row total', () => {
+  const model = prepared(), group = model.groups[0];
+  const html = renderA4Group(group);
+  const cells = row => (row.match(/<t[hd][\s>]/g) || []).length;
+  for (const row of html.match(/<tr data-kind=[^]*?<\/tr>/g)) assert.equal(cells(row), 5);
+  assert.equal(cells(html.match(/<thead>[^]*?<\/thead>/)[0]), 5);
+  assert.equal((html.match(/<col class=/g) || []).length, 5);
+  const regular = `<tr class="subtotal" data-subtotal="regular"><th colspan="3" scope="row">Regular subtotal</th><td class="qty">${group.regular.pieces}</td><td class="num">${formatA4Number(group.regular.area)}</td></tr>`;
+  const top = `<tr class="subtotal" data-subtotal="top"><th colspan="3" scope="row">Top subtotal</th><td class="qty">${group.top.pieces}</td><td class="num">${formatA4Number(group.top.area)}</td></tr>`;
+  // Regular lines, Regular subtotal, Top lines, Top subtotal; nothing after it.
+  const body = html.match(/<tbody>([^]*?)<\/tbody>/)[1];
+  assert.ok(body.indexOf(regular) > body.lastIndexOf('data-kind="regular"'));
+  assert.ok(body.indexOf(regular) < body.indexOf('data-kind="top"'));
+  assert.ok(body.endsWith(top));
+  assert.doesNotMatch(html, /₹|Amount|<tfoot>|class="total"|>Total</);
+  // Group 1 of the sample has 4 Regular then 3 Top entries.
+  const first = renderA4Group(group, 0, 4), last = renderA4Group(group, 4, group.entries.length);
+  assert.match(first, /data-subtotal="regular"/); assert.doesNotMatch(first, /data-subtotal="top"/);
+  assert.match(last, /data-subtotal="top"/); assert.doesNotMatch(last, /data-subtotal="regular"/);
+  const partial = renderA4Group(group, 0, 3);
+  assert.doesNotMatch(partial, /data-subtotal/, 'A subtotal waits for the fragment holding its last entry.');
+  assert.throws(() => renderA4Group({ ...group, entries: [] }));
+});
+
+test('summary shows a zero material amount and the closing shows escaped bank details only when present', () => {
+  const record = (bankDetails, lineTotal = 40) => ({
+    status: 'Dispatched', date: '2026-10-11', dispatchSlipNumber: 'BANK-2', partyName: 'Client', supervisor: 'S',
+    logistics: { truckNumber: 'AP 01', buyerDestination: 'Town' },
+    businessSnapshot: { businessName: 'Stone Works', bankDetails },
+    inventory: [{ ratePerSqFt: lineTotal ? 10 : 0, measurementRows: [{ rowNo: 1, lengthFt: 2, widthFt: 2, quantity: 1, category: 'Regular', lineTotal }] }],
+    summary: { loadingAndRoyaltyFees: 0 },
+  });
+  const render = model => renderA4Invoice(model, [{ columns: [[{ group: model.groups[0], from: 0, to: model.groups[0].entries.length }], [], []], summary: true }]);
+  const withBank = render(a4InvoiceFromDispatch(record('SBI <A/C> 123\nUPI: works@sbi')));
+  assert.match(withBank, /<p class="label bank-label">Bank \/ UPI details<\/p><p class="bank-details">SBI &lt;A\/C&gt; 123\nUPI: works@sbi<\/p>/);
+  assert.match(withBank, /<dd data-amount="material">₹40\.00<\/dd>/);
+  for (const value of ['', '   ', undefined]) assert.doesNotMatch(render(a4InvoiceFromDispatch(record(value))), /Bank \/ UPI details|bank-details/);
+  const zero = render(a4InvoiceFromDispatch(record('', 0)));
+  assert.match(zero, /<dt>Material amount<\/dt><dd data-amount="material">₹0\.00<\/dd>/);
+});
+
+// jsPDF writes uncompressed text operators, so drawn strings appear as "(text) Tj".
+const pdfText = async output => Buffer.from(await output.blob.arrayBuffer()).toString('latin1');
+const count = (text, pattern) => (text.match(pattern) || []).length;
+
+test('buyer invoice PDF follows the A4 invoice: Regular / Top subtotals, no row total, one summary', async () => {
+  const record = {
+    status: 'Dispatched', date: '2026-10-11', dispatchSlipNumber: 'GS-42', partyName: 'Venkata Granites', supervisor: 'Ramesh',
+    logistics: { truckNumber: 'AP 37 TA 4312', buyerDestination: 'Kadapa' },
+    businessSnapshot: { businessName: 'Original Stone Works', address: 'Kadapa', bankDetails: 'UPI: stone@upi' },
+    inventory: [{ ratePerSqFt: 40, measurementRows: [
+      { rowNo: 1, lengthFt: 5, widthFt: 6, quantity: 20, category: 'Regular', lineTotal: 24000 },
+      { rowNo: 1, lengthFt: 5, widthFt: 6.75, quantity: 4, category: 'TOP', lineTotal: 5400 },
+      { rowNo: 2, lengthFt: 4, widthFt: 3, quantity: 2, category: 'Regular', lineTotal: 960 },
+    ] }],
+    summary: { loadingAndRoyaltyFees: 500 },
+  };
+  const output = a4InvoicePdf(a4InvoiceFromDispatch(record), 'Invoice.pdf');
+  const text = await pdfText(output);
+  assert.equal(output.filename, 'Invoice.pdf');
+  assert.equal(output.pages, 1);
+  assert.ok(text.startsWith('%PDF-'));
+  assert.equal(count(text, /\(Regular subtotal\) Tj/g), 2, 'one Regular subtotal per row');
+  assert.equal(count(text, /\(Top subtotal\) Tj/g), 1, 'only row 1 has Top lines');
+  assert.equal(count(text, /\(Total\) Tj/g), 0, 'no combined per-row total');
+  for (const value of ['\\(600.00\\)', '\\(135.00\\)', '\\(6\u00be\\)', 'BUYER INVOICE', 'IN TRANSIT', 'ORDER SUMMARY', 'PAYMENT SUMMARY',
+    'NET PAYABLE', '\\(Rs. 30,860.00\\)', '\\(Rs. 40.00\\)', 'UPI: stone@upi', 'Rupees Thirty Thousand Eight Hundred Sixty Only.', 'Authorized signatory', 'Page 1 of 1'])
+    assert.match(text, new RegExp(value));
+});
+
+test('buyer invoice PDF paginates long bills with the shared planner and keeps every entry', async () => {
+  const lines = Array.from({ length: 90 }, (_, i) => ({ rowNo: 1 + Math.floor(i / 6), lengthFt: 4, widthFt: 3, quantity: 1, category: i % 6 > 3 ? 'TOP' : 'Regular', lineTotal: 480 }));
+  const record = { status: 'Delivered', date: '2026-10-11', dispatchSlipNumber: 'LONG', partyName: 'P', supervisor: 'S',
+    logistics: { truckNumber: 'T', buyerDestination: 'D' }, businessSnapshot: { businessName: 'B' },
+    inventory: [{ ratePerSqFt: 40, measurementRows: lines }], summary: { loadingAndRoyaltyFees: 0 } };
+  const output = a4InvoicePdf(a4InvoiceFromDispatch(record));
+  const text = await pdfText(output);
+  assert.ok(output.pages >= 2);
+  assert.equal(count(text, /\/Type \/Page\b/g), output.pages);
+  assert.equal(count(text, /\(Regular subtotal\) Tj/g), 15);
+  assert.equal(count(text, /\(Top subtotal\) Tj/g), 15);
+  assert.equal(count(text, /NET PAYABLE/g), 1, 'summary appears once, on the final page');
+  assert.equal(count(text, /Continued on the next page/g), output.pages - 1);
+  assert.match(text, new RegExp(`Page ${output.pages} of ${output.pages}`));
+});
+
+test('sample buyer invoice PDF uses the approved three-page layout', async () => {
+  const output = a4InvoicePdf(prepared());
+  const text = await pdfText(output);
+  assert.equal(output.pages, 3);
+  assert.equal(count(text, /\(Regular subtotal\) Tj/g), 24);
+  assert.match(text, /SAMPLE INVOICE/); assert.match(text, /Not valid for payment/);
 });

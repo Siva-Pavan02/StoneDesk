@@ -20,6 +20,7 @@ model User {
   supabaseUserId String?   @unique @db.Uuid
   passwordHash   String
   passwordSalt   String
+  passwordLogin  Boolean   @default(true)
   role           Role      @default(Dispatcher)
   active         Boolean   @default(true)
   createdAt      DateTime  @default(now())
@@ -55,6 +56,7 @@ model MasterSettings {
   businessName      String?  @db.VarChar(120)
   address           String?  @db.VarChar(300)
   phone             String?  @db.VarChar(30)
+  bankDetails       String?  @db.VarChar(300)
   gstNumber         String?  @db.VarChar(15)
   tradeLicense      String?  @db.VarChar(80)
   logoPath          String?
@@ -128,6 +130,7 @@ model Dispatch {
   logistics          Json     
   inventory          Json     
   summary            Json     
+  revisions          Json     @default("[]")
   status             DispatchStatus @default(Draft)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt

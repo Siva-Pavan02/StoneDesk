@@ -73,15 +73,14 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
 .a4-invoice .row-table .dim, .a4-invoice .row-table .qty { text-align: center; white-space: nowrap; }
 .a4-invoice .row-table .type { white-space: nowrap; font-size: .9em; }
 .a4-invoice .row-table .top { color: var(--accent); }
-.a4-invoice .sub > *, .a4-invoice .total > * { color: var(--ink); font-size: 1em; font-weight: 600; }
-.a4-invoice .sub > * { background: var(--tint); }
-.a4-invoice .total > * { background: var(--total-bg); border-bottom: 0; }
-.a4-invoice .sub > th, .a4-invoice .total > th { text-align: start; }
-.a4-invoice .sub .qty, .a4-invoice .total .qty { text-align: center; }
-.a4-invoice .col-type, .a4-invoice .col-l, .a4-invoice .col-w { width: 12%; }
-.a4-invoice .col-qty { width: 9%; }
-.a4-invoice .col-area { width: 24%; }
-.a4-invoice .col-amount { width: 31%; }
+.a4-invoice .subtotal > * { color: var(--ink); font-size: 1em; font-weight: 600; background: var(--total-bg); border-bottom: 0; white-space: nowrap; }
+.a4-invoice .subtotal > th { text-align: start; }
+.a4-invoice .subtotal .qty { text-align: center; }
+/* Five columns: Type, L, W, Qty, Sq ft (sums to 100%). */
+.a4-invoice .col-type { width: 16%; }
+.a4-invoice .col-l, .a4-invoice .col-w { width: 20%; }
+.a4-invoice .col-qty { width: 14%; }
+.a4-invoice .col-area { width: 30%; }
 .a4-invoice thead { display: table-header-group; }
 .a4-invoice tfoot { display: table-row-group; }
 .a4-invoice tr { break-inside: avoid; }
@@ -96,10 +95,6 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
 .a4-invoice .headline-stat dt { color: var(--muted); font-size: 7pt; line-height: 1.2; }
 .a4-invoice .headline-stat dd { margin-top: 4px; font-size: 21pt; font-weight: 600; line-height: 1.05; letter-spacing: -.035em; font-variant-numeric: tabular-nums lining-nums; white-space: nowrap; }
 .a4-invoice .area-stat dd { color: var(--accent); }
-.a4-invoice .area-breakdown { display: flex; flex-wrap: wrap; gap: 5px 16px; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
-.a4-invoice .area-breakdown > div { display: flex; align-items: baseline; gap: 6px; }
-.a4-invoice .area-breakdown dt { color: var(--muted); font-size: 7pt; }
-.a4-invoice .area-breakdown dd { font-size: 8pt; font-weight: 600; font-variant-numeric: tabular-nums lining-nums; white-space: nowrap; }
 .a4-invoice .material-total { margin-top: 6px; }
 .a4-invoice .material-total > div { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; padding: 6px 8px; background: var(--tint); }
 .a4-invoice .material-total dt { color: var(--muted); font-size: 7pt; }
@@ -115,6 +110,8 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
 .a4-invoice .settlement-net dd { color: var(--accent); font-size: 15pt; font-weight: 700; letter-spacing: -.025em; }
 .a4-invoice .closing { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 6mm; align-items: end; margin-top: 14px; margin-bottom: 14px; break-inside: avoid; }
 .a4-invoice .amount-in-words { font-size: 8pt; }
+.a4-invoice .bank-label { margin-top: 8px; }
+.a4-invoice .bank-details { font-size: 8pt; white-space: pre-line; overflow-wrap: anywhere; }
 .a4-invoice .label { margin-bottom: 4px; color: var(--muted); font-size: 6.5pt; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
 .a4-invoice .rounding-note { margin-top: 8px; color: var(--muted); font-size: 6.5pt; line-height: 1.45; }
 .a4-invoice .sign { display: grid; gap: 2px; width: 100%; max-width: 55mm; justify-self: end; padding-top: 9px; border-top: 1px solid var(--border); text-align: end; }
@@ -156,9 +153,9 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   .a4-invoice .row-table :is(th, td):first-child { padding-inline-start: 0; }
   .a4-invoice .row-table :is(th, td):last-child { padding-inline-end: 0; }
   .a4-invoice .row-table .num { white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .a4-invoice .col-type { width: 12%; } .a4-invoice .col-l, .a4-invoice .col-w { width: 13%; } .a4-invoice .col-qty { width: 11%; } .a4-invoice .col-area { width: 21%; } .a4-invoice .col-amount { width: 30%; }
+  .a4-invoice .col-type { width: 16%; } .a4-invoice .col-l, .a4-invoice .col-w { width: 20%; } .a4-invoice .col-qty { width: 16%; } .a4-invoice .col-area { width: 28%; }
   .a4-invoice .row-table thead :is(th, th.dim, th.qty) { white-space: normal; line-height: 1.15; vertical-align: bottom; }
-  .a4-invoice .sub > th, .a4-invoice .total > th { white-space: nowrap; }
+  .a4-invoice .subtotal > th { white-space: nowrap; }
 }
 @container invoice (max-width: 340px) {
   .a4-invoice .row-table { font-size: 11px; }

@@ -3,7 +3,6 @@ import { CheckIcon, CopyIcon, EyeClosedIcon, EyeOpenIcon } from '@radix-ui/react
 import { useLanguage } from '../../i18n/LanguageContext';
 import { request } from '../../lib/pilotApi.js';
 import { Button, ErrorMessage } from './Controls.jsx';
-import Icon from './Icon.jsx';
 import Invitations from './Invitations.jsx';
 
 const ROLES = [['Admin', 'అడ్మిన్'], ['Yard Manager', 'యార్డ్ మేనేజర్'], ['Dispatcher', 'డిస్పాచర్']];
@@ -79,7 +78,7 @@ function DeleteAccount({ user, onDeleted }) {
   </div>;
 }
 
-export default function AccountSettings({ settings, user, section, navigate, onDeleted }) {
+export default function AccountSettings({ settings, user, section, onDeleted, onUserChange }) {
   const { pick } = useLanguage();
   const [users, setUsers] = useState([]);
   const [message, setMessage] = useState(null);
@@ -132,9 +131,26 @@ export default function AccountSettings({ settings, user, section, navigate, onD
     catch (err) { setMessage({ section: 'team', member: member.id, error: err.message }); }
     finally { setBusy(''); }
   }
-  async function changePassword(e) {
+  const passwordFree = user.hasPassword === false; // undefined (older API) falls back to the safe "Change password" form.
+  async function savePassword(e) {
     e.preventDefault(); if (busy) return; setBusy('password'); setMessage(null);
-    try { await request('/auth/password', { method: 'POST', body: Object.fromEntries(new FormData(e.currentTarget)) }); e.target.reset(); showNotice('account', pick('Password updated. Other sessions have been signed out.', 'పాస్‌వర్డ్ మార్చబడింది. ఇతర పరికరాలలో లాగ్ అవుట్ అయింది.')); }
+    try {
+      await request('/auth/password', { method: 'POST', body: Object.fromEntries(new FormData(e.currentTarget)) });
+      e.target.reset();
+      showNotice('account', passwordFree
+        ? pick('Password set. You can now also log in with email and password.', 'పాస్‌వర్డ్ సెట్ అయింది. ఇప్పుడు ఇమెయిల్ మరియు పాస్‌వర్డ్‌తో కూడా లాగిన్ అవ్వచ్చు.')
+        : pick('Password updated. Other sessions have been signed out.', 'పాస్‌వర్డ్ మార్చబడింది. ఇతర పరికరాలలో లాగ్ అవుట్ అయింది.'));
+      // The server confirmed success; fall back to local state if the refresh read fails.
+      request('/auth/me').then(d => onUserChange?.(d.user)).catch(() => onUserChange?.({ ...user, hasPassword: true }));
+    }
+    catch (err) { showError('account', err); } finally { setBusy(''); }
+  }
+  async function sendResetLink() {
+    if (busy) return; setBusy('reset-link'); setMessage(null);
+    try {
+      await request('/auth/forgot-password', { method: 'POST', body: { email: user.email } });
+      showNotice('account', pick('If that email exists, we sent a link', 'ఆ ఇమెయిల్ ఉంటే, మేము లింక్ పంపాము'));
+    }
     catch (err) { showError('account', err); } finally { setBusy(''); }
   }
 
@@ -169,10 +185,6 @@ export default function AccountSettings({ settings, user, section, navigate, onD
           </dd>
         </div>
       </dl>
-      {admin && <a href="#profile" className="st-row st-nav-row" onClick={e => { if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); navigate('profile'); }}>
-        <span>{pick('Business profile & default charges', 'వ్యాపార వివరాలు మరియు డిఫాల్ట్ ఛార్జీలు')}</span>
-        <Icon name="next" />
-      </a>}
       </div>
       {feedback('general')}
     </section>
@@ -199,12 +211,26 @@ export default function AccountSettings({ settings, user, section, navigate, onD
 
     <section id="settings-account" className="st-section" aria-labelledby="settings-account-heading">
       {head('account', 'Your account', 'మీ ఖాతా', `${user.name} · ${user.email} · ${roleLabel(user.role)}`, `${user.name} · ${user.email} · ${roleLabel(user.role)}`)}
-      <form className="st-password st-card" onSubmit={changePassword}>
-        <input type="text" autoComplete="username" value={user.email || ''} readOnly hidden />
-        <PasswordField name="currentPassword" en="Current password" te="ప్రస్తుత పాస్‌వర్డ్" autoComplete="current-password" maxLength={128} required />
-        <PasswordField name="password" en="New password (12+ characters)" te="కొత్త పాస్‌వర్డ్ (12+ అక్షరాలు)" autoComplete="new-password" minLength={12} maxLength={128} required />
-        <div><Button type="submit" disabled={!!busy} en={busy === 'password' ? 'Updating…' : 'Update password'} te={busy === 'password' ? 'మారుస్తోంది…' : 'పాస్‌వర్డ్ మార్చండి'} /></div>
-      </form>
+      {passwordFree
+        ? <form key="set" className="st-password st-card" onSubmit={savePassword}>
+            <h3 className="st-password-heading">{pick('Set a password', 'పాస్‌వర్డ్ సెట్ చేయండి')}</h3>
+            <p>{pick('You sign in with Google. Add a password to also log in with your email.', 'మీరు Googleతో లాగిన్ అవుతారు. ఇమెయిల్‌తో కూడా లాగిన్ అవ్వడానికి పాస్‌వర్డ్ జోడించండి.')}</p>
+            <input type="text" autoComplete="username" value={user.email || ''} readOnly hidden />
+            <PasswordField name="password" en="New password (12+ characters)" te="కొత్త పాస్‌వర్డ్ (12+ అక్షరాలు)" autoComplete="new-password" minLength={12} maxLength={128} required />
+            <div><Button type="submit" disabled={!!busy} en={busy === 'password' ? 'Setting…' : 'Set password'} te={busy === 'password' ? 'సెట్ చేస్తోంది…' : 'పాస్‌వర్డ్ సెట్ చేయండి'} /></div>
+          </form>
+        : <form key="change" className="st-password st-card" onSubmit={savePassword}>
+            <input type="text" autoComplete="username" value={user.email || ''} readOnly hidden />
+            <PasswordField name="currentPassword" en="Current password" te="ప్రస్తుత పాస్‌వర్డ్" autoComplete="current-password" maxLength={128} required />
+            <PasswordField name="password" en="New password (12+ characters)" te="కొత్త పాస్‌వర్డ్ (12+ అక్షరాలు)" autoComplete="new-password" minLength={12} maxLength={128} required />
+            <div><Button type="submit" disabled={!!busy} en={busy === 'password' ? 'Updating…' : 'Update password'} te={busy === 'password' ? 'మారుస్తోంది…' : 'పాస్‌వర్డ్ మార్చండి'} /></div>
+            {user.hasGoogle === true && <div className="st-password-reset">
+              <p>{pick('Signed up with Google and never chose a password? Email yourself a reset link to set one.', 'Googleతో నమోదు చేసి ఎప్పుడూ పాస్‌వర్డ్ ఎంచుకోలేదా? పాస్‌వర్డ్ సెట్ చేయడానికి రీసెట్ లింక్‌ను మీ ఇమెయిల్‌కు పంపుకోండి.')}</p>
+              <button type="button" className="st-link" disabled={!!busy} aria-busy={busy === 'reset-link' || undefined} onClick={sendResetLink}>
+                {busy === 'reset-link' ? pick('Sending…', 'పంపుతోంది…') : pick('Email me a reset link', 'నాకు రీసెట్ లింక్ పంపండి')}
+              </button>
+            </div>}
+          </form>}
       {feedback('account')}
     </section>
 

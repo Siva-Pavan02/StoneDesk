@@ -3,6 +3,7 @@ const prisma = require('../utils/prisma');
 const calc = require('../utils/pilotCalculations');
 const { snapshot } = require('../utils/businessBranding');
 const { buildAnalytics, windows } = require('../utils/dispatchAnalytics');
+const { auditLog } = require('../utils/auditLog');
 
 const ANALYTICS_RECORD_CAP = 20000;
 
@@ -83,7 +84,7 @@ exports.finalizeDispatch = async (req, res, next) => {
     // Parallelize: fetch dispatch and settings simultaneously
     const [dispatch, settings] = await Promise.all([
       prisma.dispatch.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } }),
-      prisma.masterSettings.findUnique({ where: { id: req.user.organizationId }, select: { businessName: true, address: true, phone: true, logoPath: true } })
+      prisma.masterSettings.findUnique({ where: { id: req.user.organizationId }, select: { businessName: true, address: true, phone: true, bankDetails: true, logoPath: true } })
     ]);
     if (!dispatch) return res.status(404).json({ error: 'Not found' });
     if (dispatch.status !== 'Draft') return res.json(dispatch);
@@ -101,6 +102,56 @@ exports.finalizeDispatch = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const FINALIZED_STATUSES = ['Dispatched', 'Delivered'];
+
+exports.reviseDispatch = async (req, res, next) => {
+  try {
+    const id = req.params.id;
+    const organizationId = req.user.organizationId;
+    const dispatch = await prisma.dispatch.findFirst({ where: { id, organizationId } });
+    if (!dispatch) return res.status(404).json({ error: 'Not found' });
+    if (!FINALIZED_STATUSES.includes(dispatch.status)) return res.status(409).json({ error: 'Only a finalized invoice can be revised.' });
+
+    // Client's last-read timestamp: a stale edit must not overwrite a newer revision.
+    if (req.body.updatedAt !== undefined) {
+      const clientTime = new Date(req.body.updatedAt).getTime();
+      if (clientTime !== new Date(dispatch.updatedAt).getTime()) return res.status(409).json({ error: 'Load changed. Refresh and try again.' });
+    }
+
+    const { updatedAt: _clientUpdatedAt, ...body } = req.body;
+    const merged = { ...dispatch, ...body };
+    if (dispatch.partyName === null && !Object.hasOwn(body, 'partyName')) delete merged.partyName;
+    const metadata = details(merged);
+    const inventory = calc.processInventory(merged.inventory);
+    const fee = body.loadingAndRoyaltyFees ?? dispatch.summary?.loadingAndRoyaltyFees;
+    const summary = calc.totals(inventory, fee);
+
+    // Snapshot of the currently committed version, taken before applying new values.
+    const revisionSnapshot = {
+      inventory: dispatch.inventory,
+      summary: dispatch.summary,
+      logistics: dispatch.logistics,
+      supervisor: dispatch.supervisor,
+      partyName: dispatch.partyName,
+      date: dispatch.date,
+      businessSnapshot: dispatch.businessSnapshot,
+      revisedAt: new Date().toISOString(),
+      revisedByUserId: req.user.id
+    };
+    const revisions = [...(Array.isArray(dispatch.revisions) ? dispatch.revisions : []), revisionSnapshot];
+
+    // dispatchSlipNumber and status are intentionally omitted so they stay unchanged.
+    const updateResult = await prisma.dispatch.updateMany({
+      where: { id: dispatch.id, organizationId, status: { in: FINALIZED_STATUSES }, updatedAt: dispatch.updatedAt },
+      data: { ...metadata, inventory, summary, revisions }
+    });
+    if (updateResult.count === 0) return res.status(409).json({ error: 'Load changed. Refresh and try again.' });
+
+    await auditLog('dispatch.update', req, { dispatchId: id });
+    res.json(await prisma.dispatch.findUnique({ where: { id: dispatch.id } }));
+  } catch (err) { next(err); }
+};
+
 exports.updateStatus = async (req, res, next) => {
   try {
     if (req.body.status !== 'Delivered') return res.status(400).json({ error: 'Invalid status transition' });
@@ -110,6 +161,26 @@ exports.updateStatus = async (req, res, next) => {
     });
     if (updateResult.count === 0) return res.status(400).json({ error: 'Invalid status transition' });
     res.json(await prisma.dispatch.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } }));
+  } catch (err) { next(err); }
+};
+
+exports.deleteDispatch = async (req, res, next) => {
+  try {
+    const id = req.params.id;
+    const organizationId = req.user.organizationId;
+    const dispatch = await prisma.dispatch.findFirst({
+      where: { id, organizationId },
+      select: { id: true, _count: { select: { payments: true } } }
+    });
+    if (!dispatch) return res.status(404).json({ error: 'Not found' });
+    // Explicit check keeps the block deterministic instead of relying on the onDelete: Restrict FK error.
+    if (dispatch._count.payments > 0) return res.status(409).json({ error: 'Remove the recorded payments before deleting this invoice.' });
+
+    const deleteResult = await prisma.dispatch.deleteMany({ where: { id, organizationId } });
+    if (deleteResult.count === 0) return res.status(404).json({ error: 'Not found' });
+
+    await auditLog('dispatch.delete', req, { dispatchId: id });
+    res.json({ ok: true, id });
   } catch (err) { next(err); }
 };
 

@@ -3,18 +3,11 @@ import { useLanguage } from "../../i18n/LanguageContext";
 import { logoUrl } from "../../lib/pilotApi.js";
 import Icon from "./Icon.jsx";
 import LogoutDialog from "./LogoutDialog.jsx";
+import { navigationKey, visibleNavigation } from "../../utils/workspaceRoutes.js";
 
 // Hash links: let Cmd/Ctrl/Shift/middle-click open a new tab, handle plain clicks in-app.
 const isPlainClick = (e) =>
   e.button === 0 && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey);
-
-const allNavigation = [
-  ["home", "home", "Dashboard", "డ్యాష్‌బోర్డ్"],
-  ["entries", "loads", "Loading entries", "లోడ్ వివరాలు"],
-  ["products", "products", "Products & rates", "రకాలు మరియు ధరలు", true],
-  ["references", "places", "Trucks & places", "లారీలు మరియు ప్రదేశాలు", true],
-  ["settings", "settings", "Settings", "సెట్టింగ్స్"],
-];
 
 function LanguageSwitch({ className }) {
   const { pick, language, setLanguage } = useLanguage();
@@ -83,15 +76,8 @@ export default function WorkspaceShell({
     .map((part) => part[0])
     .join("")
     .toUpperCase();
-  const navigation = allNavigation.filter(
-    ([, , , , adminOnly]) => !adminOnly || user.role === "Admin",
-  );
-  const navigationView =
-    view === "profile"
-      ? "settings"
-      : view === "requirements"
-        ? "entries"
-        : view;
+  const navigation = visibleNavigation(user.role);
+  const navigationView = navigationKey(view);
   function openDrawer() {
     drawer.current.showModal();
     setDrawerOpen(true);

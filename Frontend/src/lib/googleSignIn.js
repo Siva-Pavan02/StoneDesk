@@ -3,11 +3,13 @@ import { request } from './pilotApi.js';
 const pendingKey = 'stonedesk.google.pending';
 const encode = bytes => btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
 
-export async function beginGoogleSignIn() {
+export async function beginGoogleSignIn({ signal } = {}) {
   const { url } = await request('/auth/google/config');
   const verifier = encode(crypto.getRandomValues(new Uint8Array(32)));
   const state = encode(crypto.getRandomValues(new Uint8Array(24)));
   const challenge = encode(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
+  // Abandoned attempt: no pending state, no redirect. No await follows this check.
+  if (signal?.aborted) return;
   sessionStorage.setItem(pendingKey, JSON.stringify({ verifier, state, started: Date.now() }));
   const redirect = new URL('/', window.location.origin);
   redirect.searchParams.set('google_callback', state);

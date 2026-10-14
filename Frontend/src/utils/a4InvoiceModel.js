@@ -96,7 +96,9 @@ export function prepareA4Invoice(input) {
     title: input.mode === 'sample' ? 'Sample invoice' : 'Buyer invoice',
     seller: { name: required(seller.name, 'Business name'), location: seller.location?.trim() || '',
       phone: seller.phone?.trim() || '', contactLine: seller.contactLine?.trim() || '',
-      logo: safeLogo(seller.logo), signatoryName: seller.signatoryName?.trim() || '' },
+      logo: safeLogo(seller.logo), signatoryName: seller.signatoryName?.trim() || '',
+      // Optional settlement line; non-string values (null, numbers, objects) are ignored.
+      bankDetails: typeof seller.bankDetails === 'string' ? seller.bankDetails.trim() : '' },
     party: required(input.party, 'Party'), lorryNumber: required(input.lorryNumber, 'Lorry number'),
     destination: required(input.destination, 'Destination'), supervisor: required(input.supervisor, 'Supervisor'),
     currency: input.currency,
@@ -199,7 +201,7 @@ export function a4InvoiceFromDispatch(record) {
   }
   return prepareA4Invoice({ mode: 'production', currency: 'INR', invoiceNumber: record?.dispatchSlipNumber, invoiceDate: record?.date,
     status: record?.status, seller: { name: business.businessName, location: business.address, phone: business.phone,
-      logo: business.logoDataUrl, signatoryName: business.signatoryName }, party: record?.partyName,
+      logo: business.logoDataUrl, signatoryName: business.signatoryName, bankDetails: business.bankDetails }, party: record?.partyName,
     lorryNumber: record?.logistics?.truckNumber, destination: record?.logistics?.buyerDestination,
     supervisor: record?.supervisor, groups: [...byNumber.values()], loadingRoyalty: record?.summary?.loadingAndRoyaltyFees,
     storedTotals: { totalPieces: record?.summary?.totalPieces, totalArea: record?.summary?.totalDispatchVolumeSqFt,

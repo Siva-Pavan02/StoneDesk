@@ -28,7 +28,7 @@ async function storeLogo(buffer, mime) {
   return `/uploads/${filename}`;
 }
 async function snapshot(settings) {
-  const result = { businessName: settings?.businessName || 'StoneDesk', address: settings?.address || '', phone: settings?.phone || '' };
+  const result = { businessName: settings?.businessName || 'StoneDesk', address: settings?.address || '', phone: settings?.phone || '', bankDetails: settings?.bankDetails || '' };
   if (settings?.logoPath) {
     const filename = settings.logoPath.match(/^\/uploads\/([a-f0-9-]+\.png)$/)?.[1];
     if (!filename || !validateLogoFilename(filename)) bad('Invalid stored logo');

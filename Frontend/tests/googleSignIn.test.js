@@ -76,3 +76,14 @@ test('A callback without its browser verifier cannot create a session', async t 
   const { finishGoogleSignIn } = await import('../src/lib/googleSignIn.js?missing-pending');
   await assert.rejects(finishGoogleSignIn(), /same browser tab/);
 });
+
+test('An abandoned Google attempt never redirects or stores pending state', async t => {
+  const storage = browser(t);
+  globalThis.fetch = async () => Response.json({ url: 'https://project.supabase.co' });
+  const { beginGoogleSignIn } = await import('../src/lib/googleSignIn.js?aborted');
+  const controller = new AbortController();
+  controller.abort();
+  await beginGoogleSignIn({ signal: controller.signal });
+  assert.equal(window.location.assigned, undefined);
+  assert.equal(storage.has('stonedesk.google.pending'), false);
+});

@@ -59,3 +59,11 @@ export function createInvoicePayment(dispatchId, payload) {
     body: payload
   });
 }
+
+export function deleteDispatch(id) {
+  return request(`/dispatches/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export function reviseDispatch(id, body) {
+  return request(`/dispatches/${encodeURIComponent(id)}/revise`, { method: 'PUT', body });
+}

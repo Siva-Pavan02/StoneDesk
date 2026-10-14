@@ -2,10 +2,9 @@ import { useLanguage } from '../../i18n/LanguageContext';
 import React, { useState } from 'react';
 import { request, settingsPath } from '../../lib/pilotApi.js';
 import { Button, Card, Field, ErrorMessage } from './Controls.jsx';
-import Icon from './Icon.jsx';
 import { money } from '../../utils/pilotDraft.js';
 const empty = { stoneType: '', finish: '', defaultRate: '' };
-export default function ProductSettings({ settings, onChanged, onBack, onboarding = false, user }) {
+export default function ProductSettings({ settings, onChanged, user }) {
   const { pick } = useLanguage();
   const [form, setForm] = useState(empty);
   const [editId, setEditId] = useState(null);
@@ -26,8 +25,7 @@ export default function ProductSettings({ settings, onChanged, onBack, onboardin
     catch (err) { setError(err.message); } finally { setBusy(false); }
   }
   return <div className="product-settings space-y-4 text-sm">
-    {!onboarding && onBack && <button type="button" className="text-button inline-flex items-center gap-1.5" disabled={busy} onClick={onBack}><Icon name="back" className="h-4 w-4" />{pick('Back', 'వెనక్కి')}</button>}
-    <div className="screen-heading"><h1 className="text-2xl font-semibold">{pick('Products & rates', 'రకాలు మరియు ధరలు')}</h1><p className="mt-3 text-sm text-gray-600">{pick('Add the tiles or stones you sell. All rates are per sq ft.', 'మీరు అమ్మే టైల్స్ లేదా రాళ్లను జోడించండి. ధరలు చదరపు అడుగుకు.')}</p></div>
+    <div className="screen-heading"><h2 className="section-heading text-2xl font-semibold">{pick('Products & rates', 'రకాలు మరియు ధరలు')}</h2><p className="mt-3 text-sm text-gray-600">{pick('Add the tiles or stones you sell. All rates are per sq ft.', 'మీరు అమ్మే టైల్స్ లేదా రాళ్లను జోడించండి. ధరలు చదరపు అడుగుకు.')}</p></div>
     <ErrorMessage error={error} />
     <form onSubmit={save}><Card className="product-form gap-4">
       <Field en="Tile / stone name" te="టైల్ / రాయి పేరు" required maxLength={120} value={form.stoneType} onChange={e => setForm({ ...form, stoneType: e.target.value })} />
@@ -43,6 +41,5 @@ export default function ProductSettings({ settings, onChanged, onBack, onboardin
       <div className="flex justify-between gap-3"><div className="min-w-0 break-words"><h2 className="section-heading font-semibold">{p.stoneType}</h2><p className="text-gray-600">{p.finish}</p></div><strong className="tabular-nums">{money(p.defaultRate)}<span className="block text-sm font-normal text-gray-600">/ {pick('sq ft', 'చ.అ.')}</span></strong></div>
       <div className="product-actions action-row flex flex-wrap gap-2"><Button disabled={busy} en="Edit" te="మార్చండి" onClick={() => { setForm({ ...p, defaultRate: String(p.defaultRate) }); setEditId(p.id); window.scrollTo(0, 0); }} /><Button disabled={busy} en="Remove" te="తొలగించండి" onClick={() => remove(p)} /></div>
     </Card>)}
-    {onboarding && <div className="action-row flex justify-end border-t border-gray-200 pt-4"><Button primary disabled={busy || !settings.stoneRates.length} en="Open workspace" te="వర్క్‌స్పేస్ తెరవండి" onClick={onBack} /></div>}
   </div>;
 }

@@ -1,6 +1,6 @@
 import { useLanguage } from "../../i18n/LanguageContext";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { request, settingsPath } from "../../lib/pilotApi.js";
+import { deleteDispatch, request, settingsPath } from "../../lib/pilotApi.js";
 import {
   fromDispatch,
   newDraft,
@@ -9,27 +9,21 @@ import {
 } from "../../utils/pilotDraft.js";
 import { Button, Card, ErrorMessage } from "./Controls.jsx";
 import BusinessSetup from "./BusinessSetup.jsx";
-import ProductSettings from "./ProductSettings.jsx";
+import ProductsAndPlaces from "./ProductsAndPlaces.jsx";
 import NewLoad from "./NewLoad.jsx";
 import WorkspaceShell from "./WorkspaceShell.jsx";
 import LoadHub from "./LoadHub.jsx";
 import AccountSettings from "./AccountSettings.jsx";
+import { legacyRoutes, profileSaveTarget, resolveRoute } from "../../utils/workspaceRoutes.js";
 const BillView = lazy(() => import("./BillView.jsx"));
-const SavedReferences = lazy(() => import("../SettingsScreen.jsx"));
 const LoadingRequirements = lazy(() => import("../LoadingListScreen.jsx"));
-const legacyRoutes = {
-  monitor: "entries?status=Dispatched",
-  invoices: "entries",
-};
 const route = () => {
-  const hash = window.location.hash.slice(1) || "home";
-  const next = legacyRoutes[hash];
-  if (!next) return hash;
-  window.history.replaceState(null, "", `#${next}`);
+  const { route: next, replaced } = resolveRoute(window.location.hash.slice(1));
+  if (replaced) window.history.replaceState(null, "", "#" + next);
   return next;
 };
 
-export default function PilotApp({ user, onLogout }) {
+export default function PilotApp({ user, onLogout, onUserChange }) {
   const { pick } = useLanguage();
   const [settings, setSettings] = useState(null),
     [loads, setLoads] = useState([]);
@@ -71,7 +65,7 @@ export default function PilotApp({ user, onLogout }) {
   const admin = user.role === "Admin",
     canFinalize = user.role !== "Yard Manager";
   function navigate(target) {
-    const next = legacyRoutes[target] || target;
+    const next = Object.hasOwn(legacyRoutes, target) ? legacyRoutes[target] : target;
     window.location.hash = next;
     setView(next);
     setError("");
@@ -233,7 +227,31 @@ export default function PilotApp({ user, onLogout }) {
     setInitialDraft(fromDispatch(value));
     navigate("load");
   }
+  // Admin-only: open the load-entry screen seeded from a finalized invoice.
+  // The revise draft lives only in memory (never in the recovery storage), so
+  // an unfinished revision cannot later be resumed as a new dispatch.
+  function reviseInvoice(value) {
+    if (!admin || value.status === "Draft") return;
+    setInitialDraft({
+      ...fromDispatch(value),
+      reviseOf: {
+        id: value.id,
+        updatedAt: value.updatedAt,
+        slip: value.dispatchSlipNumber || "",
+      },
+    });
+    navigate("load");
+  }
+  function closeRevise() {
+    const id = initialDraft?.reviseOf?.id;
+    setInitialDraft(null);
+    // Refetch so a bill changed elsewhere (409 on revise) shows its latest version.
+    setRecord(null);
+    navigate(id ? `bill/${id}` : "home");
+  }
   function saved(data) {
+    // A completed revision must not reopen if the user navigates back to #load.
+    if (initialDraft?.reviseOf) setInitialDraft(null);
     ++loadsRequest.current;
     loadsInFlight.current = null;
     setRefreshing(false);
@@ -242,6 +260,29 @@ export default function PilotApp({ user, onLogout }) {
     navigate(`bill/${data.id}`);
     analyticsStale.current = true;
     loadsStale.current = true;
+  }
+  // Drop a deleted dispatch from the cached list and ignore any list response
+  // already in flight, so the row cannot come back from a stale fetch.
+  function removeLoad(id) {
+    ++loadsRequest.current;
+    loadsInFlight.current = null;
+    setRefreshing(false);
+    setLoads((prev) => prev.filter((l) => l.id !== id));
+    if (record?.id === id) setRecord(null);
+    analyticsStale.current = true;
+    loadsStale.current = true;
+  }
+  async function deleteLoad(id) {
+    // On 403/409 the error propagates and the row stays so LoadHub can explain why.
+    await deleteDispatch(id);
+    removeLoad(id);
+    if (current === "home") refreshAnalytics();
+  }
+  // BillView may call onDeleted() or onDeleted(id); fall back to the open record.
+  function deleted(id) {
+    const target = typeof id === "string" || typeof id === "number" ? id : record?.id;
+    if (target) removeLoad(target);
+    home();
   }
   const needsSetup =
     settings && (!settings.businessName || !settings.stoneRates.length);
@@ -294,55 +335,28 @@ export default function PilotApp({ user, onLogout }) {
       <BusinessSetup
         settings={settings}
         user={user}
-        onBack={
-          settings.businessName
-            ? () => navigate("settings/general")
-            : undefined
-        }
         onSaved={(data) => {
           setSettings(data);
-          navigate(data.stoneRates.length ? "settings/general" : "products");
+          const to = profileSaveTarget(data);
+          if (to) navigate(to);
         }}
       />
     );
+  // current is the first path segment, so this also covers products/trucks and products/destinations.
   else if (current === "products")
     content = (
-      <ProductSettings
+      <ProductsAndPlaces
+        view={view}
         settings={settings}
-        onChanged={setSettings}
-        onBack={
-          onboarding || needsSetup
-            ? () => {
-                navigate("home");
-                setOnboarding(false);
-              }
-            : undefined
-        }
-        onboarding={onboarding || needsSetup}
         user={user}
+        onChanged={setSettings}
+        navigate={navigate}
+        onboarding={onboarding || needsSetup}
+        onFinishOnboarding={() => {
+          navigate("home");
+          setOnboarding(false);
+        }}
       />
-    );
-  else if (current === "references")
-    content = admin ? (
-      <Suspense
-        fallback={<p role="status">{pick("Loading…", "లోడ్ అవుతోంది…")}</p>}
-      >
-        <SavedReferences
-          embedded
-          user={user}
-          initialSettings={settings}
-          onChanged={setSettings}
-        />
-      </Suspense>
-    ) : (
-      <Card>
-        <p>
-          {pick(
-            "Only administrators can manage saved trucks and destinations.",
-            "సేవ్ చేసిన లారీలు మరియు గమ్యస్థానాలను అడ్మిన్ మాత్రమే మార్చగలరు.",
-          )}
-        </p>
-      </Card>
     );
   else if (current === "requirements")
     content = (
@@ -362,11 +376,15 @@ export default function PilotApp({ user, onLogout }) {
       <NewLoad
         recentLoads={loads}
         user={user}
-        key={initialDraft?.clientRequestId || "recovery"}
+        key={
+          initialDraft?.reviseOf
+            ? `revise:${initialDraft.reviseOf.id}`
+            : initialDraft?.clientRequestId || "recovery"
+        }
         settings={settings}
         initialDraft={initialDraft}
         canFinalize={canFinalize}
-        onBack={home}
+        onBack={initialDraft?.reviseOf ? closeRevise : home}
         onSaved={saved}
       />
     );
@@ -378,10 +396,13 @@ export default function PilotApp({ user, onLogout }) {
         >
           <BillView
             record={record}
+            admin={admin}
             canFinalize={canFinalize}
             onChanged={saved}
             onBack={home}
             onResume={resume}
+            onEdit={reviseInvoice}
+            onDeleted={deleted}
           />
         </Suspense>
       ) : (
@@ -397,8 +418,8 @@ export default function PilotApp({ user, onLogout }) {
         settings={settings}
         user={user}
         section={view.split("/")[1]}
-        navigate={navigate}
         onDeleted={onLogout}
+        onUserChange={onUserChange}
       />
     );
   else
@@ -408,6 +429,8 @@ export default function PilotApp({ user, onLogout }) {
         <LoadHub
           key={current}
           loads={loads}
+          admin={admin}
+          onDelete={deleteLoad}
           view={current}
           status={
             new URLSearchParams(view.split("?")[1] || "").get("status") ||

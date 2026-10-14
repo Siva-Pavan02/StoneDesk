@@ -65,7 +65,7 @@ export default function AddPaymentDialog({ open, dispatchId, invoiceTotal, recei
         if (!busy) onCancel();
       }}
     >
-      <form onSubmit={submit} className="add-payment-form space-y-4">
+      <form onSubmit={submit} className="add-payment-form space-y-4 p-3">
         <header className="dialog-header">
           <h2 id="add-payment-title" className="text-lg font-semibold text-teal-950">
             {pick('Add Payment', 'చెల్లింపును జోడించండి')}

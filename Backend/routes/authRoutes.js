@@ -12,6 +12,7 @@ const googleAuth = require('../utils/googleAuth');
 const deleteAuthUser = require('../utils/deleteAuthUser');
 const invitations = require('../utils/invitations');
 const { limitAccount } = require('../utils/rateLimiter');
+const { requiresCurrentPassword, buildResetUrl } = require('../utils/authFlags');
 
 router.get('/google/config', (req, res, next) => {
   try { res.json({ url: googleAuth.configuration().url }); } catch (err) { next(err); }
@@ -94,7 +95,7 @@ router.post('/signup', auth.authLimit, async (req, res, next) => {
 
     const passwordSalt = randomBytes(16).toString('hex');
     const passwordHash = await auth.passwordHash(password, passwordSalt);
-    const fields = { email, name, passwordSalt, passwordHash, active: true, ...(google ? { supabaseUserId: google.supabaseUserId } : {}) };
+    const fields = { email, name, passwordSalt, passwordHash, active: true, ...(google ? { supabaseUserId: google.supabaseUserId, passwordLogin: false } : {}) };
     
     let user;
     if (createOrganization) {
@@ -146,13 +147,16 @@ router.get('/session', async (req, res, next) => {
 router.post('/password', auth.authLimit, auth.requireSession, async (req, res, next) => {
   try {
     const { password } = credentials({ email: req.user.email, password: req.body.password });
-    if (typeof req.body.currentPassword !== 'string' || req.body.currentPassword.length > 128) return res.status(400).json({ error: 'Enter your current password' });
+    // Read the flag from the freshly loaded row, never from req.user.
     const user = await prisma.user.findUnique({ where: { id: req.user.id } });
-    if (!await auth.verifyPassword(req.body.currentPassword, user)) return res.status(400).json({ error: 'Current password is incorrect' });
+    if (requiresCurrentPassword(user)) {
+      if (typeof req.body.currentPassword !== 'string' || req.body.currentPassword.length > 128) return res.status(400).json({ error: 'Enter your current password' });
+      if (!await auth.verifyPassword(req.body.currentPassword, user)) return res.status(400).json({ error: 'Current password is incorrect' });
+    }
     const passwordSalt = randomBytes(16).toString('hex');
     const passwordHash = await auth.passwordHash(password, passwordSalt);
     const [updatedUser] = await prisma.$transaction([
-      prisma.user.update({ where: { id: user.id }, data: { passwordSalt, passwordHash } }),
+      prisma.user.update({ where: { id: user.id }, data: { passwordSalt, passwordHash, passwordLogin: true } }),
       prisma.session.deleteMany({ where: { userId: user.id } })
     ]);
     await auth.startSession(req, res, updatedUser);
@@ -231,7 +235,7 @@ router.post('/forgot-password', auth.authLimit, async (req, res, next) => {
     });
     
     const appOrigin = process.env.APP_ORIGIN || `${req.protocol}://${req.get('host') || 'localhost:5000'}`;
-    const resetUrl = `${appOrigin}/reset-password?token=${token}&email=${encodeURIComponent(email)}`;
+    const resetUrl = buildResetUrl(appOrigin, token, email);
     
     const settings = await prisma.masterSettings.findUnique({ where: { id: user.organizationId }, select: { businessName: true } });
     
@@ -272,7 +276,7 @@ router.post('/reset-password', auth.authLimit, async (req, res, next) => {
     await prisma.$transaction([
       prisma.user.update({
         where: { id: resetToken.userId },
-        data: { passwordSalt, passwordHash }
+        data: { passwordSalt, passwordHash, passwordLogin: true }
       }),
       prisma.session.deleteMany({ where: { userId: resetToken.userId } }),
       prisma.passwordResetToken.update({

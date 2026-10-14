@@ -11,17 +11,25 @@ function idPrefix(value) {
 const number = value => escapeA4Text(formatA4Number(value));
 const money = value => escapeA4Text(formatA4Money(value));
 const entryRow = entry => `<tr data-kind="${entry.type}" data-entry-id="${escapeA4Text(entry.id)}"><th class="type${entry.type === 'top' ? ' top' : ''}" scope="row"${entry.type === 'regular' ? ' aria-label="Regular material"' : ''}>${entry.type === 'top' ? 'Top' : ''}</th><td class="dim">${escapeA4Text(formatA4Dimension(entry.lengthFt))}</td><td class="dim">${escapeA4Text(formatA4Dimension(entry.widthFt))}</td><td class="qty">${entry.quantity}</td><td class="num">${number(entry.area)}</td></tr>`;
-// Group total row: pieces and area only; Type, L and W are covered by the label.
-const totalRow = values => `<tr class="total"><th colspan="3" scope="row">Total</th><td class="qty">${values.pieces}</td><td class="num">${number(values.area)}</td></tr>`;
+// Subtotal row: pieces and area only; Type, L and W are covered by the label.
+const subtotalRow = (kind, label, values) => `<tr class="subtotal" data-subtotal="${kind}"><th colspan="3" scope="row">${label}</th><td class="qty">${values.pieces}</td><td class="num">${number(values.area)}</td></tr>`;
 
-// A fragment is a half-open range of actual entries; the group total appears
-// only on the fragment containing the group's final real entry.
+// A fragment is a half-open range of actual entries (Regular first, then Top).
+// The Regular subtotal follows the group's last Regular entry and the Top
+// subtotal its last Top entry, so each appears once, on the fragment holding
+// that entry. A group with no entries of a kind has no subtotal for it.
 export function renderA4Group(group, from = 0, to = group.entries.length, prefix = 'document') {
   if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to > group.entries.length || to <= from) throw new Error(`Invalid fragment of group ${group.id}.`);
   const id = `${idPrefix(prefix)}-row-${group.id}-${from}`;
+  const lastRegular = group.entries.findLastIndex(entry => entry.type === 'regular');
+  const lastTop = group.entries.findLastIndex(entry => entry.type === 'top');
   const rows = [];
-  for (let index = from; index < to; index++) rows.push(entryRow(group.entries[index]));
-  return `<section class="row-block" id="${id}" aria-labelledby="${id}-heading"><h3 id="${id}-heading">${group.id}${from ? '<span class="continuation-marker">(continued)</span>' : ''}</h3><div class="row-table-wrap"><table class="row-table"><caption class="sr-only">Measurements for group ${group.id}${from ? ', continued' : ''}; dimensions in feet</caption><colgroup><col class="col-type"><col class="col-l"><col class="col-w"><col class="col-qty"><col class="col-area"></colgroup><thead><tr><th scope="col">Type</th><th class="dim" scope="col">L (ft)</th><th class="dim" scope="col">W (ft)</th><th class="qty" scope="col">Qty</th><th class="num" scope="col">Sq ft</th></tr></thead><tbody>${rows.join('')}</tbody>${to === group.entries.length ? `<tfoot>${totalRow(group.total)}</tfoot>` : ''}</table></div></section>`;
+  for (let index = from; index < to; index++) {
+    rows.push(entryRow(group.entries[index]));
+    if (index === lastRegular) rows.push(subtotalRow('regular', 'Regular subtotal', group.regular));
+    if (index === lastTop) rows.push(subtotalRow('top', 'Top subtotal', group.top));
+  }
+  return `<section class="row-block" id="${id}" aria-labelledby="${id}-heading"><h3 id="${id}-heading">${group.id}${from ? '<span class="continuation-marker">(continued)</span>' : ''}</h3><div class="row-table-wrap"><table class="row-table"><caption class="sr-only">Measurements for group ${group.id}${from ? ', continued' : ''}; dimensions in feet</caption><colgroup><col class="col-type"><col class="col-l"><col class="col-w"><col class="col-qty"><col class="col-area"></colgroup><thead><tr><th scope="col">Type</th><th class="dim" scope="col">L (ft)</th><th class="dim" scope="col">W (ft)</th><th class="qty" scope="col">Qty</th><th class="num" scope="col">Sq ft</th></tr></thead><tbody>${rows.join('')}</tbody></table></div></section>`;
 }
 
 function renderHeader(model) {

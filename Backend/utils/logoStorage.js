@@ -1,11 +1,13 @@
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const { createClient } = require('@supabase/supabase-js');
+const { supabaseSecretKey } = require('./supabaseKeys');
 const uploadDir = path.resolve(process.env.UPLOAD_DIR || path.join(__dirname, '../uploads'));
 const cloudEnabled = () => process.env.LOGO_STORAGE === 'supabase';
 function storageClient() {
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) throw new Error('Private logo storage is not configured');
-  return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }).storage;
+  const key = supabaseSecretKey('storage');
+  if (!process.env.SUPABASE_URL || !key) throw new Error('Private logo storage is not configured');
+  return createClient(process.env.SUPABASE_URL, key, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } }).storage;
 }
 const bucketName = () => process.env.SUPABASE_LOGO_BUCKET || 'stonedesk-logos';
 function valid(filename) {

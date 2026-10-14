@@ -3,7 +3,21 @@ import { request } from './pilotApi.js';
 const pendingKey = 'stonedesk.google.pending';
 const encode = bytes => btoa(String.fromCharCode(...bytes)).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
 
-export async function beginGoogleSignIn({ signal } = {}) {
+export const EMBEDDED_BROWSER_MESSAGE = 'Google sign-in does not work inside in-app browsers. Open this page in Chrome or Safari, or use email & password.';
+
+// Google blocks OAuth in embedded webviews (error "disallowed_useragent") and the
+// Identity Services guide notes sign-in is disabled there. Detect the common
+// in-app browsers so users get a clear next step instead of a Google error page.
+export function isEmbeddedBrowser(userAgent = globalThis.navigator?.userAgent || '') {
+  if (/\b(FBAN|FBAV|FB_IAB|FBIOS|Instagram|Line\/|MicroMessenger|LinkedInApp|Snapchat|Twitter|WhatsApp)\b/i.test(userAgent)) return true;
+  // Android System WebView marks itself with "; wv)".
+  if (/Android.*;\s*wv\)/.test(userAgent)) return true;
+  // iOS WKWebView: an iPhone/iPad WebKit agent without the "Safari/" token (Chrome, Firefox and Edge on iOS keep it).
+  return /\b(iPhone|iPad|iPod)\b/.test(userAgent) && /AppleWebKit/.test(userAgent) && !/Safari\//.test(userAgent);
+}
+
+export async function beginGoogleSignIn({ signal, userAgent } = {}) {
+  if (isEmbeddedBrowser(userAgent)) throw new Error(EMBEDDED_BROWSER_MESSAGE);
   const { url } = await request('/auth/google/config');
   const verifier = encode(crypto.getRandomValues(new Uint8Array(32)));
   const state = encode(crypto.getRandomValues(new Uint8Array(24)));

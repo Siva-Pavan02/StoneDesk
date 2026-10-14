@@ -111,6 +111,7 @@ async function renderProductionCase(page, base, name, input, options = {}) {
       entries: document.querySelectorAll('.row-table tr[data-entry-id]').length,
       entryIds: [...document.querySelectorAll('.row-table tr[data-entry-id]')].map(row => row.dataset.entryId),
       groupTotals: document.querySelectorAll('.row-table tr.total').length,
+      regularSubtotals: document.querySelectorAll('.row-table tr[data-subtotal="regular"]').length,
       summaryCount: document.querySelectorAll('.invoice-summary').length,
       signCount: document.querySelectorAll('.closing').length,
       allRefsVisible: [...document.querySelectorAll('.invoice-reference')].every(node => node.textContent.includes(document.querySelector('.invoice-reference').textContent)),
@@ -150,7 +151,8 @@ async function renderProductionCase(page, base, name, input, options = {}) {
   if (options.summaryOnly) assert.deepEqual(result.columns.at(-1), [[], [], []], `${name}: needs a dedicated summary page`);
   if (options.oversized) {
     assert.ok(result.columns.flatMap(p => p.flat()).filter(part => part.id === 1).length > 1, `${name}: the oversized group must repeat its heading`);
-    assert.equal(inspection.groupTotals, 1, `${name}: the group grand total must not repeat on continuation fragments`);
+    assert.equal(inspection.groupTotals, 0, `${name}: rows show Regular / Top subtotals, not a combined row total`);
+    assert.equal(inspection.regularSubtotals, 1, `${name}: the Regular subtotal must not repeat on continuation fragments`);
   }
   if (options.shot) for (let i = 1; i <= result.pages; i++) await page.locator('.sample-sheet').nth(i - 1).screenshot({ path: path.join(out, `${name}-screen-page-${i}.png`) });
   const bytes = await page.pdf({ format: 'A4', preferCSSPageSize: true, scale: 1, printBackground: true, displayHeaderFooter: false,
@@ -161,7 +163,7 @@ async function renderProductionCase(page, base, name, input, options = {}) {
   if (name === 'long-identity-and-money') {
     assert.ok(pageText.join(' ').includes('₹25,000.25') && pageText.join(' ').includes('₹40.00'), 'Printed payment summary must show both saved per-square-foot rates');
   }
-  if (options.oversized) assert.equal(pageText.join(' ').match(/Reg\. subtotal/g)?.length, 1);
+  if (options.oversized) assert.equal(pageText.join(' ').match(/Regular subtotal/g)?.length, 1);
   console.log('CASE', name, JSON.stringify({ pages: result.pages, entries: inspection.entries, summaryPage: result.summaryPage,
     groups: result.columns.map(columns => columns.map(column => column.map(part => part.id))), geometry: result.geometry }));
   return result;

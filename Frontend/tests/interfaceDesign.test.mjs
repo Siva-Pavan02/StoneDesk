@@ -549,7 +549,8 @@ async function workspace(language, width) {
     await expect(main().locator('.a4-invoice .settlement-net dd')).toHaveText('₹18,384.00');
     await expect(main().locator('.a4-invoice .settlement-rate dt')).toHaveText(t('Rate / sq ft', 'చ.అ. ధర'));
     await expect(main().locator('.a4-invoice [data-rate="sq-ft"]')).toHaveText('₹64.00');
-    await expect(main().locator('input[name="invoice-export-document"][value="html"]')).toBeChecked();
+    // The buyer invoice PDF is the default; the HTML web copy is a separate option.
+    await expect(main().locator('input[name="invoice-export-document"][value="invoice"]')).toBeChecked();
     await expect(main().getByRole('button', { name: t('Print / PDF', 'ప్రింట్ / PDF'), exact: true })).toBeEnabled();
     await expect(main().getByRole('button', { name: t('Share document', 'పత్రం షేర్ చేయండి'), exact: true })).toBeEnabled();
     await main().getByRole('button', { name: t('Mark delivered', 'డెలివరీ పూర్తయింది'), exact: true }).click();
@@ -558,6 +559,12 @@ async function workspace(language, width) {
     await expect(main().getByRole('button', { name: t('Mark delivered', 'డెలివరీ పూర్తయింది'), exact: true })).toBeVisible();
     assert.equal(result.mutations.length, 0, 'Canceled delivery confirmation must not make a request');
     if (width === 390 || width === 1440) {
+      const [invoiceDownload] = await Promise.all([page.waitForEvent('download'), main().getByRole('button', { name: t('Download', 'డౌన్‌లోడ్'), exact: true }).click()]);
+      const invoiceFile = `${result.id}-invoice-${path.basename(invoiceDownload.suggestedFilename())}`, invoicePath = path.join(out, invoiceFile);
+      await invoiceDownload.saveAs(invoicePath); const invoiceBytes = await fs.readFile(invoicePath);
+      assert.ok(invoiceFile.endsWith('.pdf') && invoiceBytes.subarray(0, 5).toString('ascii') === '%PDF-' && invoiceBytes.toString('latin1').includes('18,384.00'));
+      result.downloads.push({ filename: invoiceFile, path: invoicePath, bytes: invoiceBytes.length, kind: 'buyer-invoice-pdf', pages: (invoiceBytes.toString('latin1').match(/\/Type \/Page\b/g) || []).length });
+      await main().locator('input[name="invoice-export-document"][value="html"]').check();
       const [htmlDownload] = await Promise.all([page.waitForEvent('download'), main().getByRole('button', { name: t('Download', 'డౌన్‌లోడ్'), exact: true }).click()]);
       const htmlFile = `${result.id}-${path.basename(htmlDownload.suggestedFilename())}`;
       const htmlPath = path.join(out, htmlFile);
@@ -583,7 +590,9 @@ async function workspace(language, width) {
         } finally { await task.destroy(); }
         result.downloads.push({ filename: printFile, path: path.join(out, printFile), bytes: bytes.length, kind: 'approved-a4-print', pages: 1 });
       } finally { await printPage.close(); }
-      for (const kind of ['pdf', 'excel', 'driver']) {
+      // The legacy buyer PDF is no longer offered; Print / PDF covers that need.
+      await expect(main().locator('input[name="invoice-export-document"][value="pdf"]')).toHaveCount(0);
+      for (const kind of ['excel', 'driver']) {
         await main().locator(`input[name="invoice-export-document"][value="${kind}"]`).check();
         const [download] = await Promise.all([page.waitForEvent('download'), main().getByRole('button', { name: t('Download', 'డౌన్‌లోడ్'), exact: true }).click()]);
         const filename = `${result.id}-${kind}-${path.basename(download.suggestedFilename())}`, destination = path.join(out, filename);
@@ -611,6 +620,7 @@ async function workspace(language, width) {
       await overflow('branded-invoice', true);
       await expect(main().locator('.a4-invoice .settlement-net dd')).toHaveText('₹18,384.00');
       if (width === 390 || width === 1440) {
+        await main().locator('input[name="invoice-export-document"][value="html"]').check();
         const [download] = await Promise.all([page.waitForEvent('download'), main().getByRole('button', { name: t('Download', 'డౌన్‌లోడ్'), exact: true }).click()]);
         const html = await fs.readFile(await download.path(), 'utf8');
         assert.ok(html.includes(testLogo), 'Portable HTML must embed the historical business logo');

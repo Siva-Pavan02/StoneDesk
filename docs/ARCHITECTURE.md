@@ -20,7 +20,9 @@ StoneDesk/
       masterSettingsRoutes.js   Business profile, logo, trucks, destinations, stone rates, royalty
     utils/
       auth.js                   Sessions, scrypt hashing, requireSession / requireActive / allowRoles
-      googleAuth.js             Supabase PKCE exchange for Google sign-in
+      googleAuth.js             Supabase PKCE exchange for Google sign-in; ends the Supabase session after verifying
+      googleTickets.js          10-minute server-side tickets for Google signup/linking (Upstash, memory locally)
+      supabaseKeys.js           Per-component Supabase secret keys (storage, admin)
       pilotCalculations.js      Server-side measurement validation and bill totals
       dispatchCalculations.js   Legacy piece-based totals
       dispatchAnalytics.js      30-day dashboard analytics (IST)
@@ -37,6 +39,7 @@ StoneDesk/
       checkDatabase.js          npm run db:check
       protectDatabase.js        Enables RLS and revokes anon access
       addGoogleIdentity.js, repairOrganizationSettings.js, e2ePreview.js
+      cleanupAuthUsers.js       Lists (dry run) or deletes orphaned Google-only Supabase Auth users
     mock/                       Mock API server (npm run mock) and fixture data
     tests/                      node:test suites (auth, dispatch, multiTenancy, securityBoundary, ...)
   Frontend/                     React 19 + Vite 8 + Tailwind CSS 4 + daisyUI 5
@@ -141,7 +144,8 @@ Every query on tenant data is scoped by the caller's `organizationId`.
 | --- | --- |
 | Backend server | `PORT`, `NODE_ENV`, `APP_ORIGIN`, `TRUST_PROXY`, `SERVE_FRONTEND`, `UPLOAD_DIR` |
 | Database | `DATABASE_URL` (session pooler), `DIRECT_URL`, `TEST_DATABASE_URL`, `TEST_DIRECT_URL` |
-| Google sign-in | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` |
+| Google sign-in | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` (onboarding tickets also use the Upstash variables) |
+| Supabase server keys | `SUPABASE_STORAGE_SECRET_KEY`, `SUPABASE_ADMIN_SECRET_KEY`, fallback `SUPABASE_SECRET_KEY` |
 | Rate limiting | `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` |
 | Email | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` |
 | Frontend | `VITE_API_BASE_URL` (default `/api`) |

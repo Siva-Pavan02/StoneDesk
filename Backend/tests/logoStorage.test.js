@@ -2,7 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 test('cloud logos remain private, preserve bytes, and reject invalid paths', async t => {
-  const saved = { fetch: global.fetch, mode: process.env.LOGO_STORAGE, url: process.env.SUPABASE_URL, key: process.env.SUPABASE_SECRET_KEY };
+  const saved = { fetch: global.fetch, mode: process.env.LOGO_STORAGE, url: process.env.SUPABASE_URL, key: process.env.SUPABASE_SECRET_KEY, storageKey: process.env.SUPABASE_STORAGE_SECRET_KEY };
+  delete process.env.SUPABASE_STORAGE_SECRET_KEY;
   process.env.LOGO_STORAGE = 'supabase';
   process.env.SUPABASE_URL = 'https://storage.example.test';
   process.env.SUPABASE_SECRET_KEY = 'sb_secret_test';
@@ -17,7 +18,7 @@ test('cloud logos remain private, preserve bytes, and reject invalid paths', asy
   };
   t.after(() => {
     global.fetch = saved.fetch;
-    for (const [name, value] of Object.entries({ LOGO_STORAGE: saved.mode, SUPABASE_URL: saved.url, SUPABASE_SECRET_KEY: saved.key })) {
+    for (const [name, value] of Object.entries({ LOGO_STORAGE: saved.mode, SUPABASE_URL: saved.url, SUPABASE_SECRET_KEY: saved.key, SUPABASE_STORAGE_SECRET_KEY: saved.storageKey })) {
       if (value === undefined) delete process.env[name]; else process.env[name] = value;
     }
   });

@@ -27,6 +27,7 @@ const messages = {
   'Enter a valid email address': 'సరైన ఇమెయిల్ చిరునామా నమోదు చేయండి',
   'Enter a valid email and a password of 12 to 128 characters': 'సరైన ఇమెయిల్ మరియు 12 నుండి 128 అక్షరాల పాస్‌వర్డ్ నమోదు చేయండి',
   'Too many attempts. Try again in 15 minutes.': 'చాలా ప్రయత్నాలు. 15 నిమిషాల తర్వాత మళ్ళీ ప్రయత్నించండి.',
+  'Google sign-in does not work inside in-app browsers. Open this page in Chrome or Safari, or use email & password.': 'యాప్‌లోని బ్రౌజర్‌లో Google లాగిన్ పనిచేయదు. ఈ పేజీని Chrome లేదా Safariలో తెరవండి, లేదా ఇమెయిల్ & పాస్‌వర్డ్ ఉపయోగించండి.',
   'Failed to fetch': 'సర్వర్‌కు కనెక్ట్ కాలేదు. ఇంటర్నెట్ కనెక్షన్ తనిఖీ చేయండి',
   'This browser cannot keep a recovery copy. Save your draft before leaving.': 'ఈ బ్రౌజర్ రికవరీ కాపీని ఉంచలేదు. బయటకు వెళ్లే ముందు డ్రాఫ్ట్ సేవ్ చేయండి.',
   'Sharing is not supported on this browser. Use the download buttons to share the files manually.': 'ఈ బ్రౌజర్‌లో షేరింగ్ లేదు. ఫైళ్లు డౌన్‌లోడ్ చేసి షేర్ చేయండి.',

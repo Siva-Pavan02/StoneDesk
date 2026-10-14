@@ -115,6 +115,36 @@ export function makeRow(entry, product) {
   if (entry.rate === '' || !Number.isFinite(ratePerSqFt) || ratePerSqFt < 0) throw new Error('Enter a valid rate');
   return { stoneType: product.stoneType, finish: product.finish, rowNo, lengthFt, widthFt, quantity, ratePerSqFt, category: entry.category };
 }
+// Per-field versions of the checks in makeRow/payload, so the load screen can show
+// each message under its input. Keys match the draft/entry field names.
+export const DETAIL_MESSAGES = Object.freeze({
+  partyName: 'Enter the party name',
+  truckNumber: 'Enter the truck number',
+  date: 'Enter a valid date (dd/mm/yyyy)',
+  buyerDestination: 'Enter the destination',
+  supervisor: 'Enter the supervisor name',
+});
+export function detailErrors(draft) {
+  const errors = {};
+  for (const [key, message] of Object.entries(DETAIL_MESSAGES)) {
+    if (typeof draft[key] !== 'string' || !draft[key].trim()) errors[key] = message;
+  }
+  const fee = Number(draft.fee);
+  if (draft.fee === '' || !Number.isFinite(fee) || fee < 0) errors.fee = 'Enter valid loading/royalty charges';
+  return errors;
+}
+export function entryErrors(entry, product) {
+  const errors = {};
+  const positive = text => { const value = parseFraction(text)?.numeric; return value > 0 && Number.isFinite(value); };
+  const quantity = Number(entry.quantity);
+  const rate = Number(entry.rate);
+  if (!product) errors.productId = 'Select a product';
+  if (!positive(entry.length)) errors.length = 'Enter a length greater than 0';
+  if (!positive(entry.width)) errors.width = 'Enter a width greater than 0';
+  if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 100000) errors.quantity = 'Enter a whole quantity from 1 to 100000';
+  if (entry.rate === '' || !Number.isFinite(rate) || rate < 0) errors.rate = 'Enter a valid rate';
+  return errors;
+}
 export function payload(draft) {
   for (const key of ['partyName', 'truckNumber', 'date', 'buyerDestination', 'supervisor']) {
     if (typeof draft[key] !== 'string' || !draft[key].trim()) throw new Error('Fill all load details before saving');

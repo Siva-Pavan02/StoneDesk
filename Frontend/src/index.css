@@ -58,12 +58,21 @@
 .pilot .control-button-primary:hover { background: #134e4a; border-color: #134e4a; }
 .pilot .control-button-secondary { background: var(--ui-surface); border-color: var(--workspace-border); color: var(--ui-ink); }
 .pilot .control-button-secondary:hover { background: var(--ui-canvas); }
+/* Inline field errors: message under the input, red border on the input itself. */
+.pilot .field-error { margin: 0; color: #a12f2f; font-size: 12.5px; line-height: 1.5; }
+.pilot .field-error-block { padding: 8px 12px; border-radius: var(--ui-radius-sm); background: #fff7f7; }
+.pilot .input[aria-invalid="true"], .pilot .number-stepper:has(.input[aria-invalid="true"]) { border-color: #d98c8c; }
+.pilot .input[aria-invalid="true"]:focus, .pilot .number-stepper:has(.input[aria-invalid="true"]):focus-within { border-color: #a12f2f; box-shadow: 0 0 0 3px rgb(161 47 47 / .12); }
+.pilot .number-stepper .input[aria-invalid="true"]:focus { box-shadow: none; }
 .pilot .control-error { padding: 12px 16px; border: 1px solid #efcece; border-radius: var(--ui-radius-sm); background: #fff7f7; color: #8b3333; font-size: 13px; line-height: 1.7; }
 .pilot button { cursor: pointer; }
 .pilot button:disabled { cursor: not-allowed; }
 .pilot .btn:active:not(:disabled) { transform: var(--ui-press); }
 @media (prefers-reduced-motion: reduce) { .pilot *, .pilot *::before, .pilot *::after { transition-duration: 1ms !important; animation-duration: 1ms !important; animation-iteration-count: 1 !important; } .pilot .btn:active:not(:disabled) { transform: none; } }
 .brand-mark { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex-shrink: 0; border-radius: var(--ui-radius-sm); background: var(--ui-accent); color: var(--ui-surface); }
+/* The logo image has its own light background, so no tile colour behind it. */
+.brand-logo { display: block; flex-shrink: 0; object-fit: contain; background: none; }
+img.brand-mark { background: none; }
 .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .12em; color: #374151; }
 .text-button { min-height: 44px; padding: 8px 4px; font-size: 13px; font-weight: 500; color: var(--ui-accent); }
 .text-button:hover { text-decoration: underline; text-underline-offset: 4px; }
@@ -100,6 +109,9 @@
 .workspace-organization-mark { display: flex; align-items: center; justify-content: center; flex: 0 0 36px; width: 36px; height: 36px; border: 1px solid #dfeae4; border-radius: var(--ui-radius-sm); color: #115e59; background: #f0f6f3; }
 .workspace-organization-mark img { width: 26px; height: 26px; object-fit: contain; }
 .workspace-organization-mark svg { width: 18px; height: 18px; }
+.business-initials { font-size: 12px; font-weight: 600; letter-spacing: .02em; line-height: 1; }
+/* The drawer is used on small screens, where the header mark is hidden; keep this one visible. */
+.nav-drawer-head .nav-drawer-business-mark { display: flex; flex: 0 0 32px; width: 32px; height: 32px; }
 .workspace-organization-text { min-width: 0; }
 .workspace-organization-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #243b34; font-size: 14px; font-weight: 600; letter-spacing: -.02em; }
 .workspace-organization-caption { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--workspace-muted); font-size: 11px; line-height: 1.6; }

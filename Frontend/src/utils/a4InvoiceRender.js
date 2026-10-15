@@ -1,4 +1,4 @@
-import { AREA_ROUNDING_NOTE, formatA4Dimension, formatA4Money, formatA4Number, formatA4Rate } from './a4InvoiceModel.js';
+import { AREA_ROUNDING_NOTE, SAMPLE_BANK_PAIRS, bankDetailPairs, bankDetailSegments, formatA4Dimension, formatA4Money, formatA4Number } from './a4InvoiceModel.js';
 
 export function escapeA4Text(value) {
   return String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
@@ -44,18 +44,28 @@ function renderHeader(model) {
   return `<header class="invoice-header"><div class="business-panel">${logo}<div class="business-copy"><h1 class="business-name">${escapeA4Text(seller.name)}</h1>${contact ? `<p class="business-contact">${contact}</p>` : ''}</div></div><div class="invoice-panel"><div class="invoice-topline"><h2 class="invoice-kind">${escapeA4Text(model.title)}</h2><div class="invoice-state"><time datetime="${escapeA4Text(model.invoiceDate.datetime)}">${escapeA4Text(model.invoiceDate.label)}</time><span class="status">${escapeA4Text(state)}</span></div></div><p class="invoice-reference">No. ${escapeA4Text(model.invoiceNumber)}${model.mode === 'sample' ? ' · Fictional data — not for payment' : ''}</p><dl class="invoice-facts">${facts.map(([label, value], i) => `<div><dt>${label}</dt><dd${i === 1 ? ' class="mono"' : ''}>${escapeA4Text(value)}</dd></div>`).join('')}</dl></div></header>`;
 }
 
-function renderSummary(model, prefix, pick) {
+function renderSummary(model, prefix) {
   const totals = model.totals, id = idPrefix(prefix);
-  const rates = [...new Set(model.groups.flatMap(group => group.entries.map(entry => entry.ratePerSqFt)))];
-  const rateRow = model.mode === 'production' ? `<div class="settlement-row settlement-rate"><dt>${escapeA4Text(pick(rates.length === 1 ? 'Rate / sq ft' : 'Rates / sq ft', rates.length === 1 ? 'చ.అ. ధర' : 'చ.అ. ధరలు'))}</dt><dd data-rate="sq-ft">${rates.map(rate => rate == null ? escapeA4Text(pick('Not recorded', 'నమోదు కాలేదు')) : escapeA4Text(formatA4Rate(rate))).join(' · ')}</dd></div>` : '';
-  return `<section class="invoice-summary" aria-label="Order and payment summary"><div class="order-overview"><h2 class="summary-title" id="${id}-order-heading">Order summary</h2><dl class="headline-totals" aria-labelledby="${id}-order-heading"><div class="headline-stat"><dt>Total pieces</dt><dd data-total="pieces">${totals.pieces}</dd></div><div class="headline-stat area-stat"><dt>Total area · sq ft</dt><dd data-total="area">${number(totals.area)}</dd></div></dl><dl class="material-total"><div><dt>Material total</dt><dd data-total="material">${money(totals.materialTotal)}</dd></div></dl></div><div class="settlement-overview"><h2 class="summary-title" id="${id}-payment-heading">Payment summary</h2><dl class="settlement" aria-labelledby="${id}-payment-heading"><div class="settlement-row"><dt>Material amount</dt><dd data-amount="material">${money(totals.materialTotal)}</dd></div>${rateRow}<div class="settlement-row"><dt>Loading / royalty</dt><dd>${money(model.loadingRoyalty)}</dd></div><div class="settlement-net"><dt>Net payable</dt><dd data-total="net">${money(totals.netPayable)}</dd></div></dl></div></section>`;
+  // Material amount (Regular) + Top material amount = Material total, both from the round-once model split.
+  return `<section class="invoice-summary" aria-label="Order and payment summary"><div class="order-overview"><h2 class="summary-title" id="${id}-order-heading">Order summary</h2><dl class="headline-totals" aria-labelledby="${id}-order-heading"><div class="headline-stat"><dt>Total pieces</dt><dd data-total="pieces">${totals.pieces}</dd></div><div class="headline-stat area-stat"><dt>Total area · sq ft</dt><dd data-total="area">${number(totals.area)}</dd></div></dl><dl class="material-total"><div><dt>Material total</dt><dd data-total="material">${money(totals.materialTotal)}</dd></div></dl></div><div class="settlement-overview"><h2 class="summary-title" id="${id}-payment-heading">Payment summary</h2><dl class="settlement" aria-labelledby="${id}-payment-heading"><div class="settlement-row"><dt>Material amount</dt><dd data-amount="material">${money(totals.regularAmount)}</dd></div><div class="settlement-row"><dt>Top material amount</dt><dd data-amount="top">${money(totals.topAmount)}</dd></div><div class="settlement-row"><dt>Loading / royalty</dt><dd data-amount="loading">${money(model.loadingRoyalty)}</dd></div><div class="settlement-net"><dt>Net payable</dt><dd data-total="net">${money(totals.netPayable)}</dd></div></dl></div></section>`;
 }
 
-function renderClosing(model) {
-  // Bank / UPI line appears only when the snapshot carries a non-empty value.
-  const bankDetails = typeof model.seller.bankDetails === 'string' ? model.seller.bankDetails.trim() : '';
-  const bank = bankDetails ? `<p class="label bank-label">Bank / UPI details</p><p class="bank-details">${escapeA4Text(bankDetails)}</p>` : '';
-  return `<section class="closing" aria-label="Amount in words and authorization"><div><p class="label">Amount in words</p><p class="amount-in-words">${escapeA4Text(model.amountWords)}</p>${bank}<p class="rounding-note">${escapeA4Text(AREA_ROUNDING_NOTE)}</p></div><div class="sign">${model.mode === 'sample' ? '<strong>Sample only</strong><span>Not valid for payment</span>' : `${model.seller.signatoryName ? `<strong>${escapeA4Text(model.seller.signatoryName)}</strong>` : ''}<span>Authorized signatory</span>`}</div></section>`;
+function renderBank(model, id) {
+  const sample = model.mode === 'sample';
+  const text = typeof model.seller.bankDetails === 'string' ? model.seller.bankDetails.trim() : '';
+  // Production shows the area only when the snapshot carries a non-empty value.
+  if (!sample && !text) return '';
+  const pairs = sample ? SAMPLE_BANK_PAIRS : bankDetailPairs(text);
+  const body = pairs
+    ? `<dl class="bank-grid" aria-labelledby="${id}-bank-heading">${pairs.map(([label, value]) => `<div><dt>${escapeA4Text(label)}:</dt><dd>${escapeA4Text(value)}</dd></div>`).join('')}</dl>`
+    : `<p class="bank-text">${escapeA4Text(bankDetailSegments(text).join(' · '))}</p>`;
+  return `<div class="bank-block"><p class="label bank-label" id="${id}-bank-heading">Bank details${sample ? ' <span class="bank-note">Preview placeholders only</span>' : ''}</p>${body}</div>`;
+}
+
+function renderClosing(model, prefix) {
+  const id = idPrefix(prefix);
+  const sign = model.mode === 'sample' ? '<strong>Sample only</strong><span>Not valid for payment</span>' : `${model.seller.signatoryName ? `<strong>${escapeA4Text(model.seller.signatoryName)}</strong>` : ''}<span>Authorized signatory</span>`;
+  return `<section class="closing" aria-label="Amount in words and authorization"><div class="closing-words"><p class="amount-line"><span class="label">Amount in words</span> <span class="amount-in-words">${escapeA4Text(model.amountWords)}</span></p><p class="rounding-note">${escapeA4Text(AREA_ROUNDING_NOTE)}</p></div><div class="closing-foot">${renderBank(model, id)}<div class="sign">${sign}</div></div></section>`;
 }
 
 function pageGroups(page) { return page.columns.flatMap(column => column.map(fragment => fragment.group.id)); }
@@ -70,12 +80,13 @@ function renderNote(model, page) {
 
 function renderFooter(model, pageNumber, pageCount) {
   const left = model.mode === 'sample' ? 'SAMPLE · FICTIONAL DATA · NOT FOR PAYMENT' : 'BUYER INVOICE';
-  return `<footer class="page-foot"><strong>${left}</strong><span>All amounts in INR · Dimensions in feet</span><span class="page-number">Page ${pageNumber} of ${pageCount}</span></footer>`;
+  return `<footer class="page-foot"><strong>${left}</strong><span class="foot-center">All amounts in INR · Dimensions in feet</span><span class="page-number">Page ${pageNumber} of ${pageCount}</span></footer>`;
 }
 
-export function renderA4Page(model, page, pageNumber, pageCount, prefix = 'document', pick = en => en) {
+// `_pick` (translation picker) is kept for API compatibility; the invoice labels stay English.
+export function renderA4Page(model, page, pageNumber, pageCount, prefix = 'document', _pick = en => en) {
   const ids = pageGroups(page);
-  return `<article class="paper sample-sheet" aria-label="${escapeA4Text(model.title)} page ${pageNumber} of ${pageCount}">${renderHeader(model)}${renderNote(model, page)}<section class="detail-columns" aria-label="${ids.length ? `Measurement groups ${ids[0]} to ${ids.at(-1)}` : 'No measurement groups on this summary page'}">${page.columns.map(column => `<div class="detail-column">${column.map(({ group, from, to }) => renderA4Group(group, from, to, prefix)).join('')}</div>`).join('')}</section>${page.summary ? `${renderSummary(model, prefix, pick)}${renderClosing(model)}` : '<p class="continuation">Continued on the next page. Order totals and payment summary appear on the final page.</p>'}${renderFooter(model, pageNumber, pageCount)}</article>`;
+  return `<article class="paper sample-sheet" aria-label="${escapeA4Text(model.title)} page ${pageNumber} of ${pageCount}">${renderHeader(model)}${renderNote(model, page)}<section class="detail-columns" aria-label="${ids.length ? `Measurement groups ${ids[0]} to ${ids.at(-1)}` : 'No measurement groups on this summary page'}">${page.columns.map(column => `<div class="detail-column">${column.map(({ group, from, to }) => renderA4Group(group, from, to, prefix)).join('')}</div>`).join('')}</section>${page.summary ? `${renderSummary(model, prefix)}${renderClosing(model, prefix)}` : '<p class="continuation">Continued on the next page. Order totals and payment summary appear on the final page.</p>'}${renderFooter(model, pageNumber, pageCount)}</article>`;
 }
 
 export function renderA4Invoice(model, pages, prefix = 'document', pick = en => en) {

@@ -45,6 +45,25 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
   const [savedLists, setSavedLists] = useState([]);
   const [activeListId, setActiveListId] = useState(null);
 
+  // Inline validation and save feedback (no blocking alert()).
+  const [reqErrors, setReqErrors] = useState({});
+  const [notice, setNotice] = useState('');
+  const [confirmRemove, setConfirmRemove] = useState(null);
+  const snapshot = JSON.stringify({ supervisor, buyerDestination, stoneType, finish, requirements });
+  const [savedSnapshot, setSavedSnapshot] = useState(snapshot);
+  const dirty = snapshot !== savedSnapshot;
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = event => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+  function leave() {
+    if (dirty && !window.confirm(pick('Leave without saving this loading list?', 'ఈ లోడింగ్ జాబితా సేవ్ చేయకుండా వెళ్ళాలా?'))) return;
+    onClose();
+  }
+  const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
   const [historySearch, setHistorySearch] = useState('');
   const [historyQuery, setHistoryQuery] = useState('');
   const [nextCursor, setNextCursor] = useState(null);
@@ -81,8 +100,15 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
     const pWid = parseFraction(reqWid);
     const qty = Number(reqQty);
 
-    if (!pLen || !pWid || !Number.isSafeInteger(qty) || qty <= 0) {
-      alert(t('invalid') || 'Invalid input');
+    const errors = {
+      ...(!pLen && { length: pick('Enter a length like 4 1/2', '4 1/2 లాగా పొడవు నమోదు చేయండి') }),
+      ...(!pWid && { width: pick('Enter a width like 2', '2 లాగా వెడల్పు నమోదు చేయండి') }),
+      ...((!Number.isSafeInteger(qty) || qty <= 0) && { quantity: pick('Enter a whole number of pieces, like 10', '10 లాగా ముక్కల పూర్తి సంఖ్య నమోదు చేయండి') }),
+    };
+    setReqErrors(errors);
+    const firstInvalid = ['length', 'width', 'quantity'].find(key => errors[key]);
+    if (firstInvalid) {
+      document.getElementById(`requirement-${firstInvalid}`)?.focus();
       return;
     }
 
@@ -122,11 +148,14 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
     setReqWid(req.widthDisplay || decimalToFraction(req.widthFt));
     setReqQty(req.requiredQuantity);
     setEditIndex(index);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setReqErrors({});
+    window.scrollTo({ top: 0, behavior: reduceMotion() ? 'auto' : 'smooth' });
+    document.getElementById('requirement-length')?.focus({ preventScroll: true });
   };
 
   const handleCancelEdit = () => {
     setEditIndex(null);
+    setReqErrors({});
     setReqLen('');
     setReqWid('');
     setReqQty('');
@@ -136,6 +165,9 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
     const updated = [...requirements];
     updated.splice(index, 1);
     setRequirements(updated);
+    setConfirmRemove(null);
+    // Editing indexes shift after a removal; leave edit mode rather than edit the wrong line.
+    if (editIndex !== null) handleCancelEdit();
   };
 
   const handleLoadPiece = (index, overrideLenDisplay = null, overrideWidDisplay = null) => {
@@ -148,9 +180,10 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
     let pWid = parseFraction(wDisplay);
     
     if (!pLen || !pWid) {
-      alert("Invalid custom dimension.");
-      return;
+      setError(pick('Enter the custom length and width like 4 1/2, then load the piece.', 'కస్టమ్ పొడవు, వెడల్పు 4 1/2 లాగా నమోదు చేసి ముక్క లోడ్ చేయండి.'));
+      return false;
     }
+    setError('');
 
     const newPiece = {
       lengthDisplay: pLen.display,
@@ -186,14 +219,17 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
   };
 
   const handleCustomLoad = (index) => {
-    handleLoadPiece(index, customLen, customWid);
+    if (handleLoadPiece(index, customLen, customWid) === false) return;
     setActiveCustomIdx(null);
   };
 
   const handleSaveList = async () => {
     if (savingLock.current || opening) return;
-    if (!supervisor || !buyerDestination || !stoneType || !finish) {
-      alert('Please fill out all basic details');
+    const missing = [['supervisor', supervisor], ['destination', buyerDestination], ['stone-type', stoneType], ['finish', finish]].find(([, value]) => !value);
+    if (missing) {
+      setNotice('');
+      setError(pick('Fill supervisor, destination, stone type and finish before saving.', 'సేవ్ చేసే ముందు సూపర్‌వైజర్, గమ్యస్థానం, రాయి రకం మరియు ఫినిష్ నింపండి.'));
+      document.getElementById(`loading-list-${missing[0]}`)?.focus();
       return;
     }
 
@@ -207,7 +243,8 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
       status: 'Loading'
     };
 
-    savingLock.current = true; setSaving(true); setError('');
+    savingLock.current = true; setSaving(true); setError(''); setNotice('');
+    const savingSnapshot = snapshot;
     try {
       // Both endpoints return the saved list, so update it locally instead of refetching everything.
       if (activeListId) {
@@ -219,7 +256,8 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
         setLoadingListNumber(created.loadingListNumber);
         setSavedLists(lists => [created, ...lists]);
       }
-      alert('Saved Loading List');
+      setSavedSnapshot(savingSnapshot);
+      setNotice(pick('Loading list saved.', 'లోడింగ్ జాబితా సేవ్ అయింది.'));
     } catch (e) {
       setError(e.message);
     } finally { savingLock.current = false; setSaving(false); }
@@ -260,13 +298,13 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
       {/* Header */}
       {embedded ? (
         <header className="screen-heading flex flex-wrap items-center gap-3">
-          <Button en="Back" te="వెనక్కి" onClick={onClose} />
+          <Button en="Back" te="వెనక్కి" onClick={leave} />
           <h1 className="text-lg font-semibold">{t('loadingList') || 'Loading List'}</h1>
         </header>
       ) : <header className="fixed top-0 inset-x-0 z-50 bg-white border-b border-slate-200 shadow-sm pt-safe">
         <div className="max-w-xl mx-auto w-full px-4 h-14 flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
-            <button type="button" aria-label={pick('Go back', 'వెనక్కి వెళ్ళండి')} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-slate-100" onClick={onClose}>
+            <button type="button" aria-label={pick('Go back', 'వెనక్కి వెళ్ళండి')} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-slate-100" onClick={leave}>
               <span className="material-symbols-outlined">arrow_back</span>
             </button>
             <h1 className="truncate font-bold text-lg text-slate-800">{t('loadingList') || 'Loading List'}</h1>
@@ -282,7 +320,7 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
         {error && <p role="alert" className="mb-4 rounded-xl border-2 border-red-300 bg-white p-4 text-red-800">{error}</p>}
         {opening && <p role="status">{pick('Opening loading list…', 'లోడింగ్ జాబితా తెరుస్తోంది…')}</p>}
         <fieldset disabled={opening} className="space-y-4 min-w-0">
-        <Field en="Search loading lists" te="లోడింగ్ జాబితాలు వెతకండి" type="search" maxLength={120} value={historySearch} onChange={e => setHistorySearch(e.target.value)} />
+        <Field en="Search loading lists" te="లోడింగ్ జాబితాలు వెతకండి" type="search" name="q" autoComplete="off" spellCheck={false} maxLength={120} value={historySearch} onChange={e => setHistorySearch(e.target.value)} />
         <Field en="Saved loading lists" te="సేవ్ చేసిన లోడింగ్ జాబితాలు">
           <select className="input rounded-xl" disabled={saving || opening || historyBusy} value={activeListId || ''} onChange={async event => {
             if (!window.confirm(pick('Replace the current form with this loading list?', 'ప్రస్తుత వివరాలను మార్చాలా?'))) return;
@@ -294,7 +332,9 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
             setActiveListId(list?.id || null); setLoadingListNumber(list?.loadingListNumber || '');
             setSupervisor(list?.supervisor || ''); setBuyerDestination(list?.buyerDestination || '');
             setStoneType(list?.stoneType || ''); setFinish(list?.finish || '');
-            setRequirements(list ? structuredClone(list.requirements) : []); setEditIndex(null); setActiveCustomIdx(null); setError('');
+            const opened = list ? structuredClone(list.requirements) : [];
+            setRequirements(opened); setEditIndex(null); setActiveCustomIdx(null); setError(''); setNotice(''); setReqErrors({}); setConfirmRemove(null);
+            setSavedSnapshot(JSON.stringify({ supervisor: list?.supervisor || '', buyerDestination: list?.buyerDestination || '', stoneType: list?.stoneType || '', finish: list?.finish || '', requirements: opened }));
             } catch(e) { if (ticket === detailTicket.current) setError(e.message); }
             finally { if (ticket === detailTicket.current) setOpening(false); }
           }}><option value="">{pick('New loading list', 'కొత్త లోడింగ్ జాబితా')}</option>{savedLists.map(list => <option key={list.id} value={list.id}>{list.loadingListNumber} · {list.buyerDestination}</option>)}</select>
@@ -307,9 +347,9 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
         <Card className="gap-4">
           <h2 className="section-heading text-sm font-semibold">{pick('Loading list details', 'లోడింగ్ జాబితా వివరాలు')}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field en={t('supervisor')} te={t('supervisor')} type="text" value={supervisor} onChange={(e)=>setSupervisor(e.target.value)} />
+            <Field en={t('supervisor')} te={t('supervisor')} type="text" id="loading-list-supervisor" name="supervisor" autoComplete="off" value={supervisor} onChange={(e)=>setSupervisor(e.target.value)} />
             <Field en={t('destination')} te={t('destination')}>
-              <select className="input rounded-xl" value={buyerDestination} onChange={(e)=>setBuyerDestination(e.target.value)}>
+              <select id="loading-list-destination" name="buyerDestination" className="input rounded-xl" value={buyerDestination} onChange={(e)=>setBuyerDestination(e.target.value)}>
                 <option value="">--</option>
                 {settings?.savedDestinations?.map(d => <option key={d}>{d}</option>)}
               </select>
@@ -317,13 +357,13 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field en={t('stoneType')} te={t('stoneType')}>
-              <select className="input rounded-xl" value={stoneType} onChange={(e)=>setStoneType(e.target.value)}>
+              <select id="loading-list-stone-type" name="stoneType" className="input rounded-xl" value={stoneType} onChange={(e)=>setStoneType(e.target.value)}>
                 <option value="">--</option>
                 {[...new Set(settings?.stoneRates?.map(sr => sr.stoneType))].map(st => <option key={st}>{st}</option>)}
               </select>
             </Field>
             <Field en={t('finish')} te={t('finish')}>
-              <select className="input rounded-xl" value={finish} onChange={(e)=>setFinish(e.target.value)}>
+              <select id="loading-list-finish" name="finish" className="input rounded-xl" value={finish} onChange={(e)=>setFinish(e.target.value)}>
                 <option value="">--</option>
                 {[...new Set(settings?.stoneRates?.filter(sr => sr.stoneType === stoneType).map(sr => sr.finish))].map(f => <option key={f}>{f}</option>)}
               </select>
@@ -339,16 +379,16 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
           </div>
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
-              <Field en={t('length')} te={t('length')} type="text" placeholder="e.g. 4 1/2" value={reqLen} onChange={(e)=>setReqLen(e.target.value)} />
-              <FractionChips value={reqLen} setValue={setReqLen} />
+              <Field en={t('length')} te={t('length')} type="text" id="requirement-length" name="length" autoComplete="off" spellCheck={false} placeholder="e.g. 4 1/2…" error={reqErrors.length} value={reqLen} onChange={(e)=>setReqLen(e.target.value)} />
+              <FractionChips value={reqLen} setValue={setReqLen} label={t('length')} />
             </div>
             <div>
-              <Field en={t('width')} te={t('width')} type="text" placeholder="e.g. 2" value={reqWid} onChange={(e)=>setReqWid(e.target.value)} />
-              <FractionChips value={reqWid} setValue={setReqWid} />
+              <Field en={t('width')} te={t('width')} type="text" id="requirement-width" name="width" autoComplete="off" spellCheck={false} placeholder="e.g. 2…" error={reqErrors.width} value={reqWid} onChange={(e)=>setReqWid(e.target.value)} />
+              <FractionChips value={reqWid} setValue={setReqWid} label={t('width')} />
             </div>
           </div>
           <div className="mb-4">
-            <Field en={t('pieces')} te={t('pieces')} type="number" placeholder={t('pieces')} value={reqQty} onChange={(e)=>setReqQty(e.target.value)} />
+            <Field en={t('pieces')} te={t('pieces')} type="number" id="requirement-quantity" name="quantity" placeholder="e.g. 10…" error={reqErrors.quantity} value={reqQty} onChange={(e)=>setReqQty(e.target.value)} />
           </div>
           <Button className="w-full" onClick={handleAddRequirement} en={editIndex !== null ? t('updateRequirement') : t('addRequirement')} te={editIndex !== null ? t('updateRequirement') : t('addRequirement')} />
         </Card>
@@ -361,12 +401,20 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
           </div>
           
           <div className="space-y-3">
-            {requirements.map((req, idx) => (
+            {requirements.map((req, idx) => {
+              const size = `${req.lengthDisplay || decimalToFraction(req.lengthFt)} × ${req.widthDisplay || decimalToFraction(req.widthFt)}`;
+              return (
               <Card key={idx} className={editIndex === idx ? 'ring-2 ring-teal-100' : ''}>
-                <div className="action-row flex flex-wrap justify-end gap-2 mb-3">
-                  <Button onClick={() => handleEditRequirement(idx)} en="Edit" te="మార్చండి" />
-                  <Button onClick={() => handleRemoveRequirement(idx)} en={t('delete')} te={t('delete')} />
-                </div>
+                {confirmRemove === idx ? (
+                  <div className="load-delete mb-3" data-state="confirming">
+                    <span className="load-delete-question" role="status">{pick(`Delete requirement ${size}?`, `${size} అవసరాన్ని తొలగించాలా?`)}</span>
+                    <button type="button" className="load-delete-confirm" onClick={() => handleRemoveRequirement(idx)}>{pick('Yes, delete', 'అవును, తొలగించండి')}</button>
+                    <button type="button" className="load-delete-cancel" data-requirement-cancel={idx} onClick={() => { setConfirmRemove(null); requestAnimationFrame(() => document.querySelector(`[data-requirement-delete="${idx}"]`)?.focus()); }}>{pick('Cancel', 'రద్దు')}</button>
+                  </div>
+                ) : <div className="action-row flex flex-wrap justify-end gap-2 mb-3">
+                  <Button onClick={() => handleEditRequirement(idx)} en="Edit" te="మార్చండి" aria-label={pick(`Edit ${size}`, `${size} మార్చండి`)} />
+                  <Button onClick={() => { setConfirmRemove(idx); requestAnimationFrame(() => document.querySelector(`[data-requirement-cancel="${idx}"]`)?.focus()); }} data-requirement-delete={idx} en={t('delete')} te={t('delete')} aria-label={pick(`Delete ${size}`, `${size} ${t('delete')}`)} />
+                </div>}
                 
                 <div className="flex items-center gap-2 mb-3">
                   <div className="text-lg font-semibold text-slate-800">{req.lengthDisplay || decimalToFraction(req.lengthFt)} <span className="text-slate-400">×</span> {req.widthDisplay || decimalToFraction(req.widthFt)}</div>
@@ -377,15 +425,15 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
                 <div className="grid grid-cols-3 gap-2 mb-4 bg-slate-50 p-2 rounded-lg">
                   <div className="text-center">
                     <div className="text-xs text-gray-600">{pick('Required', 'అవసరం')}</div>
-                    <div className="text-lg font-bold text-slate-700">{req.requiredQuantity}</div>
+                    <div className="text-lg font-bold text-slate-700 tabular-nums">{req.requiredQuantity}</div>
                   </div>
                   <div className="text-center border-l border-r border-slate-200">
                     <div className="text-xs text-gray-600">{pick('Loaded', 'లోడ్ చేసినవి')}</div>
-                    <div className="text-lg font-bold text-teal-700">{req.loadedQuantity}</div>
+                    <div className="text-lg font-bold text-teal-700 tabular-nums">{req.loadedQuantity}</div>
                   </div>
                   <div className="text-center">
                     <div className="text-xs text-gray-600">{pick('Balance', 'మిగిలినవి')}</div>
-                    <div className={`text-lg font-bold ${req.balance < 0 ? 'text-orange-600' : 'text-slate-700'}`}>{req.balance > 0 ? req.balance : 0}</div>
+                    <div className={`text-lg font-bold tabular-nums ${req.balance < 0 ? 'text-orange-600' : 'text-slate-700'}`}>{req.balance > 0 ? req.balance : 0}</div>
                   </div>
                 </div>
 
@@ -397,12 +445,12 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
                       </div>
                       <div className="grid grid-cols-2 gap-2 mb-3">
                         <div>
-                          <Field en={t('length')} te={t('length')} type="text" value={customLen} onChange={e=>setCustomLen(e.target.value)} />
-                          <div className="mt-1"><FractionChips value={customLen} setValue={setCustomLen}/></div>
+                          <Field en={t('length')} te={t('length')} type="text" name="customLength" autoComplete="off" spellCheck={false} value={customLen} onChange={e=>setCustomLen(e.target.value)} />
+                          <div className="mt-1"><FractionChips value={customLen} setValue={setCustomLen} label={t('length')} /></div>
                         </div>
                         <div>
-                          <Field en={t('width')} te={t('width')} type="text" value={customWid} onChange={e=>setCustomWid(e.target.value)} />
-                          <div className="mt-1"><FractionChips value={customWid} setValue={setCustomWid}/></div>
+                          <Field en={t('width')} te={t('width')} type="text" name="customWidth" autoComplete="off" spellCheck={false} value={customWid} onChange={e=>setCustomWid(e.target.value)} />
+                          <div className="mt-1"><FractionChips value={customWid} setValue={setCustomWid} label={t('width')} /></div>
                         </div>
                       </div>
                       <div className="action-row flex flex-wrap gap-2">
@@ -414,12 +462,13 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
                     <div className="action-row flex flex-wrap gap-2">
                       <Button en="−" te="−" aria-label={pick('Remove last loaded piece', 'చివరిగా లోడ్ చేసిన ముక్క తొలగించండి')} onClick={() => handleRemovePiece(idx)} disabled={req.loadedQuantity === 0} />
                       <Button primary className="flex-1" en="Load piece" te="ముక్క లోడ్ చేయండి" onClick={() => handleLoadPiece(idx)} />
-                      <Button en="Custom" te="కస్టమ్" onClick={() => handleOpenCustom(idx)} />
+                      <Button en="Custom" te="కస్టమ్" aria-label={pick(`Custom piece for ${size}`, `${size} కోసం కస్టమ్ ముక్క`)} onClick={() => handleOpenCustom(idx)} />
                     </div>
                   )}
                 </div>
               </Card>
-            ))}
+              );
+            })}
           </div>
         </section>
 
@@ -459,6 +508,7 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
             {loadingListNumber && <span className="text-sm text-gray-600 break-all">{loadingListNumber}</span>}
           </div>
           <div className="action-row flex flex-wrap gap-2">
+            {notice && <p role="status" className="basis-full text-sm text-teal-800">{notice}</p>}
             {embedded && <Button primary en={saving ? pick('Saving…', 'సేవ్ అవుతోంది…') : t('save')} te={saving ? pick('Saving…', 'సేవ్ అవుతోంది…') : t('save')} disabled={saving || opening} onClick={handleSaveList} />}
             {requirements.length > 0 && <>
               <Button en="Download PDF" te="PDF డౌన్‌లోడ్" onClick={handleGeneratePdf} />

@@ -69,11 +69,19 @@ export default function BillView({ record, onBack, onResume, onEdit, onChanged, 
     return () => { live = false; };
   }, [selectedVersion, selectedVersionKey, record.id, record.dispatchSlipNumber, record.status, layoutVersion, pick]);
   useEffect(() => {
-    const refresh = () => setLayoutVersion(version => version + 1);
+    // Repagination measures the DOM; coalesce a burst of resize events into one pass per frame.
+    let frame = 0;
+    const refresh = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => setLayoutVersion(version => version + 1));
+    };
     window.addEventListener('resize', refresh);
     document.fonts?.addEventListener?.('loadingdone', refresh);
-    return () => { window.removeEventListener('resize', refresh); document.fonts?.removeEventListener?.('loadingdone', refresh); };
+    return () => { cancelAnimationFrame(frame); window.removeEventListener('resize', refresh); document.fonts?.removeEventListener?.('loadingdone', refresh); };
   }, []);
+  // Confirm steps swap the clicked button; keep keyboard focus on the matching control.
+  const focusSoon = selector => requestAnimationFrame(() => document.querySelector(`.bill-screen ${selector}`)?.focus());
+  const previewProblem = detail => pick(`The A4 preview couldn’t be prepared. Reload the page or download the PDF. (${detail})`, `A4 ప్రివ్యూ సిద్ధం కాలేదు. పేజీని రీలోడ్ చేయండి లేదా PDF డౌన్‌లోడ్ చేయండి. (${detail})`);
   useEffect(() => {
     if (!invoiceSource) return;
     let live = true;
@@ -161,7 +169,10 @@ export default function BillView({ record, onBack, onResume, onEdit, onChanged, 
     if (lock.current) return;
     lock.current = true; setBusy(true); setError('');
     try { onChanged(await request(`/dispatches/${record.id}/status`, { method: 'PATCH', body: { status: 'Delivered' } })); setConfirming(false); }
-    catch (err) { setError(err.message); } finally { lock.current = false; setBusy(false); }
+    catch (err) {
+      const detail = err?.message ? ` (${err.message})` : '';
+      setError(pick(`Couldn’t mark as delivered. Check your connection and try again.${detail}`, `డెలివరీ పూర్తయినట్లు గుర్తించలేకపోయాం. కనెక్షన్ తనిఖీ చేసి మళ్ళీ ప్రయత్నించండి.${detail}`));
+    } finally { lock.current = false; setBusy(false); }
   }
   // Admin-only; the API enforces the role too. Only runs after the explicit confirm step.
   async function removeInvoice() {
@@ -176,8 +187,9 @@ export default function BillView({ record, onBack, onResume, onEdit, onChanged, 
         ? pick('This invoice has payments recorded. Remove those payments first, then delete it.', 'ఈ బిల్లుకు చెల్లింపులు నమోదయ్యాయి. ముందుగా ఆ చెల్లింపులను తొలగించి, తర్వాత బిల్లును తొలగించండి.')
         : err.status === 403
           ? pick('You are not permitted to delete this invoice.', 'ఈ బిల్లును తొలగించడానికి మీకు అనుమతి లేదు.')
-          : err.message);
+          : pick(`The invoice wasn’t deleted. Try again.${err?.message ? ` (${err.message})` : ''}`, `బిల్లు తొలగించబడలేదు. మళ్ళీ ప్రయత్నించండి.${err?.message ? ` (${err.message})` : ''}`));
       setConfirmingDelete(false);
+      focusSoon('[data-delete-trigger]');
     } finally { lock.current = false; setBusy(false); }
   }
   return <div className="bill-screen space-y-6">
@@ -191,8 +203,8 @@ export default function BillView({ record, onBack, onResume, onEdit, onChanged, 
       </div>
       {canFinalize && <div className="delivery-bar-actions">
         {confirming
-          ? <><Button disabled={busy} en="Not yet" te="ఇంకా లేదు" onClick={() => setConfirming(false)} /><Button primary disabled={busy} en={busy ? 'Saving…' : 'Yes, delivered'} te={busy ? 'సేవ్ అవుతోంది…' : 'అవును, చేరింది'} onClick={delivered} /></>
-          : <Button disabled={busy} en="Mark delivered" te="డెలివరీ పూర్తయింది" onClick={() => setConfirming(true)} />}
+          ? <><Button disabled={busy} data-delivery-cancel="" en="Not yet" te="ఇంకా లేదు" onClick={() => { setConfirming(false); focusSoon('[data-delivery-trigger]'); }} /><Button primary disabled={busy} en={busy ? 'Saving…' : 'Yes, delivered'} te={busy ? 'సేవ్ అవుతోంది…' : 'అవును, చేరింది'} onClick={delivered} /></>
+          : <Button disabled={busy} data-delivery-trigger="" en="Mark delivered" te="డెలివరీ పూర్తయింది" onClick={() => { setConfirming(true); focusSoon('[data-delivery-cancel]'); }} />}
       </div>}
     </section>}
     {record.status === 'Delivered' && <section className="delivery-bar" data-state="delivered" aria-label={pick('Delivery status', 'డెలివరీ స్థితి')}>
@@ -200,11 +212,11 @@ export default function BillView({ record, onBack, onResume, onEdit, onChanged, 
       <div className="delivery-bar-text"><strong>{pick('Delivered', 'డెలివరీ అయింది')}</strong>{destination && <span>{pick(`Reached ${destination}`, `${destination}కు చేరింది`)}</span>}</div>
     </section>}
     {finalized && <PaymentSection dispatchId={record.id} canRecordPayment={canFinalize} />}
-    <div className="invoice-paper-shell a4-preview-shell" aria-live="polite">
-      {!finalized ? <p className="a4-preview-feedback">{pick('Complete this draft to see the final A4 invoice. Missing data is never replaced with sample values.', 'చివరి A4 బిల్లు చూడటానికి డ్రాఫ్ట్‌ను పూర్తి చేయండి. లేని సమాచారాన్ని నమూనా విలువలతో నింపము.')}</p>
-        : previewIssue ? <p className="a4-preview-feedback" role="alert">{previewIssue}</p>
+    <div className="invoice-paper-shell a4-preview-shell">
+      {!finalized ? <p className="a4-preview-feedback" role="status">{pick('Complete this draft to see the final A4 invoice. Missing data is never replaced with sample values.', 'చివరి A4 బిల్లు చూడటానికి డ్రాఫ్ట్‌ను పూర్తి చేయండి. లేని సమాచారాన్ని నమూనా విలువలతో నింపము.')}</p>
+        : previewIssue ? <p className="a4-preview-feedback" role="alert">{previewProblem(previewIssue)}</p>
           : preview ? <>{preview.model.warnings.length > 0 && <div className="a4-preview-feedback" role="alert"><strong>{pick('Saved invoice values need review before export.', 'సేవ్ చేసిన బిల్లు విలువలను ఎగుమతికి ముందు తనిఖీ చేయండి.')}</strong><ul>{preview.model.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></div>}<div dangerouslySetInnerHTML={{ __html: invoiceHtml }} /></>
-            : <p className="a4-preview-feedback">{pick('Preparing the saved A4 invoice…', 'సేవ్ చేసిన A4 బిల్లును సిద్ధం చేస్తున్నాం…')}</p>}
+            : <p className="a4-preview-feedback" role="status">{pick('Preparing the saved A4 invoice…', 'సేవ్ చేసిన A4 బిల్లును సిద్ధం చేస్తున్నాం…')}</p>}
     </div>
     {finalized ? <>
       <section className="invoice-export-panel" aria-labelledby="invoice-export-title">
@@ -234,53 +246,56 @@ export default function BillView({ record, onBack, onResume, onEdit, onChanged, 
           <div className="action-row"><Button disabled={busy} en="Print / PDF" te="ప్రింట్ / PDF" onClick={printInvoice} /><Button disabled={busy} en="Download" te="డౌన్‌లోడ్" onClick={() => exportFile(documentType)} /><Button primary disabled={busy} en={busy ? 'Preparing…' : 'Share document'} te={busy ? 'సిద్ధం అవుతోంది…' : 'పత్రం షేర్ చేయండి'} onClick={() => exportFile(documentType, true)}><Icon name="arrow" /></Button></div>
         </footer>
       </section>
-      {admin && onEdit && <section className="invoice-admin-edit flex flex-col gap-3 border-t border-base-300 pt-5 sm:flex-row sm:items-center sm:justify-between" aria-labelledby="invoice-edit-title">
-        <div className="min-w-0">
-          <h2 id="invoice-edit-title" className="text-base font-semibold">{pick('Edit invoice', 'బిల్లు మార్చండి')}</h2>
-          <p className="text-sm opacity-70">{pick('Admins only. Correct measurements, prices or details. The slip number stays the same and the current version is kept in history.', 'అడ్మిన్‌లకు మాత్రమే. కొలతలు, ధరలు లేదా వివరాలు సరిచేయండి. స్లిప్ నంబర్ మారదు, ప్రస్తుత వెర్షన్ చరిత్రలో ఉంటుంది.')}</p>
+      {admin && <div className="invoice-admin-panel">
+      <p className="invoice-admin-eyebrow">{pick('Admin', 'అడ్మిన్')}</p>
+      {onEdit && <section className="invoice-admin-row" aria-labelledby="invoice-edit-title">
+        <div className="invoice-admin-copy">
+          <h2 id="invoice-edit-title">{pick('Edit invoice', 'బిల్లు మార్చండి')}</h2>
+          <p>{pick('Admins only. Correct measurements, prices or details. The slip number stays the same and the current version is kept in history.', 'అడ్మిన్‌లకు మాత్రమే. కొలతలు, ధరలు లేదా వివరాలు సరిచేయండి. స్లిప్ నంబర్ మారదు, ప్రస్తుత వెర్షన్ చరిత్రలో ఉంటుంది.')}</p>
         </div>
         <div className="action-row shrink-0"><Button disabled={busy} en="Edit invoice" te="బిల్లు మార్చండి" onClick={() => onEdit(record)} /></div>
       </section>}
-      {showHistory && <section className="invoice-admin-history flex flex-col gap-3 border-t border-base-300 pt-5" aria-labelledby="invoice-history-title">
-        <div className="min-w-0">
-          <h2 id="invoice-history-title" className="text-base font-semibold">{pick('Version history', 'వెర్షన్ చరిత్ర')}</h2>
-          <p className="text-sm opacity-70">{pick('Admins only. Earlier versions of this invoice, most recent first. They are read-only.', 'అడ్మిన్‌లకు మాత్రమే. ఈ బిల్లు పాత వెర్షన్లు, తాజావి ముందు. వీటిని చూడటం మాత్రమే సాధ్యం.')}</p>
+      {showHistory && <section className="invoice-admin-row invoice-admin-history" aria-labelledby="invoice-history-title">
+        <div className="invoice-admin-copy">
+          <h2 id="invoice-history-title">{pick('Version history', 'వెర్షన్ చరిత్ర')}</h2>
+          <p>{pick('Admins only. Earlier versions of this invoice, most recent first. They are read-only.', 'అడ్మిన్‌లకు మాత్రమే. ఈ బిల్లు పాత వెర్షన్లు, తాజావి ముందు. వీటిని చూడటం మాత్రమే సాధ్యం.')}</p>
         </div>
-        <ul className="flex flex-col divide-y divide-base-300 border-y border-base-300">
+        <ul className="invoice-admin-versions">
           {versions.map(version => {
             const active = selectedVersion?.index === version.index;
             return <li key={version.index} className="flex items-center justify-between gap-3 py-2">
               <span className="min-w-0 truncate text-sm">{versionTime(version.snapshot?.revisedAt)}</span>
-              <button type="button" className="text-button shrink-0 text-sm" aria-pressed={active} disabled={busy} onClick={() => setHistorySelection(active ? null : { key: historyKey, index: version.index })}>
+              <button type="button" className="text-button shrink-0 text-sm" aria-expanded={active} aria-controls={active ? `${historyPreviewId}-panel` : undefined} disabled={busy} onClick={() => setHistorySelection(active ? null : { key: historyKey, index: version.index })}>
                 {active ? pick('Hide', 'దాచండి') : pick('View', 'చూడండి')}
               </button>
             </li>;
           })}
         </ul>
-        {selectedVersion && <div className="flex flex-col gap-3" aria-live="polite">
+        {selectedVersion && <div id={`${historyPreviewId}-panel`} className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <strong className="min-w-0 text-sm">{pick(`Version from ${versionTime(selectedVersion.snapshot?.revisedAt)} (read-only)`, `${versionTime(selectedVersion.snapshot?.revisedAt)} నాటి వెర్షన్ (చూడటానికి మాత్రమే)`)}</strong>
             <button type="button" className="text-button shrink-0 text-sm" onClick={() => setHistorySelection(null)}>{pick('Close', 'మూసివేయండి')}</button>
           </div>
           <div className="invoice-paper-shell a4-preview-shell">
-            {historyCurrent?.issue ? <p className="a4-preview-feedback" role="alert">{historyCurrent.issue}</p>
+            {historyCurrent?.issue ? <p className="a4-preview-feedback" role="alert">{previewProblem(historyCurrent.issue)}</p>
               : historyCurrent?.preview ? <>{historyCurrent.preview.model.warnings.length > 0 && <div className="a4-preview-feedback" role="alert"><strong>{pick('This earlier version has values that need review.', 'ఈ పాత వెర్షన్‌లోని విలువలను తనిఖీ చేయాలి.')}</strong><ul>{historyCurrent.preview.model.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></div>}<div dangerouslySetInnerHTML={{ __html: historyHtml }} /></>
-                : <p className="a4-preview-feedback">{pick('Preparing this earlier version…', 'ఈ పాత వెర్షన్‌ను సిద్ధం చేస్తున్నాం…')}</p>}
+                : <p className="a4-preview-feedback" role="status">{pick('Preparing this earlier version…', 'ఈ పాత వెర్షన్‌ను సిద్ధం చేస్తున్నాం…')}</p>}
           </div>
         </div>}
       </section>}
-      {admin && <section className="invoice-admin-delete flex flex-col gap-3 border-t border-base-300 pt-5 sm:flex-row sm:items-center sm:justify-between" aria-labelledby="invoice-delete-title" data-state={confirmingDelete ? 'confirming' : 'idle'}>
-        <div className="min-w-0" aria-live="polite">
-          <h2 id="invoice-delete-title" className="text-base font-semibold">{confirmingDelete ? pick('Delete this invoice?', 'ఈ బిల్లును తొలగించాలా?') : pick('Delete invoice', 'బిల్లును తొలగించండి')}</h2>
-          <p className="text-sm opacity-70">{confirmingDelete ? pick('It will be removed from your loads. This can’t be undone.', 'ఇది మీ లోడ్‌ల నుండి తొలగించబడుతుంది. దీన్ని మార్చలేరు.') : pick('Admins only. Invoices with recorded payments can’t be deleted.', 'అడ్మిన్‌లకు మాత్రమే. చెల్లింపులు నమోదైన బిల్లులను తొలగించలేరు.')}</p>
+      <section className="invoice-admin-row invoice-admin-delete" aria-labelledby="invoice-delete-title" data-state={confirmingDelete ? 'confirming' : 'idle'}>
+        <div className="invoice-admin-copy" aria-live="polite">
+          <h2 id="invoice-delete-title">{confirmingDelete ? pick('Delete this invoice?', 'ఈ బిల్లును తొలగించాలా?') : pick('Delete invoice', 'బిల్లును తొలగించండి')}</h2>
+          <p>{confirmingDelete ? pick('It will be removed from your loads. This can’t be undone.', 'ఇది మీ లోడ్‌ల నుండి తొలగించబడుతుంది. దీన్ని మార్చలేరు.') : pick('Admins only. Invoices with recorded payments can’t be deleted.', 'అడ్మిన్‌లకు మాత్రమే. చెల్లింపులు నమోదైన బిల్లులను తొలగించలేరు.')}</p>
           <ErrorMessage error={deleteError} />
         </div>
         <div className="action-row shrink-0">
           {confirmingDelete
-            ? <><Button disabled={busy} en="Keep invoice" te="బిల్లు ఉంచండి" onClick={() => setConfirmingDelete(false)} /><Button primary disabled={busy} en={busy ? 'Deleting…' : 'Yes, delete'} te={busy ? 'తొలగిస్తోంది…' : 'అవును, తొలగించండి'} onClick={removeInvoice} /></>
-            : <Button disabled={busy} en="Delete invoice" te="బిల్లును తొలగించండి" onClick={() => { setDeleteError(''); setConfirmingDelete(true); }} />}
+            ? <><Button disabled={busy} data-delete-cancel="" en="Keep invoice" te="బిల్లు ఉంచండి" onClick={() => { setConfirmingDelete(false); focusSoon('[data-delete-trigger]'); }} /><Button primary className="invoice-danger-button" disabled={busy} en={busy ? 'Deleting…' : 'Yes, delete'} te={busy ? 'తొలగిస్తోంది…' : 'అవును, తొలగించండి'} onClick={removeInvoice} /></>
+            : <Button className="invoice-danger-quiet" disabled={busy} data-delete-trigger="" en="Delete invoice" te="బిల్లును తొలగించండి" onClick={() => { setDeleteError(''); setConfirmingDelete(true); focusSoon('[data-delete-cancel]'); }} />}
         </div>
-      </section>}
+      </section>
+      </div>}
     </> : <div className="invoice-draft-action"><Button primary disabled={busy} en="Continue this draft" te="డ్రాఫ్ట్ కొనసాగించండి" onClick={() => onResume(record)}><Icon name="arrow" /></Button></div>}
   </div>;
 }

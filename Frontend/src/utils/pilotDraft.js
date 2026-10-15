@@ -37,11 +37,17 @@ async function getEncryptionKey(organizationId, storage = localStorage) {
   );
 }
 
-async function encryptDraft(draft, organizationId, storage) {
+// Up to MAX_DRAFTS unfinished loads are kept per organization on this device,
+// stored as one encrypted list: { drafts: [{ savedAt, draft }] }, newest first.
+export const MAX_DRAFTS = 5;
+export const DRAFTS_FULL = 'full';
+
+async function encryptList(entries, organizationId, storage) {
   try {
+    if (!entries.length) { storage.removeItem(`${DRAFT_KEY}:${organizationId}`); return true; }
     const key = await getEncryptionKey(organizationId, storage);
     const iv = crypto.getRandomValues(new Uint8Array(DRAFT_IV_SIZE));
-    const encoded = new TextEncoder().encode(JSON.stringify(draft));
+    const encoded = new TextEncoder().encode(JSON.stringify({ drafts: entries }));
     const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
     const combined = new Uint8Array(iv.length + encrypted.byteLength);
     combined.set(iv);
@@ -68,36 +74,66 @@ function enqueue(storage, organizationId, operation) {
 export function hasDraftContent(draft) {
   return Boolean(draft.rows?.length || draft.partyName?.trim() || draft.truckNumber?.trim() || draft.buyerDestination?.trim() || draft.entry?.length || draft.entry?.width);
 }
-export function writeDraft(draft, organizationId, storage = localStorage) {
-  return enqueue(storage, organizationId, () => encryptDraft(draft, organizationId, storage));
+function validDraft(value) {
+  if (!value || !Array.isArray(value.rows) || typeof value.clientRequestId !== 'string') return null;
+  if (!value.rows.every(row => row && typeof row.stoneType === 'string' && typeof row.finish === 'string' && Number.isFinite(row.lengthFt) && row.lengthFt > 0 && Number.isFinite(row.widthFt) && row.widthFt > 0 && Number.isSafeInteger(row.quantity) && row.quantity > 0 && Number.isFinite(row.ratePerSqFt) && row.ratePerSqFt >= 0)) return null;
+  // Drafts saved before row numbers existed continue under row 1.
+  return { ...value, rows: value.rows.map(row => ({ ...row, rowNo: row.rowNo ?? 1 })) };
 }
-export function clearDraft(organizationId, storage = localStorage) {
-  return enqueue(storage, organizationId, () => {
-    storage.removeItem(`${DRAFT_KEY}:${organizationId}`);
-    return true;
+// Reads the stored list without waiting on the queue (callers inside the queue use it).
+async function decryptList(organizationId, storage) {
+  const stored = storage.getItem(`${DRAFT_KEY}:${organizationId}`);
+  if (!stored) return [];
+  const key = await getEncryptionKey(organizationId, storage);
+  const combined = Uint8Array.from(atob(stored), c => c.charCodeAt(0));
+  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: combined.slice(0, DRAFT_IV_SIZE) }, key, combined.slice(DRAFT_IV_SIZE));
+  const value = JSON.parse(new TextDecoder().decode(decrypted));
+  // The earlier format stored a single draft object.
+  const entries = Array.isArray(value?.drafts) ? value.drafts : [{ savedAt: 0, draft: value }];
+  return entries
+    .map(entry => ({ savedAt: Number(entry?.savedAt) || 0, draft: validDraft(entry?.draft) }))
+    .filter(entry => entry.draft)
+    .sort((a, b) => b.savedAt - a.savedAt);
+}
+async function storedList(organizationId, storage) {
+  try { return await decryptList(organizationId, storage); } catch { return []; }
+}
+/** Saves or updates one draft. Resolves true, false (storage failed) or DRAFTS_FULL. */
+export function writeDraft(draft, organizationId, storage = localStorage) {
+  return enqueue(storage, organizationId, async () => {
+    const { savedAt: _savedAt, ...clean } = draft;
+    const list = await storedList(organizationId, storage);
+    const others = list.filter(entry => entry.draft.clientRequestId !== clean.clientRequestId);
+    if (others.length === list.length && others.length >= MAX_DRAFTS) return DRAFTS_FULL;
+    return encryptList([{ savedAt: Date.now(), draft: clean }, ...others], organizationId, storage);
+  });
+}
+/** Removes one draft by clientRequestId, or every draft of the organization when omitted. */
+export function clearDraft(organizationId, storage = localStorage, clientRequestId) {
+  return enqueue(storage, organizationId, async () => {
+    if (clientRequestId === undefined) {
+      storage.removeItem(`${DRAFT_KEY}:${organizationId}`);
+      return true;
+    }
+    const list = await storedList(organizationId, storage);
+    const next = list.filter(entry => entry.draft.clientRequestId !== clientRequestId);
+    return next.length === list.length ? true : encryptList(next, organizationId, storage);
   });
 }
 export async function flushDraft(organizationId, storage = localStorage) {
   await pendingWrites.get(storage)?.get(organizationId);
 }
-
-export async function readDraft(storage = localStorage, organizationId) {
-  try {
-    await pendingWrites.get(storage)?.get(organizationId);
-    const stored = storage.getItem(`${DRAFT_KEY}:${organizationId}`);
-    if (!stored) return null;
-    const key = await getEncryptionKey(organizationId, storage);
-    const combined = Uint8Array.from(atob(stored), c => c.charCodeAt(0));
-    const iv = combined.slice(0, DRAFT_IV_SIZE);
-    const encrypted = combined.slice(DRAFT_IV_SIZE);
-    const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, encrypted);
-    const value = JSON.parse(new TextDecoder().decode(decrypted));
-    if (!value || !Array.isArray(value.rows) || typeof value.clientRequestId !== 'string') return null;
-    if (!value.rows.every(row => row && typeof row.stoneType === 'string' && typeof row.finish === 'string' && Number.isFinite(row.lengthFt) && row.lengthFt > 0 && Number.isFinite(row.widthFt) && row.widthFt > 0 && Number.isSafeInteger(row.quantity) && row.quantity > 0 && Number.isFinite(row.ratePerSqFt) && row.ratePerSqFt >= 0)) return null;
-    // Drafts saved before row numbers existed continue under row 1.
-    value.rows = value.rows.map(row => ({ ...row, rowNo: row.rowNo ?? 1 }));
-    return value;
-  } catch { return null; }
+/** All unfinished drafts, newest first, each with its savedAt time (ms). */
+export async function readDrafts(storage = localStorage, organizationId) {
+  await pendingWrites.get(storage)?.get(organizationId);
+  return (await storedList(organizationId, storage)).map(entry => ({ ...entry.draft, savedAt: entry.savedAt }));
+}
+/** One draft by clientRequestId, or the most recently saved one. */
+export async function readDraft(storage = localStorage, organizationId, clientRequestId) {
+  await pendingWrites.get(storage)?.get(organizationId);
+  const list = await storedList(organizationId, storage);
+  const entry = clientRequestId === undefined ? list[0] : list.find(item => item.draft.clientRequestId === clientRequestId);
+  return entry?.draft || null;
 }
 export function previewRows(rows) {
   return rows.map(row => ({ ...row, sqFt: round2(rawArea(row)), lineTotal: round2(rawAmount(row)) }));

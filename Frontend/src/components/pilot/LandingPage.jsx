@@ -4,6 +4,7 @@ import Icon from './Icon.jsx';
 import BrandLogo from './BrandLogo.jsx';
 import ProductShowcase, { SampleInvoice } from './ProductShowcase.jsx';
 import { MagneticCTA, Reveal } from './MarketingMotion.jsx';
+import { money } from '../../utils/pilotDraft.js';
 
 function ScrubText({ text, className }) {
   const ref = useRef(null);
@@ -33,6 +34,14 @@ export default function LandingPage({ onStart, onLogin, user, onWorkspace }) {
   const info = useRef(null);
   const bill = useRef(null);
   const [topic, setTopic] = useState('privacy');
+  // The browser chrome matches this page's background while it is shown.
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) return undefined;
+    const previous = meta.getAttribute('content');
+    meta.setAttribute('content', '#f7fbfa');
+    return () => meta.setAttribute('content', previous);
+  }, []);
   const start = user ? onWorkspace : onStart;
   const startLabel = user ? pick('Open workspace', 'వర్క్‌స్పేస్ తెరవండి') : pick('Sign up', 'సైన్ అప్');
   const topics = {
@@ -75,7 +84,7 @@ export default function LandingPage({ onStart, onLogin, user, onWorkspace }) {
     <a className="mk-skip-link" href="#marketing-main" onClick={event => anchor(event, 'marketing-main')}>{pick('Skip to content', 'విషయానికి వెళ్ళండి')}</a>
     <header className="mk-public-header sticky top-3 z-20 mx-auto w-[calc(100%-24px)] max-w-[1160px] sm:top-4 sm:w-[calc(100%-48px)]">
       <nav aria-label={pick('Public navigation', 'పబ్లిక్ నావిగేషన్')} className="mk-nav flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[28px] border border-white px-3 py-2 sm:gap-x-5 sm:rounded-full sm:px-5">
-        <a href="#marketing-main" onClick={event => anchor(event, 'marketing-main')} className="flex min-h-11 shrink-0 items-center gap-2.5" aria-label={pick('StoneDesk home', 'StoneDesk హోమ్')}><BrandLogo size={32} className="mk-brand h-8 w-8" /><span className="text-lg font-semibold tracking-[-0.045em]">StoneDesk</span></a>
+        <a href="#marketing-main" onClick={event => anchor(event, 'marketing-main')} className="flex min-h-11 shrink-0 items-center gap-2.5" aria-label={pick('StoneDesk home', 'StoneDesk హోమ్')}><BrandLogo size={32} className="mk-brand h-8 w-8" /><span className="text-lg font-semibold tracking-[-0.045em]" translate="no">StoneDesk</span></a>
         <div className="mk-nav-links flex items-center gap-1 sm:gap-3">
           <a href="#product" onClick={event => anchor(event, 'product')} className="mk-nav-link flex min-h-11 items-center rounded-full px-3 text-sm">{pick('Product', 'ఉత్పత్తి')}</a>
           <a href="#how-it-works" onClick={event => anchor(event, 'how-it-works')} className="mk-nav-link flex min-h-11 items-center rounded-full px-3 text-sm">{pick('How it works', 'ఎలా పనిచేస్తుంది')}</a>
@@ -94,7 +103,7 @@ export default function LandingPage({ onStart, onLogin, user, onWorkspace }) {
           <p className="mt-6 max-w-[36ch] text-base leading-relaxed text-[#526661] sm:text-lg">{pick('From first measurement to final bill. A clear workspace for your stone business and the people running it.', 'మొదటి కొలత నుండి చివరి బిల్లు వరకు. మీ రాతి వ్యాపారం మరియు బృందం కోసం స్పష్టమైన వర్క్‌స్పేస్.')}</p>
           <div className="mt-8"><MagneticCTA onClick={start}>{startLabel}</MagneticCTA></div>
         </div>
-        <Reveal className="mk-hero-product relative min-w-0" delay={0.08}><ProductShowcase animateStatus /></Reveal>
+        <Reveal className="mk-hero-product relative min-w-0" delay={0.08}><ProductShowcase animateStatus headingLevel="h2" /></Reveal>
       </section>
 
       <ul className="mk-essentials" aria-label={pick('Workspace essentials', 'వర్క్‌స్పేస్ ముఖ్యాంశాలు')}>
@@ -128,12 +137,12 @@ export default function LandingPage({ onStart, onLogin, user, onWorkspace }) {
           </Reveal>
           <Reveal className="mk-bill-bezel min-w-0 rounded-[28px] border border-[#cfdfd8] p-2.5 sm:p-4" delay={0.06}>
             <div className="mk-bill-card" aria-label={pick('Sample bill summary', 'నమూనా బిల్లు సారాంశం')} role="group">
-              <div className="mk-bill-card-head"><div><p className="mk-bill-card-kind">{pick('Buyer invoice', 'కొనుగోలుదారు ఇన్వాయిస్')}</p><p className="mk-bill-card-no">SAMPLE-001</p></div><span className="invoice-sample-tag">{pick('SAMPLE DATA', 'నమూనా')}</span></div>
+              <div className="mk-bill-card-head"><div><p className="mk-bill-card-kind">{pick('Buyer invoice', 'కొనుగోలుదారు ఇన్వాయిస్')}</p><p className="mk-bill-card-no" translate="no">SAMPLE-001</p></div><span className="invoice-sample-tag">{pick('SAMPLE DATA', 'నమూనా')}</span></div>
               <dl className="mk-bill-card-lines">
-                {[[ 'Material · 210 sq ft', 'మెటీరియల్ · 210 చ.అ.', '₹13,440.00' ], [ 'Top · 58.5 sq ft', 'టాప్ · 58.5 చ.అ.', '₹3,744.00' ], [ 'Loading / royalty', 'లోడింగ్ / రాయల్టీ', '₹1,200.00' ]].map(([en, te, value]) => <div key={en}><dt>{pick(en, te)}</dt><dd>{value}</dd></div>)}
+                {[[ 'Material · 210\u00A0sq\u00A0ft', 'మెటీరియల్ · 210\u00A0చ.అ.', 13440 ], [ 'Top · 58.5\u00A0sq\u00A0ft', 'టాప్ · 58.5\u00A0చ.అ.', 3744 ], [ 'Loading / royalty', 'లోడింగ్ / రాయల్టీ', 1200 ]].map(([en, te, value]) => <div key={en}><dt>{pick(en, te)}</dt><dd>{money(value)}</dd></div>)}
               </dl>
-              <div className="mk-bill-card-total"><span>{pick('Net payable', 'చెల్లించవలసిన మొత్తం')}</span><strong>₹18,384.00</strong></div>
-              <div className="mk-bill-card-files" aria-label={pick('Download formats', 'డౌన్‌లోడ్ రూపాలు')}>{['PDF', 'Excel', pick('Driver slip', 'డ్రైవర్ స్లిప్')].map(label => <span key={label}><Icon name="bill" className="h-3.5 w-3.5" />{label}</span>)}</div>
+              <div className="mk-bill-card-total"><span>{pick('Net payable', 'చెల్లించవలసిన మొత్తం')}</span><strong>{money(18384)}</strong></div>
+              <ul className="mk-bill-card-files" aria-label={pick('Download formats', 'డౌన్‌లోడ్ రూపాలు')}>{['PDF', 'Excel', pick('Driver slip', 'డ్రైవర్ స్లిప్')].map(label => <li key={label}><span><Icon name="bill" className="h-3.5 w-3.5" />{label}</span></li>)}</ul>
             </div>
           </Reveal>
         </div>
@@ -153,7 +162,7 @@ export default function LandingPage({ onStart, onLogin, user, onWorkspace }) {
       </section>
     </main>
 
-    <footer className="border-t border-[#dce6e1]"><div className="mx-auto flex max-w-[1240px] flex-col items-start justify-between gap-5 px-5 py-8 sm:px-8 md:flex-row md:items-center lg:px-10"><div><p className="text-lg font-semibold tracking-[-0.045em]">StoneDesk</p><p className="mt-2 text-xs text-[#526661]">{pick('Small-business pilot · Feet, square feet & INR', 'చిన్న వ్యాపార పైలట్ · అడుగులు, చదరపు అడుగులు మరియు INR')}</p></div><div className="flex flex-wrap gap-2 sm:gap-5">{[['privacy', 'Privacy', 'గోప్యత'], ['terms', 'Terms', 'నిబంధనలు'], ['support', 'Support', 'సహాయం']].map(([key, en, te]) => <button type="button" key={key} onClick={() => openInfo(key)} className="mk-nav-link min-h-11 rounded-full px-3 text-sm text-[#526661]">{pick(en, te)}</button>)}</div></div></footer>
+    <footer className="border-t border-[#dce6e1]"><div className="mx-auto flex max-w-[1240px] flex-col items-start justify-between gap-5 px-5 py-8 sm:px-8 md:flex-row md:items-center lg:px-10"><div><p className="text-lg font-semibold tracking-[-0.045em]" translate="no">StoneDesk</p><p className="mt-2 text-xs text-[#526661]">{pick('Small-business pilot · Feet, square feet & INR', 'చిన్న వ్యాపార పైలట్ · అడుగులు, చదరపు అడుగులు మరియు INR')}</p></div><div className="flex flex-wrap gap-2 sm:gap-5">{[['privacy', 'Privacy', 'గోప్యత'], ['terms', 'Terms', 'నిబంధనలు'], ['support', 'Support', 'సహాయం']].map(([key, en, te]) => <button type="button" key={key} onClick={() => openInfo(key)} className="mk-nav-link min-h-11 rounded-full px-3 text-sm text-[#526661]">{pick(en, te)}</button>)}</div></div></footer>
 
     <dialog ref={info} className="mk-dialog" aria-labelledby="marketing-info-title" aria-describedby="marketing-info-body">
       <div className="p-6 sm:p-8"><h2 id="marketing-info-title" className="text-2xl font-semibold tracking-tight">{topics[topic].title}</h2><div id="marketing-info-body" className="mt-5 space-y-4 text-sm leading-relaxed text-[#526661]">{topics[topic].paragraphs.map((paragraph, index) => <p key={`${topic}-${index}`}>{paragraph}</p>)}</div><div className="mt-6 flex justify-end"><button type="button" autoFocus onClick={() => info.current?.close()} className="mk-secondary min-h-11 rounded-full border border-[#cadbd5] px-5 text-sm font-semibold text-[#17645d]">{pick('Close', 'మూసివేయండి')}</button></div></div>

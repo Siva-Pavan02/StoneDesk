@@ -131,7 +131,7 @@ export default function WorkspaceShell({
         <div className="sidebar-brand">
           <BrandLogo size={44} className="brand-mark" />
           <div>
-            <strong>StoneDesk</strong>
+            <strong translate="no">StoneDesk</strong>
             <p className="text-xs text-gray-600">
               {pick("Your yard. In order.", "మీ యార్డ్. క్రమబద్ధంగా.")}
             </p>
@@ -213,6 +213,7 @@ export default function WorkspaceShell({
               <div className="workspace-organization-text">
                 <p
                   className="workspace-organization-name"
+                  translate="no"
                   title={settings?.businessName || "StoneDesk"}
                 >
                   {settings?.businessName || "StoneDesk"}
@@ -224,6 +225,7 @@ export default function WorkspaceShell({
             </div>
           </div>
           <form
+            id="workspace-search-form"
             className={`workspace-search${searchOpen ? " is-open" : ""}`}
             role="search"
             onSubmit={(e) => {
@@ -251,7 +253,10 @@ export default function WorkspaceShell({
               ref={searchInput}
               id="global-search"
               type="search"
-                maxLength={120}
+              name="q"
+              autoComplete="off"
+              spellCheck={false}
+              maxLength={120}
               className="input"
               value={query}
               onChange={(e) => {
@@ -263,8 +268,8 @@ export default function WorkspaceShell({
                   navigate("entries");
               }}
               placeholder={pick(
-                "Lorry, party or bill ID",
-                "లారీ, పార్టీ లేదా బిల్లు",
+                "Lorry, party or bill ID…",
+                "లారీ, పార్టీ లేదా బిల్లు…",
               )}
             />
             <button
@@ -283,6 +288,7 @@ export default function WorkspaceShell({
               className="icon-button workspace-search-toggle"
               aria-label={pick("Open search", "శోధన తెరవండి")}
               aria-expanded={searchOpen}
+              aria-controls="workspace-search-form"
               onClick={() => setSearchOpen(true)}
             >
               <Icon name="search" />
@@ -302,7 +308,14 @@ export default function WorkspaceShell({
             <button
               type="button"
               className="icon-button workspace-notifications"
-              aria-label={pick("Notifications and tasks", "నోటిఫికేషన్లు")}
+              aria-label={
+                attention > 0
+                  ? pick(
+                      `Notifications and tasks, ${attention} drafts to review`,
+                      `నోటిఫికేషన్లు, ${attention} డ్రాఫ్ట్‌లు తనిఖీ చేయాలి`,
+                    )
+                  : pick("Notifications and tasks", "నోటిఫికేషన్లు")
+              }
               aria-haspopup="dialog"
               onClick={() => notifications.current.showModal()}
             >
@@ -348,7 +361,7 @@ export default function WorkspaceShell({
                 {businessMark}
               </span>
             )}
-            <strong id="nav-title" className="nav-drawer-title">
+            <strong id="nav-title" className="nav-drawer-title" translate="no">
               {settings?.businessName || "StoneDesk"}
             </strong>
             <button
@@ -430,21 +443,30 @@ export default function WorkspaceShell({
             {pick("Needs attention", "చేయవలసినవి")}
           </h2>
           <p>
-            {attention}{" "}
-            {pick(
-              "saved drafts to review.",
-              "సేవ్ చేసిన డ్రాఫ్ట్‌లు తనిఖీ చేయాలి.",
+            {attention > 0 ? (
+              <>
+                {attention}{" "}
+                {pick(
+                  "saved drafts to review.",
+                  "సేవ్ చేసిన డ్రాఫ్ట్‌లు తనిఖీ చేయాలి.",
+                )}
+              </>
+            ) : (
+              pick("Nothing waiting for review.", "తనిఖీ కోసం ఏమీ లేదు.")
             )}
           </p>
-          <button
+          <a
+            href="#entries"
             className="btn w-full min-h-12 bg-teal-800 text-white"
-            onClick={() => {
+            onClick={(event) => {
+              if (!isPlainClick(event)) return;
+              event.preventDefault();
               notifications.current.close();
               navigate("entries");
             }}
           >
             {pick("View loading entries", "లోడ్ వివరాలు చూడండి")}
-          </button>
+          </a>
           <button
             className="text-button w-full"
             onClick={() => notifications.current.close()}

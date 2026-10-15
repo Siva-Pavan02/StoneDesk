@@ -4,8 +4,9 @@ import { deleteDispatch, request, settingsPath } from "../../lib/pilotApi.js";
 import {
   fromDispatch,
   newDraft,
-  readDraft,
+  readDrafts,
   clearDraft,
+  MAX_DRAFTS,
 } from "../../utils/pilotDraft.js";
 import { Button, Card, ErrorMessage } from "./Controls.jsx";
 import BusinessSetup from "./BusinessSetup.jsx";
@@ -37,7 +38,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
     [refreshing, setRefreshing] = useState(false),
     [updatedAt, setUpdatedAt] = useState(null);
   const [nextCursor, setNextCursor] = useState(null);
-  const [recovery, setRecovery] = useState(null);
+  const [recoveries, setRecoveries] = useState([]);
   const [onboarding, setOnboarding] = useState(false);
   const [analytics, setAnalytics] = useState({
     data: null,
@@ -83,7 +84,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
       if (ticket === analyticsRequest.current)
         setAnalytics((prev) => ({
           ...prev,
-          error: err.message || "Unable to load analytics",
+          error: err.message || "Unable to load analytics. Try again.",
           loading: false,
         }));
     }
@@ -141,17 +142,30 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
     window.addEventListener("hashchange", changed);
     return () => window.removeEventListener("hashchange", changed);
   }, []);
-  // readDraft is async — read it into state so we never pass a Promise as a prop
+  // readDrafts is async — read it into state so we never pass a Promise as a prop
   useEffect(() => {
     if (!settings?.id) return;
     let cancelled = false;
-    readDraft(undefined, settings.id).then((value) => {
-      if (!cancelled) setRecovery(value);
+    readDrafts(undefined, settings.id).then((value) => {
+      if (!cancelled) setRecoveries(value);
     });
     return () => {
       cancelled = true;
     };
   }, [settings?.id, view]);
+  const draftsFullMessage = pick(
+    `This phone already keeps ${MAX_DRAFTS} unfinished loads. Continue or delete one before starting another.`,
+    `ఈ ఫోన్‌లో ఇప్పటికే ${MAX_DRAFTS} పూర్తి కాని లోడ్లు ఉన్నాయి. కొత్తది ప్రారంభించే ముందు ఒకదాన్ని కొనసాగించండి లేదా తొలగించండి.`,
+  );
+  // LoadHub asks for confirmation inline before calling this; returns whether it was removed.
+  async function deleteRecovery(draft) {
+    if (!(await clearDraft(settings.id, undefined, draft.clientRequestId))) {
+      setError("Unable to delete the recovery copy. Check browser storage.");
+      return false;
+    }
+    setRecoveries(await readDrafts(undefined, settings.id));
+    return true;
+  }
   useEffect(() => {
     if (!view.startsWith("entries") || !settings?.businessName || !settings?.stoneRates.length) return;
     const interval = setInterval(() => {
@@ -184,22 +198,12 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
   async function newLoad() {
     if (!settings?.businessName) return navigate("profile");
     if (!settings.stoneRates.length) return navigate("products");
-    const currentRecovery = await readDraft(undefined, settings.id);
-    if (
-      currentRecovery &&
-      !window.confirm(
-        pick(
-          "Start a new load and replace the unfinished load on this phone? Use Continue to keep working on it.",
-          "ఫోన్‌లోని పూర్తి కాని లోడ్ స్థానంలో కొత్త లోడ్ ప్రారంభించాలా?",
-        ),
-      )
-    )
-      return;
-    if (!(await clearDraft(settings.id))) {
-      setError("Unable to replace the recovery copy. Check browser storage.");
+    // Unfinished loads are kept side by side, up to MAX_DRAFTS.
+    if ((await readDrafts(undefined, settings.id)).length >= MAX_DRAFTS) {
+      if (current !== "home") navigate("home");
+      setError(draftsFullMessage);
       return;
     }
-    setRecovery(null);
     setInitialDraft({
       ...newDraft(settings.defaultRoyaltyFee),
       supervisor: user.name,
@@ -207,23 +211,17 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
     navigate("load");
   }
   async function resume(value) {
-    const currentRecovery = await readDraft(undefined, settings.id);
-    if (
-      currentRecovery &&
-      currentRecovery.serverId !== value.id &&
-      !window.confirm(
-        pick(
-          "Replace the unsaved load on this phone with this saved draft?",
-          "ఫోన్‌లోని సేవ్ చేయని లోడ్ స్థానంలో ఈ డ్రాఫ్ట్ తెరవాలా?",
-        ),
-      )
-    )
+    // The server copy wins over an older phone copy of the same draft.
+    const list = await readDrafts(undefined, settings.id);
+    const local = list.find((d) => d.serverId === value.id);
+    if (!local && list.length >= MAX_DRAFTS) {
+      setError(draftsFullMessage);
       return;
-    if (!(await clearDraft(settings.id))) {
+    }
+    if (local && !(await clearDraft(settings.id, undefined, local.clientRequestId))) {
       setError("Unable to replace the recovery copy. Check browser storage.");
       return;
     }
-    setRecovery(null);
     setInitialDraft(fromDispatch(value));
     navigate("load");
   }
@@ -255,7 +253,6 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
     ++loadsRequest.current;
     loadsInFlight.current = null;
     setRefreshing(false);
-    setRecovery(null);
     setRecord(data);
     navigate(`bill/${data.id}`);
     analyticsStale.current = true;
@@ -317,7 +314,17 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
     );
   else if (!settings)
     content = (
-      <Button en="Retry connection" te="మళ్ళీ ప్రయత్నించండి" onClick={load} />
+      <>
+        {!error && (
+          <p role="alert" className="control-error">
+            {pick(
+              "Couldn’t load your workspace. Check your connection, then retry.",
+              "వర్క్‌స్పేస్ లోడ్ కాలేదు. కనెక్షన్ తనిఖీ చేసి మళ్ళీ ప్రయత్నించండి.",
+            )}
+          </p>
+        )}
+        <Button en="Retry connection" te="మళ్ళీ ప్రయత్నించండి" onClick={load} />
+      </>
     );
   else if (["profile", "products"].includes(current) && !admin)
     content = (
@@ -392,7 +399,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
     content =
       record && record.id === view.slice(5) ? (
         <Suspense
-          fallback={<p>{pick("Loading bill…", "బిల్లు లోడ్ అవుతోంది…")}</p>}
+          fallback={<p role="status">{pick("Loading bill…", "బిల్లు లోడ్ అవుతోంది…")}</p>}
         >
           <BillView
             record={record}
@@ -455,12 +462,13 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
           loading={refreshing}
           analytics={analytics}
           onRetryAnalytics={refreshAnalytics}
-          recovery={recovery}
-          onContinue={() => {
-            setInitialDraft(recovery);
-            setRecovery(null);
+          recoveries={recoveries}
+          maxDrafts={MAX_DRAFTS}
+          onContinue={(draft) => {
+            setInitialDraft(draft);
             navigate("load");
           }}
+          onDeleteRecovery={deleteRecovery}
           onNavigate={navigate}
           onNew={newLoad}
           updatedAt={updatedAt}

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { newDraft, readDraft, writeDraft, clearDraft, hasDraftContent, DRAFT_KEY, detailErrors, entryErrors, makeRow, payload } from '../src/utils/pilotDraft.js';
+import { newDraft, readDraft, readDrafts, writeDraft, clearDraft, hasDraftContent, DRAFT_KEY, DRAFTS_FULL, MAX_DRAFTS, detailErrors, entryErrors, makeRow, payload } from '../src/utils/pilotDraft.js';
 const storage = () => { const values = new Map(); return { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) }; };
 test('encrypted draft recovery preserves the latest edit and organization isolation', async () => {
   const store = storage(), first = { ...newDraft(), partyName: 'First', entry: { length: '3', width: '2' } }, last = { ...first, partyName: 'Latest' };
@@ -43,4 +43,37 @@ test('entryErrors flags each invalid measurement field and agrees with makeRow',
   assert.deepEqual(entryErrors(valid, product), {});
   assert.doesNotThrow(() => makeRow(valid, product));
   assert.deepEqual(Object.keys(entryErrors({ ...valid, quantity: '100001' }, product)), ['quantity']);
+});
+test('up to five unfinished loads are kept side by side and a sixth is refused', async () => {
+  const store = storage();
+  const drafts = Array.from({ length: MAX_DRAFTS }, (_, i) => ({ ...newDraft(), partyName: `Party ${i}` }));
+  for (const draft of drafts) assert.equal(await writeDraft(draft, 'yard', store), true);
+  assert.equal(MAX_DRAFTS, 5);
+  assert.equal((await readDrafts(store, 'yard')).length, 5);
+  assert.equal(await writeDraft({ ...newDraft(), partyName: 'Sixth' }, 'yard', store), DRAFTS_FULL);
+  // Updating an existing draft still works when the list is full.
+  assert.equal(await writeDraft({ ...drafts[0], partyName: 'Edited' }, 'yard', store), true);
+  assert.equal((await readDraft(store, 'yard', drafts[0].clientRequestId)).partyName, 'Edited');
+  assert.equal((await readDraft(store, 'yard')).partyName, 'Edited', 'most recently saved comes first');
+  assert.ok(!store.getItem(`${DRAFT_KEY}:yard`).includes('Party'));
+});
+test('deleting one draft keeps the others and frees a slot', async () => {
+  const store = storage();
+  const a = { ...newDraft(), partyName: 'A' }, b = { ...newDraft(), partyName: 'B' };
+  await writeDraft(a, 'yard', store); await writeDraft(b, 'yard', store);
+  assert.equal(await clearDraft('yard', store, a.clientRequestId), true);
+  assert.deepEqual((await readDrafts(store, 'yard')).map(d => d.partyName), ['B']);
+  assert.equal(await readDraft(store, 'yard', a.clientRequestId), null);
+  await clearDraft('yard', store, b.clientRequestId);
+  assert.equal(store.getItem(`${DRAFT_KEY}:yard`), null);
+});
+test('listed drafts carry their saved time, which is never stored inside the draft', async () => {
+  const store = storage(), draft = { ...newDraft(), partyName: 'Timed' };
+  await writeDraft(draft, 'yard', store);
+  const [listed] = await readDrafts(store, 'yard');
+  assert.equal(listed.partyName, 'Timed');
+  assert.ok(listed.savedAt > 0);
+  // Writing a listed draft back (as the load screen does) does not nest savedAt.
+  await writeDraft(listed, 'yard', store);
+  assert.equal('savedAt' in await readDraft(store, 'yard'), false);
 });

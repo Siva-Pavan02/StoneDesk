@@ -37,6 +37,6 @@ test('products view with a query string maps to the Products tab', () => {
 });
 
 test('sidebar navigation order and labels', () => {
-  assert.deepEqual(NAVIGATION.map(([, , en]) => en), ['Dashboard', 'Loading entries', 'Products & places', 'Profile settings', 'Settings']);
-  assert.deepEqual(NAVIGATION.map(([key]) => key), ['home', 'entries', 'products', 'profile', 'settings']);
+  assert.deepEqual(NAVIGATION.map(([, , en]) => en), ['Profile', 'Dashboard', 'Loading entries', 'Products & places', 'Settings']);
+  assert.deepEqual(NAVIGATION.map(([key]) => key), ['profile', 'home', 'entries', 'products', 'settings']);
 });

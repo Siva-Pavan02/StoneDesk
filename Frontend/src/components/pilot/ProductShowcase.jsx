@@ -30,7 +30,7 @@ function MeasurementTable({ invoice = false }) {
   const { pick } = useLanguage();
   return <div className="mk-table-scroll overflow-x-auto" role="region" tabIndex={0} aria-label={pick('Sample measurements, scroll horizontally if needed', 'నమూనా కొలతలు, అవసరమైతే అడ్డంగా స్క్రోల్ చేయండి')}>
     <table className={`mk-sample-table w-full border-collapse text-sm ${invoice ? 'mk-invoice-table' : ''}`}>
-      <caption className="sr-only">{pick('Sample stone · Polished · ₹64 per square foot', 'నమూనా రాయి · పాలిష్ · చదరపు అడుగుకు ₹64')}</caption>
+      <caption className="sr-only">{pick(`Sample stone · Polished · ${money(64)} per square foot`, `నమూనా రాయి · పాలిష్ · చదరపు అడుగుకు ${money(64)}`)}</caption>
       <thead><tr className="bg-[#f2f6f4] text-[#526661]">
         <th scope="col">{pick('Type', 'రకం')}</th>
         <th scope="col">{pick('Size (ft)', 'సైజు (అడుగులు)')}</th>
@@ -55,10 +55,11 @@ export function SampleInvoice({ compact = false }) {
   </InvoiceDocument>;
 }
 
-function Overview({ onSelect }) {
+// Heading is the panel heading level: h2 when the showcase sits directly under the page h1.
+function Overview({ onSelect, Heading = 'h3' }) {
   const { pick } = useLanguage();
   return <div className="space-y-5 p-4 sm:p-5">
-    <div><h3 className="text-lg font-semibold tracking-tight">{pick('Your yard, at a glance', 'మీ యార్డ్ వివరాలు')}</h3><p className="mt-1 text-xs text-[#526661]">{pick('A sample workspace, not your business records.', 'ఇది నమూనా వర్క్‌స్పేస్, మీ వ్యాపార రికార్డులు కావు.')}</p></div>
+    <div><Heading className="text-lg font-semibold tracking-tight">{pick('Your yard, at a glance', 'మీ యార్డ్ వివరాలు')}</Heading><p className="mt-1 text-xs text-[#526661]">{pick('A sample workspace, not your business records.', 'ఇది నమూనా వర్క్‌స్పేస్, మీ వ్యాపార రికార్డులు కావు.')}</p></div>
     <dl className="grid grid-cols-2 gap-3">
       <div className="rounded-xl border border-[#e0eae7] p-3"><dt className="text-xs text-[#526661]">{pick('Drafts to review', 'తనిఖీ చేయవలసినవి')}</dt><dd className="mt-2 text-2xl font-semibold tabular-nums">1</dd></div>
       <div className="rounded-xl border border-[#e0eae7] p-3"><dt className="text-xs text-[#526661]">{pick('Lorries in transit', 'ప్రయాణంలో లారీలు')}</dt><dd className="mt-2 text-2xl font-semibold tabular-nums">1</dd></div>
@@ -66,7 +67,7 @@ function Overview({ onSelect }) {
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[#edf6f2] px-4 py-3"><span className="text-xs text-[#355f55]">{pick('Sample total billed', 'నమూనా బిల్లుల మొత్తం')}</span><strong className="text-xl font-semibold tracking-tight text-[#17645d] tabular-nums">{money(18384)}</strong></div>
     <div><p className="mb-2 text-xs font-semibold text-[#526661]">{pick('Recent sample loads', 'ఇటీవలి నమూనా లోడ్లు')}</p>
       <button type="button" onClick={() => onSelect('dispatch')} className="mk-preview-row flex min-h-16 w-full items-center justify-between gap-3 rounded-lg border-b border-[#e0eae7] py-3 text-left">
-        <span className="min-w-0"><strong className="block text-sm font-medium">SAMPLE-LORRY</strong><span className="mt-1 block text-xs text-[#526661]">{pick('268.5 sq ft · 43 pieces', '268.5 చ.అ. · 43 ముక్కలు')}</span></span>
+        <span className="min-w-0"><strong className="block text-sm font-medium">SAMPLE-LORRY</strong><span className="mt-1 block text-xs text-[#526661]">{pick('268.5\u00A0sq\u00A0ft · 43\u00A0pieces', '268.5\u00A0చ.అ. · 43\u00A0ముక్కలు')}</span></span>
         <span className="mk-status">{pick('In transit', 'ప్రయాణంలో')}</span><Icon name="arrow" className="h-4 w-4 text-[#526661]" />
       </button>
       <button type="button" onClick={() => onSelect('measure')} className="mk-preview-row flex min-h-16 w-full items-center justify-between gap-3 rounded-lg py-3 text-left">
@@ -77,32 +78,33 @@ function Overview({ onSelect }) {
   </div>;
 }
 
-function Measurements() {
+function Measurements({ Heading = 'h3' }) {
   const { pick } = useLanguage();
   return <div className="space-y-5 p-4 sm:p-5">
-    <div><h3 className="text-lg font-semibold tracking-tight">{pick('Fractions in. Clear totals out.', 'భిన్నాలతో కొలతలు. స్పష్టమైన మొత్తాలు.')}</h3><p className="mt-1 text-xs leading-relaxed text-[#526661]">{pick('Feet, quantities and numbered rows with Top pieces.', 'అడుగులు, ముక్కలు, టాప్ ముక్కలతో వరుస సంఖ్యలు.')}</p></div>
+    <div><Heading className="text-lg font-semibold tracking-tight">{pick('Fractions in. Clear totals out.', 'భిన్నాలతో కొలతలు. స్పష్టమైన మొత్తాలు.')}</Heading><p className="mt-1 text-xs leading-relaxed text-[#526661]">{pick('Feet, quantities and numbered rows with Top pieces.', 'అడుగులు, ముక్కలు, టాప్ ముక్కలతో వరుస సంఖ్యలు.')}</p></div>
     <div className="rounded-xl border border-[#d9e8e1] bg-[#edf6f2] p-4"><p className="text-xs text-[#355f55]">{pick('Sample calculation', 'నమూనా లెక్క')}</p><p className="mk-calc mt-2 text-xl font-semibold tracking-tight">3½ × 2 × 30 <span className="text-[#526661]">=</span> 210 <span className="text-sm font-medium">{pick('sq ft', 'చ.అ.')}</span></p></div>
     <MeasurementTable />
-    <div className="flex flex-wrap items-baseline justify-between gap-3"><span className="text-sm text-[#526661]">{pick('Total measured area', 'మొత్తం కొలిచిన విస్తీర్ణం')}</span><strong className="mk-measure-total text-3xl font-semibold tracking-tight text-[#17645d] tabular-nums">268.5 <small className="text-sm font-medium">{pick('sq ft', 'చ.అ.')}</small></strong></div>
+    <div className="flex flex-wrap items-baseline justify-between gap-3"><span className="text-sm text-[#526661]">{pick('Total measured area', 'మొత్తం కొలిచిన విస్తీర్ణం')}</span><strong className="mk-measure-total text-3xl font-semibold tracking-tight text-[#17645d] tabular-nums">268.5{'\u00A0'}<small className="text-sm font-medium">{pick('sq\u00A0ft', 'చ.అ.')}</small></strong></div>
     <p className="text-xs leading-relaxed text-[#526661]">{pick('Enter 3½, 3 1/2 or 3.5 in the workspace. Review every row before finalizing.', 'వర్క్‌స్పేస్‌లో 3½, 3 1/2 లేదా 3.5 నమోదు చేయండి. ఖరారు చేసే ముందు ప్రతి వరుస తనిఖీ చేయండి.')}</p>
   </div>;
 }
 
-function Dispatch() {
+function Dispatch({ Heading = 'h3' }) {
   const { pick } = useLanguage();
   return <div className="space-y-5 p-4 sm:p-5">
-    <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-lg font-semibold">SAMPLE-LORRY</h3><p className="mt-1 text-xs text-[#526661]">{pick('Sample buyer · Sample destination', 'నమూనా కొనుగోలుదారు · నమూనా గమ్యస్థానం')}</p></div><span className="mk-status">{pick('In transit', 'ప్రయాణంలో')}</span></div>
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><Heading className="text-lg font-semibold" translate="no">SAMPLE-LORRY</Heading><p className="mt-1 text-xs text-[#526661]">{pick('Sample buyer · Sample destination', 'నమూనా కొనుగోలుదారు · నమూనా గమ్యస్థానం')}</p></div><span className="mk-status">{pick('In transit', 'ప్రయాణంలో')}</span></div>
     <ol className="mk-dispatch-path space-y-5 py-2">
       {[[true, 'Draft / loaded', 'డ్రాఫ్ట్ / లోడ్', 'Measurements prepared', 'కొలతలు సిద్ధమయ్యాయి'], [true, 'Dispatched', 'పంపబడింది', 'Bill finalized; financial values locked', 'బిల్లు ఖరారైంది; మొత్తాలు లాక్ అయ్యాయి'], [false, 'Delivered', 'డెలివరీ అయింది', 'Awaiting a team member’s confirmation', 'బృంద సభ్యుని నిర్ధారణ కోసం వేచి ఉంది']].map(([done, en, te, detailEn, detailTe]) => <li key={en} className="relative flex items-start gap-3">
         <span className={`relative z-[1] flex h-7 w-7 shrink-0 items-center justify-center rounded-full border ${done ? 'border-[#17645d] bg-[#17645d] text-white' : 'border-[#cadbd5] bg-white text-[#526661]'}`} aria-hidden="true">{done ? <Icon name="check" className="h-3.5 w-3.5" /> : <span className="h-1.5 w-1.5 rounded-full bg-[#71857e]" />}</span>
-        <div><p className="text-sm font-semibold">{pick(en, te)}</p><p className="mt-1 text-xs leading-relaxed text-[#526661]">{pick(detailEn, detailTe)}</p></div>
+        <div><p className="text-sm font-semibold">{pick(en, te)}<span className="sr-only">{done ? pick(' (completed)', ' (పూర్తయింది)') : pick(' (pending)', ' (పెండింగ్)')}</span></p><p className="mt-1 text-xs leading-relaxed text-[#526661]">{pick(detailEn, detailTe)}</p></div>
       </li>)}
     </ol>
     <p className="rounded-xl bg-[#f2f6f4] p-3 text-xs leading-relaxed text-[#526661]">{pick('Dispatchers and Admins record dispatch and delivery. Status is team-updated, not GPS tracking.', 'డిస్పాచర్లు, అడ్మిన్లు డిస్పాచ్ మరియు డెలివరీ నమోదు చేస్తారు. స్థితిని బృందం నవీకరిస్తుంది; GPS ట్రాకింగ్ కాదు.')}</p>
   </div>;
 }
 
-export default function ProductShowcase({ initialTab = 'overview', animateStatus = false, className = '' }) {
+export default function ProductShowcase({ initialTab = 'overview', animateStatus = false, className = '', headingLevel = 'h3' }) {
+  const Heading = headingLevel;
   const { pick } = useLanguage();
   const [active, setActive] = useState(initialTab);
   const id = useId();
@@ -118,14 +120,14 @@ export default function ProductShowcase({ initialTab = 'overview', animateStatus
 
   return <div className={`mk-double-bezel min-w-0 rounded-[28px] border border-[#cfdfd8] p-2 sm:p-2.5 ${className}`}>
     <div className="mk-product-window overflow-hidden rounded-[20px] border border-[#d9e4df] bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e0eae7] px-4 py-3 sm:px-5"><span className="flex items-center gap-2 text-sm font-semibold"><BrandLogo size={28} className="h-7 w-7" />StoneDesk</span><SampleLabel /></div>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#e0eae7] px-4 py-3 sm:px-5"><span className="flex items-center gap-2 text-sm font-semibold"><BrandLogo size={28} className="h-7 w-7" /><span translate="no">StoneDesk</span></span><SampleLabel /></div>
       <div className="border-b border-[#e0eae7] px-3 py-3 sm:px-4"><div className="mk-showcase-tabs grid grid-cols-4" role="tablist" aria-label={pick('Explore the sample workspace', 'నమూనా వర్క్‌స్పేస్ చూడండి')}>
         {screens.map(([key, en, te], index) => <button type="button" key={key} ref={node => { tabs.current[index] = node; }} id={`${id}-tab-${key}`} role="tab" aria-selected={active === key} aria-controls={`${id}-panel`} tabIndex={active === key ? 0 : -1} onClick={() => setActive(key)} onKeyDown={event => keyboard(event, index)} className="min-w-0 px-1 sm:px-2">{pick(en, te)}</button>)}
       </div></div>
       <div id={`${id}-panel`} role="tabpanel" tabIndex={0} aria-labelledby={`${id}-tab-${active}`} className="mk-showcase-panel min-w-0">
-        {active === 'overview' && <Overview onSelect={key => { setActive(key); tabs.current[screens.findIndex(screen => screen[0] === key)]?.focus(); }} />}
-        {active === 'measure' && <Measurements />}
-        {active === 'dispatch' && <Dispatch />}
+        {active === 'overview' && <Overview Heading={Heading} onSelect={key => { setActive(key); tabs.current[screens.findIndex(screen => screen[0] === key)]?.focus(); }} />}
+        {active === 'measure' && <Measurements Heading={Heading} />}
+        {active === 'dispatch' && <Dispatch Heading={Heading} />}
         {active === 'bill' && <div className="p-3 sm:p-4"><SampleInvoice compact /></div>}
       </div>
       {animateStatus ? <SampleMotionBadge /> : <p className="border-t border-[#e0eae7] px-4 py-3 text-xs text-[#526661] sm:px-5">{pick('Interactive sample · no real business data', 'ఇంటరాక్టివ్ నమూనా · నిజమైన వ్యాపార సమాచారం లేదు')}</p>}

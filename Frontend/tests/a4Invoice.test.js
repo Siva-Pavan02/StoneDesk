@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { a4InvoiceFromDispatch, amountInWords, formatA4Dimension, formatA4Money, formatA4Number, formatA4Rate,
-  prepareA4Invoice, sampleA4Invoice } from '../src/utils/a4InvoiceModel.js';
+  prepareA4Invoice, sampleA4Invoice, bankDetailPairs } from '../src/utils/a4InvoiceModel.js';
 import { fixedSampleA4Pages, renderA4Invoice, renderA4Group, renderStandaloneA4Invoice } from '../src/utils/a4InvoiceRender.js';
 import { packA4Groups, planA4Invoice } from '../src/utils/a4InvoicePagination.js';
 import { a4InvoicePdf } from '../src/utils/a4InvoicePdf.js';
@@ -56,12 +56,19 @@ test('the sample columns are explicit and the final summary appears only once', 
   assert.match(html, /5,537\.88/);
   assert.match(html, /₹222,015\.00/);
   assert.match(html, /Page 3 of 3/);
-  assert.equal((html.match(/<dt>Material amount<\/dt><dd data-amount="material">₹221,515\.00<\/dd>/g) || []).length, 1);
+  assert.equal((html.match(/<dt>Material amount<\/dt><dd data-amount="material">₹126,580\.00<\/dd>/g) || []).length, 1);
+  assert.match(html, /<dt>Top material amount<\/dt><dd data-amount="top">₹94,935\.00<\/dd>/);
+  assert.match(html, /<dd data-total="material">₹221,515\.00<\/dd>/);
   assert.match(html, /<dd data-total="area">5,537\.88<\/dd>/);
   assert.match(html, /<dt>Loading \/ royalty<\/dt>/);
   assert.match(html, /<dt>Net payable<\/dt><dd data-total="net">₹222,015\.00<\/dd>/);
-  assert.doesNotMatch(html, /Top material amount|Regular sq ft|Top sq ft|area-breakdown|data-total="(regular|top)"/);
-  assert.doesNotMatch(html, /Bank \/ UPI details|class="bank-details"/);
+  assert.doesNotMatch(html, /Regular sq ft|Top sq ft|area-breakdown|data-total="(regular|top)"|settlement-rate|data-rate/);
+  assert.doesNotMatch(html, /Bank \/ UPI details|class="bank-text"/);
+  assert.match(html, /Preview placeholders only/);
+  for (const [label, value] of [['Holder', 'Account holder name'], ['Bank', 'Bank name'], ['A\\/c no\\.', 'Account number'],
+    ['IFSC', 'IFSC code'], ['Branch', 'Branch — optional'], ['UPI', 'UPI ID — optional']])
+    assert.match(html, new RegExp(`<dt>${label}:<\\/dt><dd>\\[${value}\\]<\\/dd>`));
+  assert.match(html, /Sample only/);
   assert.doesNotMatch(html, /Measurement details|24 rows|<h3[^>]*>Row /);
   const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(([, id]) => id);
   assert.equal(new Set(ids).size, ids.length);
@@ -101,7 +108,11 @@ test('production preserves saved lines, round-once summaries, categories and off
   assert.match(html, /LONG-INVOICE-REFERENCE-2026/);
   assert.match(html, /Signed by A/);
   assert.match(html, /₹2\.11/);
-  assert.match(html, /<dt>Rate \/ sq ft<\/dt><dd data-rate="sq-ft">₹1\.005<\/dd>/);
+  assert.doesNotMatch(html, /Rate \/ sq ft|data-rate|settlement-rate/);
+  assert.match(html, /<dd data-amount="material">₹1\.01<\/dd>/);
+  assert.match(html, /<dd data-amount="top">₹1\.00<\/dd>/);
+  assert.match(html, /Authorized signatory/);
+  assert.doesNotMatch(html, /Bank details/);
   assert.doesNotMatch(html, /SAMPLE · FICTIONAL|₹40\.00/);
 
   record.inventory[0].measurementRows[0].lineTotal = 2.01;
@@ -111,7 +122,7 @@ test('production preserves saved lines, round-once summaries, categories and off
   assert.ok(changed.warnings.some(warning => warning.includes('Net payable')));
 });
 
-test('payment summary lists each saved rate without inventing a rate for legacy rows', () => {
+test('payment summary splits regular and top material amounts and shows no rate row', () => {
   const raw = sampleA4Invoice();
   raw.mode = 'production'; raw.status = 'Dispatched';
   raw.groups = [{ id: 1, entries: [
@@ -122,9 +133,11 @@ test('payment summary lists each saved rate without inventing a rate for legacy 
   const model = prepareA4Invoice(raw);
   const pages = [{ columns: [[{ group: model.groups[0], from: 0, to: 3 }], [], []], summary: true }];
   const html = renderA4Invoice(model, pages);
-  assert.match(html, /<dt>Rates \/ sq ft<\/dt><dd data-rate="sq-ft">₹40\.00 · ₹55\.50 · Not recorded<\/dd>/);
+  assert.match(html, /data-amount="material">₹95\.50/);
+  assert.match(html, /data-amount="top">₹9\.00/);
+  assert.match(html, /data-total="material">₹104\.50/);
   const telugu = renderA4Invoice(model, pages, 'document', (_, te) => te);
-  assert.match(telugu, /<dt>చ\.అ\. ధరలు<\/dt><dd data-rate="sq-ft">₹40\.00 · ₹55\.50 · నమోదు కాలేదు<\/dd>/);
+  for (const rendered of [html, telugu]) assert.doesNotMatch(rendered, /Rates? \/ sq ft|చ\.అ\.|data-rate/);
 });
 
 test('historical piece-only records, Top-only and Regular-only groups retain entries and omit empty subtotals', () => {
@@ -254,11 +267,31 @@ test('summary shows a zero material amount and the closing shows escaped bank de
   });
   const render = model => renderA4Invoice(model, [{ columns: [[{ group: model.groups[0], from: 0, to: model.groups[0].entries.length }], [], []], summary: true }]);
   const withBank = render(a4InvoiceFromDispatch(record('SBI <A/C> 123\nUPI: works@sbi')));
-  assert.match(withBank, /<p class="label bank-label">Bank \/ UPI details<\/p><p class="bank-details">SBI &lt;A\/C&gt; 123\nUPI: works@sbi<\/p>/);
+  assert.match(withBank, /<p class="label bank-label" id="[^"]+">Bank details<\/p><p class="bank-text">SBI &lt;A\/C&gt; 123 · UPI: works@sbi<\/p>/);
   assert.match(withBank, /<dd data-amount="material">₹40\.00<\/dd>/);
-  for (const value of ['', '   ', undefined]) assert.doesNotMatch(render(a4InvoiceFromDispatch(record(value))), /Bank \/ UPI details|bank-details/);
+  for (const value of ['', '   ', undefined]) {
+    const html = render(a4InvoiceFromDispatch(record(value)));
+    assert.doesNotMatch(html, /Bank details|bank-block|bank-text/);
+    assert.match(html, /class="sign"/);
+  }
   const zero = render(a4InvoiceFromDispatch(record('', 0)));
   assert.match(zero, /<dt>Material amount<\/dt><dd data-amount="material">₹0\.00<\/dd>/);
+});
+
+test('bank details parse into label/value pairs only when every segment has one', () => {
+  const text = 'Holder: Stone Works · Bank: SBI | A/c no.: 123; IFSC: SBIN0001\nUPI: works@sbi';
+  assert.deepEqual(bankDetailPairs(text), [['Holder', 'Stone Works'], ['Bank', 'SBI'], ['A/c no.', '123'], ['IFSC', 'SBIN0001'], ['UPI', 'works@sbi']]);
+  assert.deepEqual(bankDetailPairs('Bank: SBI, IFSC: SBIN0001'), [['Bank', 'SBI'], ['IFSC', 'SBIN0001']]);
+  assert.equal(bankDetailPairs('SBI, Main branch'), null);
+  assert.equal(bankDetailPairs('SBI <A/C> 123\nUPI: works@sbi'), null);
+  const model = a4InvoiceFromDispatch({ status: 'Dispatched', date: '2026-10-11', dispatchSlipNumber: 'BANK-3', partyName: 'Client', supervisor: 'S',
+    logistics: { truckNumber: 'AP 01', buyerDestination: 'Town' }, businessSnapshot: { businessName: 'Stone Works', bankDetails: text },
+    inventory: [{ ratePerSqFt: 10, measurementRows: [{ rowNo: 1, lengthFt: 2, widthFt: 2, quantity: 1, category: 'Regular', lineTotal: 40 }] }],
+    summary: { loadingAndRoyaltyFees: 0 } });
+  const html = renderA4Invoice(model, [{ columns: [[{ group: model.groups[0], from: 0, to: 1 }], [], []], summary: true }]);
+  assert.match(html, /<dl class="bank-grid"/);
+  assert.match(html, /<dt>Holder:<\/dt><dd>Stone Works<\/dd>/);
+  assert.doesNotMatch(html, /bank-note/);
 });
 
 // jsPDF writes uncompressed text operators, so drawn strings appear as "(text) Tj".
@@ -286,8 +319,10 @@ test('buyer invoice PDF follows the A4 invoice: Regular / Top subtotals, no row 
   assert.equal(count(text, /\(Top subtotal\) Tj/g), 1, 'only row 1 has Top lines');
   assert.equal(count(text, /\(Total\) Tj/g), 0, 'no combined per-row total');
   for (const value of ['\\(600.00\\)', '\\(135.00\\)', '\\(6\u00be\\)', 'BUYER INVOICE', 'IN TRANSIT', 'ORDER SUMMARY', 'PAYMENT SUMMARY',
-    'NET PAYABLE', '\\(Rs. 30,860.00\\)', '\\(Rs. 40.00\\)', 'UPI: stone@upi', 'Rupees Thirty Thousand Eight Hundred Sixty Only.', 'Authorized signatory', 'Page 1 of 1'])
+    'NET PAYABLE', '\\(Rs. 30,860.00\\)', 'Top material amount', '\\(Rs. 24,960.00\\)', '\\(Rs. 5,400.00\\)', '\\(Rs. 30,360.00\\)',
+    'BANK DETAILS', 'stone@upi', 'Rupees Thirty Thousand Eight Hundred Sixty Only.', 'Authorized signatory', 'Page 1 of 1'])
     assert.match(text, new RegExp(value));
+  assert.doesNotMatch(text, /Rate \/ sq ft|Rates \/ sq ft/);
 });
 
 test('buyer invoice PDF paginates long bills with the shared planner and keeps every entry', async () => {
@@ -312,4 +347,6 @@ test('sample buyer invoice PDF uses the approved three-page layout', async () =>
   assert.equal(output.pages, 3);
   assert.equal(count(text, /\(Regular subtotal\) Tj/g), 24);
   assert.match(text, /SAMPLE INVOICE/); assert.match(text, /Not valid for payment/);
+  assert.match(text, /Preview placeholders only/);
+  assert.match(text, /\[Account holder name\]/);
 });

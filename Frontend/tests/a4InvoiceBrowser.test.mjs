@@ -161,7 +161,7 @@ async function renderProductionCase(page, base, name, input, options = {}) {
   const pageText = await inspectPdf(bytes, name, result.pages);
   assert.equal(pageText.filter(text => text.includes('NET PAYABLE')).length, 1, `${name}: PDF summary exactly once`);
   if (name === 'long-identity-and-money') {
-    assert.ok(pageText.join(' ').includes('₹25,000.25') && pageText.join(' ').includes('₹40.00'), 'Printed payment summary must show both saved per-square-foot rates');
+    assert.ok(pageText.join(' ').includes('Top material amount') && !/Rates? \/ sq ft/.test(pageText.join(' ')), 'Printed payment summary shows the material / top split and no rate row');
   }
   if (options.oversized) assert.equal(pageText.join(' ').match(/Regular subtotal/g)?.length, 1);
   console.log('CASE', name, JSON.stringify({ pages: result.pages, entries: inspection.entries, summaryPage: result.summaryPage,

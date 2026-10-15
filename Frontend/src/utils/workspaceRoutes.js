@@ -28,10 +28,10 @@ export function productsTab(view) {
 
 // [key, icon, en, te, adminOnly]
 export const NAVIGATION = [
+  ['profile', 'user', 'Profile', 'ప్రొఫైల్', true],
   ['home', 'home', 'Dashboard', 'డ్యాష్‌బోర్డ్'],
   ['entries', 'loads', 'Loading entries', 'లోడ్ వివరాలు'],
   ['products', 'products', 'Products & places', 'రకాలు మరియు ప్రదేశాలు', true],
-  ['profile', 'user', 'Profile settings', 'ప్రొఫైల్ సెట్టింగ్స్', true],
   ['settings', 'settings', 'Settings', 'సెట్టింగ్స్'],
 ];
 

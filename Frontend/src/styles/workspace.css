@@ -41,8 +41,7 @@
   background: var(--ui-canvas);
   transition:
     background-color 150ms var(--ui-ease),
-    border-color 150ms var(--ui-ease),
-    box-shadow 150ms var(--ui-ease);
+    border-color 150ms var(--ui-ease);
 }
 .pilot.workspace .workspace-search .input:hover {
   border-color: #9bbab1;
@@ -187,6 +186,7 @@
   z-index: 20;
   max-height: 232px;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 6px;
   border: 1px solid var(--workspace-border);
   border-radius: var(--ui-radius-md);
@@ -398,9 +398,7 @@
   background: transparent;
   font-size: 15px;
   font-weight: 500;
-  transition:
-    border-color 150ms var(--ui-ease),
-    box-shadow 150ms var(--ui-ease);
+  transition: border-color 150ms var(--ui-ease);
 }
 .pilot.workspace .logistics-fields .input:hover {
   border-color: #9bbab1;
@@ -686,41 +684,134 @@
   background: #fdebec;
   color: #9f2f2d;
 }
+/* Unsaved drafts: one bordered list, one compact line per draft (no nested cards). */
 .dashboard-resume {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 20px 24px;
-  border: 1px solid #eaeaea;
-  border-radius: var(--ui-radius-md);
-  background: white;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 10px 8px 10px 16px;
+  animation: resume-enter 420ms cubic-bezier(.16, 1, .3, 1) both;
+  animation-delay: calc(var(--index, 0) * 60ms);
 }
+.dashboard-resume + .dashboard-resume { border-top: 1px solid #f0efed; }
+/* Inline delete confirm: the draft name stays visible; the question wraps below it on phones. */
+.dashboard-resume:has(.load-delete) { flex-wrap: wrap; }
+.dashboard-resume:has(.load-delete) .dashboard-resume-text { flex-basis: 160px; }
+.dashboard-resume:has(.load-delete) .dashboard-resume-actions { margin-left: auto; }
 .dashboard-resume-text {
+  flex: 1 1 auto;
   min-width: 0;
 }
+@keyframes resume-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .dashboard-resume { animation: none; } }
 .dashboard-resume-top {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 .dashboard-resume-name {
-  margin-top: 6px;
-  overflow-wrap: anywhere;
+  overflow: hidden;
   color: var(--ui-ink);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+.dashboard-resume-text .queue-sub {
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Continue: quiet accent text button on desktop, a round arrow on phones. */
 .pilot .dashboard-resume .dashboard-resume-action {
   flex: none;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
   border-radius: var(--ui-radius-sm);
+  background: transparent;
+  color: var(--ui-accent);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: none;
+  transition: background-color var(--ui-dur) var(--ui-ease), transform var(--ui-dur) var(--ui-ease);
 }
-@media (min-width: 640px) {
-  .dashboard-resume {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-  }
+.pilot .dashboard-resume .dashboard-resume-action:hover { background: #e9f3ed; }
+.pilot .dashboard-resume .dashboard-resume-action:active { transform: var(--ui-press); }
+.pilot .dashboard-resume .dashboard-resume-action svg { transition: transform var(--ui-dur) var(--ui-ease); }
+.pilot .dashboard-resume .dashboard-resume-action:hover svg { transform: translateX(2px); }
+.dashboard-resume-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
+.dashboard-resume-items {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #eaeaea;
+  border-radius: var(--ui-radius-md);
+  background: white;
+}
+.dashboard-resume-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+@media (max-width: 639px) {
+  .pilot .dashboard-resume .dashboard-resume-action { width: 40px; padding: 0; justify-content: center; border-radius: 50%; background: #e9f3ed; }
+  .pilot .dashboard-resume .dashboard-resume-action .control-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+/* Quiet square delete icon shared by drafts and saved loads: gray until hovered or focused. */
+.icon-delete-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid transparent;
+  border-radius: var(--ui-radius-sm);
+  background: transparent;
+  color: #8a8f8d;
+  cursor: pointer;
+  transition: background-color var(--ui-dur) var(--ui-ease), border-color var(--ui-dur) var(--ui-ease), color var(--ui-dur) var(--ui-ease);
+}
+
+.icon-delete-button:hover:not(:disabled) { border-color: #f5d5d6; background: #fdebec; color: #9f2f2d; }
+.icon-delete-button:focus-visible { outline: 2px solid #9f2f2d; outline-offset: 2px; color: #9f2f2d; }
+.icon-delete-button:disabled { cursor: default; opacity: .45; }
+/* Saved loads: delete and open share one right-aligned row; the confirm replaces the icon inline. */
+.load-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px; }
+.load-actions-cell { width: 1%; white-space: nowrap; }
+.load-actions-cell .load-actions,
+.load-actions-cell .load-delete:not(:has(.load-delete-error)) { flex-wrap: nowrap; }
+.load-actions-card { flex-wrap: nowrap; gap: 8px; }
+.measurement-undo { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; color: var(--ui-muted); font-size: 13px; }
+/* Load more appends 20 rows at a time; off-screen cards skip layout and paint. */
+.pilot.workspace .dashboard-activity .mobile-load-record { content-visibility: auto; contain-intrinsic-size: auto 160px; }
+.pilot .load-actions-card .load-open-wide { flex: 1 1 auto; min-width: 0; }
+.load-actions-card .icon-delete-button { width: 44px; height: 44px; border-color: #eaeaea; }
+.load-delete { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; font-size: 13px; }
+.load-actions-card .load-delete[data-state="confirming"] { flex: 1 1 100%; }
+.load-actions-card:has(.load-delete[data-state="confirming"]) { flex-wrap: wrap; }
+.load-delete-question { color: var(--ui-ink); font-weight: 500; white-space: nowrap; }
+/* In the table the question is read by screen readers only, so the row keeps its width and the open arrow stays visible. */
+.load-actions-cell .load-delete-question { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.load-delete-confirm, .load-delete-cancel { min-height: 32px; padding: 4px 10px; border: 1px solid #eaeaea; border-radius: 6px; background: white; font-size: 12px; font-weight: 500; white-space: nowrap; cursor: pointer; }
+.load-delete-confirm { border-color: #9f2f2d; background: #9f2f2d; color: white; }
+.load-delete-confirm:hover:not(:disabled) { background: #842624; }
+.load-delete-cancel { color: var(--ui-ink); }
+.load-delete-cancel:hover:not(:disabled) { background: #f7f6f3; }
+.load-delete-error { flex: 1 1 100%; text-align: right; white-space: normal; }
 .dashboard-overview {
   display: grid;
   gap: 24px;
@@ -1357,9 +1448,6 @@ p.queue-sub {
   padding-block: 6px;
   padding-right: 6px;
 }
-.pilot .btn:active:not(:disabled) {
-  transform: scale(0.98);
-}
 @keyframes drawer-reveal {
   from {
     transform: translateX(-100%);
@@ -1451,7 +1539,13 @@ p.queue-sub {
 }
 @media (prefers-reduced-motion: reduce) {
   .nav-drawer[open],
-  .nav-drawer[open] .sidebar-link {
+  .nav-drawer[open] .sidebar-link,
+  .pilot.workspace .nav-drawer::backdrop,
+  .refresh-spin,
+  .pilot.workspace .combo-list {
+    animation: none;
+  }
+  .pilot.workspace .workspace-search.is-open {
     animation: none;
   }
   .records-skeleton > div::after {

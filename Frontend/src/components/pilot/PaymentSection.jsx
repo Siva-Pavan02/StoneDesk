@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useLanguage } from '../../i18n/LanguageContext';
-import { ErrorMessage } from './Controls.jsx';
+import { Button, ErrorMessage } from './Controls.jsx';
 import { money } from '../../utils/pilotDraft.js';
 import { getInvoicePayments } from '../../lib/pilotApi.js';
 import AddPaymentDialog from './AddPaymentDialog.jsx';
@@ -14,6 +14,19 @@ export default function PaymentSection({ dispatchId, canRecordPayment = true }) 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  // The dialog unmounts on close; return focus to its trigger, or the heading if the trigger is gone.
+  const addButton = useRef(null);
+  const heading = useRef(null);
+  function closeDialog() {
+    setDialogOpen(false);
+    requestAnimationFrame(() => (addButton.current || heading.current)?.focus());
+  }
+  function retry() {
+    setError('');
+    setLoading(true);
+    setAttempt((value) => value + 1);
+  }
 
   useEffect(() => {
     let active = true;
@@ -25,7 +38,8 @@ export default function PaymentSection({ dispatchId, canRecordPayment = true }) 
         }
       })
       .catch((err) => {
-        if (active) setError(err.message);
+        // Keep the raw detail; the sentence around it is chosen at render so it follows the language.
+        if (active) setError(err?.message || String(err));
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -33,25 +47,26 @@ export default function PaymentSection({ dispatchId, canRecordPayment = true }) 
     return () => {
       active = false;
     };
-  }, [dispatchId]);
+  }, [dispatchId, attempt]);
 
   function onPaymentSaved(updatedSummary) {
     setData(updatedSummary);
-    setDialogOpen(false);
+    closeDialog();
   }
 
   if (loading && !data) {
     return (
-      <section className="payment-section-card bg-stone-50 border border-stone-200 rounded-lg p-4 text-sm text-stone-500">
-        <p>{pick('Loading payment details…', 'చెల్లింపు వివరాలు లోడ్ అవుతున్నాయి…')}</p>
+      <section className="payment-section-card payment-panel" aria-busy="true">
+        <p className="payment-panel-loading" role="status">{pick('Loading payment details…', 'చెల్లింపు వివరాలు లోడ్ అవుతున్నాయి…')}</p>
       </section>
     );
   }
 
   if (error && !data) {
     return (
-      <section className="payment-section-card bg-stone-50 border border-stone-200 rounded-lg p-4">
-        <ErrorMessage error={error} />
+      <section className="payment-section-card payment-panel">
+        <ErrorMessage error={pick(`Payment details couldn’t be loaded. Check your connection and try again. (${error})`, `చెల్లింపు వివరాలు లోడ్ కాలేదు. కనెక్షన్ తనిఖీ చేసి మళ్ళీ ప్రయత్నించండి. (${error})`)} />
+        <Button en="Try again" te="మళ్ళీ ప్రయత్నించండి" onClick={retry} />
       </section>
     );
   }
@@ -65,74 +80,69 @@ export default function PaymentSection({ dispatchId, canRecordPayment = true }) 
   const statusConfig = {
     PAYMENT_DUE: {
       text: pick('Payment Due', 'చెల్లించవలసినది'),
-      className: 'bg-amber-100 text-amber-900 border-amber-300'
+      tone: 'due'
     },
     PARTIALLY_PAID: {
       text: pick('Partially Paid', 'పాక్షికంగా చెల్లించబడింది'),
-      className: 'bg-sky-100 text-sky-900 border-sky-300'
+      tone: 'partial'
     },
     PAID: {
       text: pick('Paid', 'చెల్లించబడింది'),
-      className: 'bg-emerald-100 text-emerald-900 border-emerald-300'
+      tone: 'paid'
     }
   };
 
   const badge = statusConfig[status] || statusConfig.PAYMENT_DUE;
+  const progress = invoiceTotal > 0 ? Math.min(100, Math.max(0, (received / invoiceTotal) * 100)) : 0;
 
   return (
-    <section className="payment-section-card bg-white border border-stone-200 rounded-lg shadow-sm p-4 space-y-4" aria-label={pick('Payment Summary', 'చెల్లింపు సారాంశం')}>
-      <div className="flex items-center justify-between border-b border-stone-100 pb-3">
-        <div>
-          <h2 className="text-xs uppercase tracking-wider font-semibold text-stone-500">
-            {pick('Payment', 'చెల్లింపు')}
-          </h2>
+    <section className="payment-section-card payment-panel" aria-labelledby="payment-panel-title">
+      <header className="payment-panel-head">
+        <div className="payment-panel-heading">
+          <h2 id="payment-panel-title" ref={heading} tabIndex={-1}>{pick('Payment', 'చెల్లింపు')}</h2>
+          <span className="payment-status" data-tone={badge.tone} role="status">{badge.text}</span>
         </div>
-        <div className="flex items-center gap-3">
-          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${badge.className}`}>
-            {badge.text}
-          </span>
-          {canRecordPayment && balance > 0 && (
-            <button
-              type="button"
-              className="btn control-button control-button-primary text-xs py-1 px-3"
-              onClick={() => setDialogOpen(true)}
-            >
-              + {pick('Add Payment', 'చెల్లింపును జోడించండి')}
-            </button>
-          )}
-        </div>
-      </div>
+        {canRecordPayment && balance > 0 && (
+          <button
+            type="button"
+            ref={addButton}
+            className="btn control-button control-button-primary payment-add-button"
+            onClick={() => setDialogOpen(true)}
+          >
+            <span aria-hidden="true">+</span> {pick('Add Payment', 'చెల్లింపును జోడించండి')}
+          </button>
+        )}
+      </header>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 text-center sm:text-left">
-        <div className="p-3 bg-stone-50 rounded-lg border border-stone-200 transition-all duration-200 hover:shadow-sm">
-          <span className="text-xs text-stone-500 font-medium block mb-0.5">{pick('Invoice Total', 'ఇన్వాయిస్ మొత్తం')}</span>
-          <strong className="text-lg text-stone-900 font-semibold block">{money(invoiceTotal)}</strong>
+      <dl className="payment-stats">
+        <div className="payment-stat">
+          <dt>{pick('Invoice Total', 'ఇన్వాయిస్ మొత్తం')}</dt>
+          <dd>{money(invoiceTotal)}</dd>
         </div>
-        <div className="p-3 bg-emerald-50/60 rounded-lg border border-emerald-200/80 transition-all duration-200 hover:shadow-sm">
-          <span className="text-xs text-emerald-800 font-medium block mb-0.5">{pick('Received', 'స్వీకరించినది')}</span>
-          <strong className="text-lg text-emerald-800 font-semibold block">{money(received)}</strong>
+        <div className="payment-stat" data-tone="received">
+          <dt>{pick('Received', 'స్వీకరించినది')}</dt>
+          <dd>{money(received)}</dd>
         </div>
-        <div className="p-3 bg-amber-50/70 rounded-lg border border-amber-300 transition-all duration-200 hover:shadow-sm">
-          <span className="text-xs text-amber-900 font-medium block mb-0.5">{pick('Balance Due', 'మిగిలినది')}</span>
-          <strong className="text-lg text-amber-950 font-bold block">{money(balance)}</strong>
+        <div className="payment-stat" data-tone={balance > 0 ? 'due' : 'paid'}>
+          <dt>{pick('Balance Due', 'మిగిలినది')}</dt>
+          <dd>{money(balance)}</dd>
         </div>
-      </div>
+      </dl>
+      <div className="payment-progress" aria-hidden="true"><span style={{ transform: `scaleX(${progress / 100})` }} /></div>
 
       {payments.length > 0 && (
-        <div className="payment-history-block pt-2">
-          <h3 className="text-xs font-semibold text-stone-600 mb-2 uppercase tracking-wider">
-            {pick('Payment History', 'చెల్లింపు చరిత్ర')}
-          </h3>
-          <ul className="divide-y divide-stone-100 text-sm">
+        <div className="payment-history-block">
+          <h3>{pick('Payment History', 'చెల్లింపు చరిత్ర')}</h3>
+          <ul>
             {payments.map((p) => (
-              <li key={p.id} className="py-2 flex items-start justify-between gap-4">
-                <div>
-                  <strong className="text-stone-900 font-medium block">{money(p.amount)}</strong>
-                  {p.note && <span className="text-stone-600 text-xs block">{p.note}</span>}
+              <li key={p.id}>
+                <div className="min-w-0">
+                  <strong>{money(p.amount)}</strong>
+                  {p.note && <span className="payment-note">{p.note}</span>}
                 </div>
-                <div className="text-right text-xs text-stone-400 whitespace-nowrap">
+                <div className="payment-meta">
                   <span>{formatDate(p.createdAt)}</span>
-                  {p.createdBy && <span className="block text-stone-400">by {p.createdBy}</span>}
+                  {p.createdBy && <span className="payment-by" title={p.createdBy}>{pick('by ', '')}<span translate="no">{p.createdBy}</span>{pick('', ' ద్వారా')}</span>}
                 </div>
               </li>
             ))}
@@ -147,7 +157,7 @@ export default function PaymentSection({ dispatchId, canRecordPayment = true }) 
           invoiceTotal={invoiceTotal}
           received={received}
           balance={balance}
-          onCancel={() => setDialogOpen(false)}
+          onCancel={closeDialog}
           onSaved={onPaymentSaved}
         />
       )}

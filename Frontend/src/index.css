@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+/* Geist and Geist Mono load from index.html so the browser discovers them before this stylesheet. */
 @import "tailwindcss";
 @plugin "daisyui" {
   themes: light --default;
@@ -30,23 +30,29 @@
   --ui-press: scale(.98);
   --workspace-border: #e2e8e5;
   --workspace-muted: var(--ui-muted);
+  color-scheme: light;
 }
 
 /* Canonical shared controls; screen-specific fields retain their own sizing. */
-.pilot { color-scheme: light; font-family: 'Geist', 'Noto Telugu', sans-serif; color: var(--ui-ink); font-size: 14px; line-height: 1.5; }
+.pilot { color-scheme: light; font-family: 'Geist', 'Noto Telugu', sans-serif; color: var(--ui-ink); font-size: 14px; line-height: 1.5; -webkit-tap-highlight-color: transparent; }
+/* Rapid yard taps must not trigger double-tap zoom; pressed states replace the grey tap box. */
+.pilot :where(button, a, input, select, textarea, summary, label, [role="button"]) { touch-action: manipulation; }
+.pilot input[type="number"] { font-variant-numeric: tabular-nums; }
 .pilot.workspace { background: var(--ui-canvas); }
 .pilot :where(h1, h2, h3) { color: var(--ui-ink); text-wrap: balance; }
 .pilot h1 { font-size: clamp(22px, 2.5vw, 28px); line-height: 1.4; font-weight: 600; letter-spacing: -.035em; }
 .pilot :where(h2, h3) { font-weight: 600; letter-spacing: -.015em; }
 .pilot .btn { min-height: 44px; height: auto; padding: 10px 14px; border-width: 1px; border-radius: var(--ui-radius-sm); font-size: 13px; font-weight: 500; white-space: normal; box-shadow: none; transition: background-color var(--ui-dur) var(--ui-ease), border-color var(--ui-dur) var(--ui-ease), color var(--ui-dur) var(--ui-ease), transform var(--ui-dur) var(--ui-ease); }
 .pilot .btn:disabled { opacity: .55; }
-.pilot .input { min-width: 0; width: 100%; height: 44px; padding-inline: 12px; border: 1px solid var(--workspace-border); border-radius: var(--ui-radius-sm); background: var(--ui-surface); color: var(--ui-ink); font-size: 16px; box-shadow: none; transition: border-color var(--ui-dur) var(--ui-ease), box-shadow var(--ui-dur) var(--ui-ease); }
+.pilot .input { min-width: 0; width: 100%; height: 44px; padding-inline: 12px; border: 1px solid var(--workspace-border); border-radius: var(--ui-radius-sm); background: var(--ui-surface); color: var(--ui-ink); font-size: 16px; box-shadow: none; transition: border-color var(--ui-dur) var(--ui-ease); }
 .pilot .input:hover:not(:focus):not(:disabled) { border-color: #c9d6d0; }
 .pilot .input:focus { border-color: var(--ui-accent); box-shadow: 0 0 0 3px rgb(23 100 93 / .12); }
 .pilot :where(input, select, textarea) { min-width: 0; max-width: 100%; }
 .pilot :where(textarea) { border-radius: var(--ui-radius-sm); }
 .pilot :where(button, a, input, select, textarea, summary):focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
 .pilot .input:focus-visible { outline: none; }
+/* Headings receive focus only programmatically, to announce a swapped screen section. */
+.pilot :is(h1, h2)[tabindex="-1"]:focus { outline: none; }
 .pilot .card { min-width: 0; border-color: var(--workspace-border); border-radius: var(--ui-radius-md); box-shadow: none; }
 .pilot .card :where(p, h2, h3, strong, dd) { overflow-wrap: anywhere; }
 .pilot .control-label { text-align: left; font-size: 13px; font-weight: 500; }
@@ -65,7 +71,7 @@
 .pilot .input[aria-invalid="true"]:focus, .pilot .number-stepper:has(.input[aria-invalid="true"]):focus-within { border-color: #a12f2f; box-shadow: 0 0 0 3px rgb(161 47 47 / .12); }
 .pilot .number-stepper .input[aria-invalid="true"]:focus { box-shadow: none; }
 /* Google sign-in button, light theme per Google's branding guidelines (#fff fill, #747775 stroke, #1f1f1f text). */
-.pilot .google-signin-button { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; min-height: 48px; padding: 10px 16px; border: 1px solid #747775; border-radius: var(--ui-radius-sm); background: #fff; color: #1f1f1f; font-family: Roboto, Arial, sans-serif; font-size: 14px; font-weight: 500; letter-spacing: .25px; transition: background-color var(--ui-dur) var(--ui-ease), box-shadow var(--ui-dur) var(--ui-ease); }
+.pilot .google-signin-button { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; min-height: 48px; padding: 10px 16px; border: 1px solid #747775; border-radius: var(--ui-radius-sm); background: #fff; color: #1f1f1f; font-family: Roboto, Arial, sans-serif; font-size: 14px; font-weight: 500; letter-spacing: .25px; transition: background-color var(--ui-dur) var(--ui-ease); }
 .pilot .google-signin-button:hover:not(:disabled) { background: #f8f9fa; box-shadow: 0 1px 2px rgb(60 64 67 / .3), 0 1px 3px 1px rgb(60 64 67 / .15); }
 .pilot .google-signin-button:disabled { border-color: #1f1f1f1f; background: #ffffff61; color: #1f1f1f61; }
 .pilot .google-signin-button:disabled .google-signin-mark { opacity: .38; }
@@ -74,7 +80,7 @@
 .pilot button { cursor: pointer; }
 .pilot button:disabled { cursor: not-allowed; }
 .pilot .btn:active:not(:disabled) { transform: var(--ui-press); }
-@media (prefers-reduced-motion: reduce) { .pilot *, .pilot *::before, .pilot *::after { transition-duration: 1ms !important; animation-duration: 1ms !important; animation-iteration-count: 1 !important; } .pilot .btn:active:not(:disabled) { transform: none; } }
+/* Reduced motion lives in one block at the end of this file. */
 .brand-mark { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex-shrink: 0; border-radius: var(--ui-radius-sm); background: var(--ui-accent); color: var(--ui-surface); }
 /* The logo image has its own light background, so no tile colour behind it. */
 .brand-logo { display: block; flex-shrink: 0; object-fit: contain; background: none; }
@@ -84,7 +90,7 @@ img.brand-mark { background: none; }
 .text-button:hover { text-decoration: underline; text-underline-offset: 4px; }
 .icon-button { display: inline-flex; align-items: center; justify-content: center; min-width: 48px; min-height: 48px; border-radius: var(--ui-radius-sm); }
 .status-tag { display: inline-flex; border-radius: var(--ui-radius-pill); padding: 4px 8px; font-size: 11px; font-weight: 500; white-space: nowrap; }
-.app-dialog { width: min(440px, calc(100% - 24px)); max-height: calc(100dvh - 32px); margin: auto; padding: 0; border: 1px solid var(--workspace-border); border-radius: var(--ui-radius-md); color: var(--ui-ink); background: var(--ui-surface); overflow-y: auto; box-shadow: var(--ui-shadow-panel); }
+.app-dialog { width: min(440px, calc(100% - 24px)); max-height: calc(100dvh - 32px); margin: auto; padding: 0; border: 1px solid var(--workspace-border); border-radius: var(--ui-radius-md); color: var(--ui-ink); background: var(--ui-surface); overflow-y: auto; overscroll-behavior: contain; box-shadow: var(--ui-shadow-panel); }
 .app-dialog[open] { animation: app-dialog-glide 220ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 .app-dialog::backdrop { background: rgb(17 24 39 / .5); animation: app-backdrop-fade 220ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 .app-dialog.nav-drawer { width: min(300px, 82vw); height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0 var(--ui-radius-lg) var(--ui-radius-lg) 0; }
@@ -284,7 +290,7 @@ img.brand-mark { background: none; }
 /* Minimal − / + number stepper; native spin arrows hidden. */
 .pilot input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .pilot input[type="number"]::-webkit-inner-spin-button, .pilot input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-.number-stepper { display: flex; align-items: stretch; height: 44px; border: 1px solid var(--workspace-border, #eaeaea); border-radius: var(--ui-radius-sm); background: var(--ui-surface, #fff); transition: border-color 160ms var(--ui-ease), box-shadow 160ms var(--ui-ease); }
+.number-stepper { display: flex; align-items: stretch; height: 44px; border: 1px solid var(--workspace-border, #eaeaea); border-radius: var(--ui-radius-sm); background: var(--ui-surface, #fff); transition: border-color 160ms var(--ui-ease); }
 .number-stepper:focus-within { border-color: var(--ui-accent); box-shadow: 0 0 0 3px rgb(23 100 93 / .12); }
 .pilot .number-stepper .input { flex: 1; height: 100%; border: 0; border-radius: 0; background: transparent; box-shadow: none; padding-inline: 4px; text-align: center; font-variant-numeric: tabular-nums; }
 .pilot .number-stepper .input:focus { box-shadow: none; }
@@ -424,15 +430,20 @@ img.brand-mark { background: none; }
 .setup-heading { padding-block: 4px 8px; }
 .setup-heading p { max-width: 56ch; }
 .setup-progress { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-block: 24px; }
-.setup-progress li { display: flex; align-items: center; gap: 8px; padding: 12px 10px; border-radius: var(--ui-radius-md); background: #eef2ef; color: var(--ui-muted); font-size: 13px; font-weight: 500; min-width: 0; }
-.setup-progress li[aria-current="step"] { background: #e8f3ed; color: var(--ui-accent); box-shadow: none; }
+.setup-progress li { display: flex; min-width: 0; }
+.setup-step-button { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; min-height: 44px; padding: 12px 10px; border: 1px solid transparent; border-radius: var(--ui-radius-md); background: #eef2ef; color: var(--ui-muted); font: inherit; font-size: 13px; font-weight: 500; text-align: left; cursor: pointer; transition: background-color var(--ui-dur) var(--ui-ease), border-color var(--ui-dur) var(--ui-ease), transform var(--ui-dur) var(--ui-ease); }
+.setup-step-button:hover:not(:disabled):not([aria-current="step"]) { border-color: #d2dcd7; background: #e6ece8; color: var(--ui-ink); }
+.setup-step-button:active:not(:disabled) { transform: var(--ui-press); }
+.setup-step-button:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
+.setup-step-button:disabled { cursor: default; }
+.setup-step-button[aria-current="step"] { background: #e8f3ed; color: var(--ui-accent); box-shadow: none; cursor: default; }
 .step-number { display: flex; flex: 0 0 28px; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: white; font-size: 12px; }
 [aria-current="step"] .step-number, [data-complete="true"] .step-number { color: var(--ui-surface); background: var(--ui-accent); }
 .setup-business-grid { display: grid; gap: 16px; }
 .setup-optional-fields { display: grid; gap: 20px; }
 .logo-picker { position: relative; display: flex; align-items: center; gap: 16px; min-height: 96px; padding: 16px; background: #fff; border: 1px solid #eaeaea; border-radius: var(--ui-radius-md); text-align: left; cursor: pointer; transition: border-color 200ms var(--ui-ease), background-color 200ms var(--ui-ease); }
 .logo-picker:hover { border-color: #c9d8d1; background: #fbfbfa; }
-.logo-picker:focus-within { outline: 3px solid var(--ui-accent); outline-offset: 3px; }
+.logo-picker:has(input:focus-visible) { outline: 3px solid var(--ui-accent); outline-offset: 3px; }
 .logo-picker input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .logo-placeholder, .logo-preview { display: flex; flex: 0 0 64px; align-items: center; justify-content: center; width: 64px; height: 64px; border-radius: var(--ui-radius-sm); }
 .logo-placeholder { border: 1px dashed #c9d8d1; background: #f9f9f8; color: #526661; transition: border-color 200ms var(--ui-ease), color 200ms var(--ui-ease); }
@@ -456,7 +467,7 @@ img.brand-mark { background: none; }
   .workspace-organization-mark { display: none; }
   .pilot .workspace-create-load { width: 44px; padding: 10px; }
   .workspace-create-load > span { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  .setup-progress li { flex-direction: column; text-align: center; padding: 10px 4px; font-size: 12px; }
+  .setup-step-button { flex-direction: column; justify-content: center; text-align: center; padding: 10px 4px; font-size: 12px; }
 }
 @media (min-width: 640px) {
   .workspace-toolbar { padding-inline: 24px; }
@@ -491,11 +502,14 @@ img.brand-mark { background: none; }
   .sidebar-link[aria-current="page"] { background: #e8f3ef; color: #115e59; }
   .sidebar-language { margin-top: auto; padding: 12px 12px 8px; border-top: 1px solid var(--workspace-border); }
   .workspace-sidebar .sidebar-language + .sidebar-account { margin-top: 0; padding-top: 4px; border-top: 0; }
-  .account-settings .settings-group { scroll-margin-top: calc(var(--settings-sticky-top) + 24px); }
+  /* The html scroll-padding-top below already clears the sticky header. */
+  .account-settings .settings-group { scroll-margin-top: 24px; }
   .sidebar-account { margin-top: auto; border-top: 1px solid var(--workspace-border); padding-top: 16px; }
   .workspace .mobile-menu { display: none; }
   .workspace-toolbar { padding: 14px 32px; }
   .workspace-header { position: sticky; top: 0; z-index: 20; }
+  /* Keep focused fields and scrolled-to anchors clear of the sticky header (73px tall). */
+  html:has(.pilot.workspace) { scroll-padding-top: 89px; }
   .workspace-main { padding: 36px 32px 64px; }
   .workflow-actions { justify-content: flex-end; }
   .workflow-actions .btn { flex: 0 0 auto; min-width: 160px; }
@@ -505,7 +519,11 @@ img.brand-mark { background: none; }
   .workspace-toolbar { padding-inline: 40px; grid-template-columns: minmax(200px, 1fr) minmax(260px, 440px) auto; gap: 24px; }
   .workspace-main { padding-inline: 40px; }
 }
-@media (prefers-reduced-motion: reduce) { .pilot *, .pilot *::before, .pilot *::after { transition: none !important; animation: none !important; } }
+@media (prefers-reduced-motion: reduce) {
+  /* .pilot itself is covered too: AuthDialog and the pending LogoutDialog put the class on the <dialog>. */
+  .pilot, .pilot *, .pilot *::before, .pilot *::after, .pilot::backdrop, .pilot *::backdrop, .app-dialog, .app-dialog::backdrop { transition: none !important; animation: none !important; }
+  .pilot .btn:active:not(:disabled) { transform: none; }
+}
 
 @theme {
   --color-surface: #f7f9f8;

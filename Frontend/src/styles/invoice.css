@@ -133,18 +133,119 @@
 /* Stays mounted as a live region; takes no space (but stays in the a11y tree) while empty. */
 .invoice-export-feedback:empty { display: contents; }
 .invoice-export-notice { padding: 10px 14px; border: 1px solid #cfe3da; border-radius: var(--ui-radius-sm); background: #f1f8f4; color: var(--ui-ink); font-size: 13px; line-height: 1.6; }
-/* Delivery status sits above the bill: one quiet line with a status dot, confirmed inline. */
-.delivery-bar { --tone: #c28a12; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 10px 10px 10px 16px; border: 1px solid var(--workspace-border); border-radius: var(--ui-radius-md); background: var(--ui-surface); }
-.delivery-bar[data-state="confirming"], .delivery-bar[data-state="delivered"] { --tone: var(--ui-accent); }
-.delivery-bar-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--tone); box-shadow: 0 0 0 4px color-mix(in srgb, var(--tone) 14%, transparent); }
-.delivery-bar-text { display: flex; flex: 1 1 160px; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
-.delivery-bar-text strong { font-size: 13px; font-weight: 600; }
-.delivery-bar-text span { min-width: 0; overflow: hidden; color: var(--ui-muted); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+/* ---------- Bill screen panels: flat, warm-monochrome, one shared card language ---------- */
+.bill-screen {
+  --bill-line: #eaeaea;
+  --bill-ink: #2f3437;
+  --bill-muted: #787774;
+  --bill-soft: #f7f6f3;
+  --bill-radius: 12px;
+  --bill-control-radius: 6px;
+}
+.bill-screen :is(.delivery-bar, .payment-panel, .invoice-export-panel, .invoice-admin-panel) {
+  border: 1px solid var(--bill-line);
+  border-radius: var(--bill-radius);
+  background: #fff;
+  box-shadow: none;
+  color: var(--bill-ink);
+}
+/* Square-ish, shadowless controls inside these panels; primary is charcoal, not a coloured pill. */
+.pilot .bill-screen :is(.delivery-bar, .payment-panel, .invoice-export-panel, .invoice-admin-panel) .btn {
+  min-height: 38px;
+  padding: 8px 16px;
+  border-radius: var(--bill-control-radius);
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background-color var(--ui-dur) var(--ui-ease), border-color var(--ui-dur) var(--ui-ease), transform var(--ui-dur) var(--ui-ease);
+}
+.pilot .bill-screen :is(.delivery-bar, .payment-panel, .invoice-export-panel, .invoice-admin-panel) .btn:active:not(:disabled) { transform: var(--ui-press); }
+.pilot .bill-screen :is(.delivery-bar, .payment-panel, .invoice-export-panel, .invoice-admin-panel) .control-button-primary { border-color: var(--bill-ink); background: var(--bill-ink); color: #fff; }
+.pilot .bill-screen :is(.delivery-bar, .payment-panel, .invoice-export-panel, .invoice-admin-panel) .control-button-primary:hover:not(:disabled) { border-color: #111; background: #111; }
+.pilot .bill-screen :is(.delivery-bar, .payment-panel, .invoice-export-panel, .invoice-admin-panel) .control-button-secondary { border-color: var(--bill-line); background: #fff; color: var(--bill-ink); }
+.pilot .bill-screen :is(.delivery-bar, .payment-panel, .invoice-export-panel, .invoice-admin-panel) .control-button-secondary:hover:not(:disabled) { border-color: #dcdcda; background: var(--bill-soft); }
+.pilot .bill-screen .invoice-export-footer .action-icon-disc { background: rgb(255 255 255 / .14); }
+.bill-screen .invoice-export-option { border-radius: var(--bill-control-radius); }
+
+/* Delivery status: one quiet line with a status dot, confirmed inline. */
+.delivery-bar { --tone: #956400; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 12px 12px 20px; }
+.delivery-bar[data-state="confirming"] { --tone: var(--bill-ink); }
+.delivery-bar[data-state="delivered"] { --tone: #346538; }
+.delivery-bar-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--tone); }
+.delivery-bar[data-state="transit"] .delivery-bar-dot { animation: bill-pulse 2.4s ease-in-out infinite; }
+.delivery-bar-text { display: flex; flex: 1 1 160px; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; min-width: 0; }
+.delivery-bar-text strong { font-size: 13px; font-weight: 500; }
+.delivery-bar-text span { min-width: 0; overflow: hidden; color: var(--bill-muted, #787774); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .delivery-bar-actions { display: flex; gap: 8px; margin-left: auto; }
-.pilot .delivery-bar-actions .btn { min-height: 36px; padding: 6px 16px; border-radius: var(--ui-radius-pill); }
-.pilot .delivery-bar-actions .control-button-secondary { border-color: #cfe3da; background: #e9f3ee; color: var(--ui-accent); }
-.pilot .delivery-bar-actions .control-button-secondary:hover { border-color: #b5d4c6; background: #dcece4; }
 @media print { .delivery-bar { display: none !important; } }
+
+/* Payment: three flat figures split by hairlines, a thin progress rule, then the history list. */
+.payment-panel { display: grid; gap: 20px; padding: 24px; }
+.payment-panel-loading { color: var(--bill-muted); font-size: 13px; }
+.payment-panel-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.payment-panel-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; }
+.pilot .payment-panel-heading h2 { font-size: 15px; font-weight: 500; letter-spacing: -.01em; line-height: 1.4; }
+.payment-status { padding: 2px 8px; border-radius: 9999px; background: #fbf3db; color: #956400; font-size: 10px; font-weight: 600; letter-spacing: .05em; line-height: 1.6; text-transform: uppercase; white-space: nowrap; }
+.payment-status[data-tone="partial"] { background: #e1f3fe; color: #1f6c9f; }
+.payment-status[data-tone="paid"] { background: #edf3ec; color: #346538; }
+.payment-add-button > span[aria-hidden] { margin-right: 2px; font-weight: 400; }
+.payment-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; border-top: 1px solid var(--bill-line); }
+.payment-stat { display: grid; gap: 6px; min-width: 0; padding: 18px 20px 4px; }
+.payment-stat:first-child { padding-left: 0; }
+.payment-stat + .payment-stat { border-left: 1px solid var(--bill-line); }
+.payment-stat dt { color: var(--bill-muted); font-size: 12px; line-height: 1.4; }
+.payment-stat dd { margin: 0; overflow-wrap: anywhere; color: var(--bill-ink); font-size: 22px; font-variant-numeric: tabular-nums; font-weight: 500; letter-spacing: -.02em; line-height: 1.2; }
+.payment-stat[data-tone="received"] dd { color: #346538; }
+.payment-stat[data-tone="due"] dd { color: #956400; }
+.payment-progress { height: 2px; overflow: hidden; border-radius: 2px; background: #f1f0ed; }
+.payment-progress > span { display: block; height: 100%; background: #346538; transform-origin: left center; transition: transform 600ms cubic-bezier(.16, 1, .3, 1); }
+.payment-history-block { display: grid; gap: 8px; }
+.pilot .payment-history-block h3 { color: var(--bill-muted); font-size: 11px; font-weight: 500; letter-spacing: .05em; line-height: 1.4; text-transform: uppercase; }
+.payment-history-block ul { display: grid; margin: 0; padding: 0; list-style: none; }
+.payment-history-block li { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 10px 0; border-top: 1px solid var(--bill-line); font-size: 13px; }
+.payment-history-block li strong { display: block; font-variant-numeric: tabular-nums; font-weight: 500; }
+.payment-note { display: block; color: var(--bill-muted); font-size: 12px; overflow-wrap: anywhere; }
+.payment-meta { display: grid; flex-shrink: 0; min-width: 0; max-width: 50%; color: var(--bill-muted); font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.payment-meta .payment-by { overflow: hidden; text-overflow: ellipsis; }
+
+/* Admin actions: one card, rows split by hairlines; delete stays quiet until confirmed. */
+.invoice-admin-panel { display: grid; padding: 8px 24px; }
+.invoice-admin-eyebrow { padding: 14px 0 2px; color: var(--bill-muted); font-family: "Geist Mono", monospace; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.invoice-admin-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding: 18px 0; }
+.invoice-admin-row + .invoice-admin-row { border-top: 1px solid var(--bill-line); }
+.invoice-admin-history { display: grid; align-items: stretch; }
+.invoice-admin-copy { flex: 1 1 280px; min-width: 0; }
+.pilot .invoice-admin-copy h2 { font-size: 14px; font-weight: 500; line-height: 1.5; }
+.invoice-admin-copy p { max-width: 62ch; margin-top: 2px; color: var(--bill-muted); font-size: 12px; line-height: 1.6; }
+.invoice-admin-versions { display: grid; margin: 0; padding: 0; border-top: 1px solid var(--bill-line); list-style: none; }
+.invoice-admin-versions li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--bill-line); font-size: 13px; }
+.invoice-admin-versions li > span { min-width: 0; overflow: hidden; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.pilot .bill-screen .invoice-admin-panel .invoice-danger-quiet { color: #9f2f2d; }
+.pilot .bill-screen .invoice-admin-panel .invoice-danger-quiet:hover:not(:disabled) { border-color: #f5d5d6; background: #fdebec; }
+.pilot .bill-screen .invoice-admin-panel .invoice-danger-button { border-color: #9f2f2d; background: #9f2f2d; }
+.pilot .bill-screen .invoice-admin-panel .invoice-danger-button:hover:not(:disabled) { border-color: #842624; background: #842624; }
+.invoice-admin-delete[data-state="confirming"] h2 { color: #9f2f2d; }
+
+/* Quiet entry: panels fade up once, staggered. */
+.bill-screen > :is(.delivery-bar, .payment-panel, .invoice-export-panel, .invoice-admin-panel) { animation: bill-enter 600ms cubic-bezier(.16, 1, .3, 1) both; }
+.bill-screen > .payment-panel { animation-delay: 80ms; }
+.bill-screen > .invoice-export-panel { animation-delay: 160ms; }
+.bill-screen > .invoice-admin-panel { animation-delay: 240ms; }
+@keyframes bill-enter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes bill-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) {
+  .bill-screen > :is(.delivery-bar, .payment-panel, .invoice-export-panel, .invoice-admin-panel), .delivery-bar-dot { animation: none !important; }
+  .payment-progress > span { transition: none; }
+}
+@media (max-width: 640px) {
+  .payment-panel { padding: 20px 16px; }
+  .payment-stats { grid-template-columns: minmax(0, 1fr); }
+  .payment-stat, .payment-stat:first-child { grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; padding: 12px 0; }
+  .payment-stat + .payment-stat { border-top: 1px solid var(--bill-line); border-left: 0; }
+  .payment-stat dd { font-size: 17px; text-align: right; }
+  .invoice-admin-panel { padding: 4px 16px; }
+  .delivery-bar { padding-left: 16px; }
+}
 .invoice-draft-action { display: flex; justify-content: flex-end; }
 .invoice-paper-compact { padding: 18px; border-radius: 16px; }
 .invoice-paper-compact .invoice-document-header { gap: 12px; padding-bottom: 14px; }

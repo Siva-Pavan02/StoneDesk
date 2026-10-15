@@ -94,7 +94,7 @@ export default function AuthDialog({ mode, initialMethod = null, onClose, onSign
   }
 
   const heading = view === 'forgot' ? pick('Reset your password', 'మీ పాస్‌వర్డ్ రీసెట్ చేయండి')
-    : linking ? pick('Connect Google to StoneDesk', 'Googleను StoneDeskకు అనుసంధానించండి')
+    : linking ? pick(<>Connect <span translate="no">Google</span> to <span translate="no">StoneDesk</span></>, 'Googleను StoneDeskకు అనుసంధానించండి')
     : signup ? pick('Set up your account', 'మీ ఖాతా సృష్టించండి')
     : pick('Welcome back', 'తిరిగి స్వాగతం');
 
@@ -119,7 +119,7 @@ export default function AuthDialog({ mode, initialMethod = null, onClose, onSign
   const modeSwitch = <button type="button" className="text-button mt-3 min-h-11 w-full text-sm underline underline-offset-4" disabled={busy} onClick={() => onMode(signup ? 'login' : 'signup')}>{signup ? pick('Already have an account? Log in', 'ఖాతా ఉందా? లాగిన్ అవ్వండి') : pick('New here? Create an account', 'కొత్తవారా? ఖాతా సృష్టించండి')}</button>;
 
   return <dialog ref={dialog} className="app-dialog pilot auth-screen" aria-labelledby="auth-title" onCancel={e => { if (locked) e.preventDefault(); else onClose(); }}>
-    <div className="p-6 text-sm"><div className="action-row flex items-center justify-between gap-3"><p className="eyebrow">STONEDESK</p><button type="button" className="text-button min-h-11 px-3" disabled={locked} onClick={onClose}>{pick('Close', 'మూసివేయండి')}</button></div>
+    <div className="p-6 text-sm"><div className="action-row flex items-center justify-between gap-3"><p className="eyebrow" translate="no">STONEDESK</p><button type="button" className="text-button min-h-11 px-3" disabled={locked} onClick={onClose}>{pick('Close', 'మూసివేయండి')}</button></div>
       <h2 id="auth-title" className="screen-heading mt-3 text-2xl font-semibold">{heading}</h2>
 
       {view === 'chooser' && <>
@@ -156,11 +156,11 @@ export default function AuthDialog({ mode, initialMethod = null, onClose, onSign
         <form className="space-y-4" onSubmit={submit}>
           <ErrorMessage error={error || initialError} />
           {signup && <Field name="name" en="Your name" te="మీ పేరు" autoComplete="name" required maxLength={120} />}
-          {signup && (createOrganization ? <><Field name="businessName" en="Business name" te="వ్యాపారం పేరు" required maxLength={120} autoComplete="organization" /><p className="text-sm text-gray-600">{pick('Invite your team from Settings after creating your workspace.', 'మీ బృందం చేరడానికి చిన్న సంస్థ ఐడీని సృష్టిస్తాము.')}</p></> : <Field name="invitationToken" en="Invitation code" te="ఆహ్వాన కోడ్" required minLength={43} maxLength={43} pattern="[A-Za-z0-9_-]{43}" autoCapitalize="none" autoCorrect="off" spellCheck={false} />)}
-          {googleSignup ? <p className="break-all text-sm">{pick('Google account:', 'Google ఖాతా:')} {googleSignup.email}</p> : <Field name="email" en="Email address" te="ఇమెయిల్ చిరునామా" type="email" autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={254} />}
+          {signup && (createOrganization ? <><Field name="businessName" en="Business name" te="వ్యాపారం పేరు" required maxLength={120} autoComplete="organization" /><p className="text-sm text-gray-600">{pick('Invite your team from Settings after creating your workspace.', 'మీ బృందం చేరడానికి చిన్న సంస్థ ఐడీని సృష్టిస్తాము.')}</p></> : <Field name="invitationToken" en="Invitation code" te="ఆహ్వాన కోడ్" required minLength={43} maxLength={43} pattern="[A-Za-z0-9_-]{43}" autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} />)}
+          {googleSignup ? <p className="break-all text-sm">{pick('Google account:', 'Google ఖాతా:')} <span translate="no">{googleSignup.email}</span></p> : <Field name="email" en="Email address" te="ఇమెయిల్ చిరునామా" type="email" autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={254} />}
           {googleSignup?.needsLink && <p className="text-sm text-gray-700">{pick('Confirm your StoneDesk password once to connect Google. Future Google sign-ins will not need it.', 'Googleను అనుసంధానించడానికి ఒకసారి మీ StoneDesk పాస్‌వర్డ్‌ను నిర్ధారించండి.')}</p>}
           {(!googleSignup || googleSignup.needsLink) && <>
-          <Field name="password" en={linking ? 'Existing StoneDesk password' : 'Password'} te={linking ? 'ప్రస్తుత StoneDesk పాస్‌వర్డ్' : 'పాస్‌వర్డ్'} type={showPassword ? 'text' : 'password'} autoComplete={signup ? 'new-password' : 'current-password'} minLength={12} maxLength={128} required />
+          <Field name="password" en={linking ? 'Existing StoneDesk password' : 'Password'} te={linking ? 'ప్రస్తుత StoneDesk పాస్‌వర్డ్' : 'పాస్‌వర్డ్'} type={showPassword ? 'text' : 'password'} autoComplete={signup ? 'new-password' : 'current-password'} autoCapitalize="none" autoCorrect="off" spellCheck={false} minLength={12} maxLength={128} required />
           <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" className="h-5 w-5 accent-teal-800" checked={showPassword} onChange={e => setShowPassword(e.target.checked)} />{pick('Show password', 'పాస్‌వర్డ్ చూపండి')}</label>
           {signup && <p className="text-sm text-gray-700">{pick('Use at least 12 characters.', 'కనీసం 12 అక్షరాలు ఉపయోగించండి.')}</p>}
           {!signup && !linking && !googleSignup && <button type="button" className="text-button text-sm underline underline-offset-4" disabled={busy} onClick={e => { setForgotEmail(e.currentTarget.form?.elements.email?.value || ''); setForgot(true); setError(''); }}>{pick('Forgot password?', 'పాస్‌వర్డ్ మర్చిపోయారా?')}</button>}

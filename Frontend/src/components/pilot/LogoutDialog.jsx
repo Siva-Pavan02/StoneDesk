@@ -33,7 +33,7 @@ export default function LogoutDialog({ open, onCancel, onConfirm }) {
       <div className="logout-dialog-body">
         <h2 id="logout-title">
           {pick(
-            "Are you sure you want to logout",
+            "Are you sure you want to log out?",
             "StoneDesk నుండి లాగ్ అవుట్ అవ్వాలా?",
           )}
         </h2>

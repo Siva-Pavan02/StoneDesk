@@ -1,37 +1,40 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { CheckIcon, CopyIcon, EyeClosedIcon, EyeOpenIcon } from '@radix-ui/react-icons';
 import { useLanguage } from '../../i18n/LanguageContext';
 import { request } from '../../lib/pilotApi.js';
-import { Button, ErrorMessage } from './Controls.jsx';
+import { Button, ErrorMessage, FieldError } from './Controls.jsx';
 import Invitations from './Invitations.jsx';
 
 const ROLES = [['Admin', 'అడ్మిన్'], ['Yard Manager', 'యార్డ్ మేనేజర్'], ['Dispatcher', 'డిస్పాచర్']];
 // Admin is the workspace owner and cannot be edited afterwards, so it is not offered for team members.
 const MEMBER_ROLES = ROLES.filter(([en]) => en !== 'Admin');
 
-function PasswordField({ en, te, ...props }) {
+function PasswordField({ en, te, error, inputRef, ...props }) {
   const { pick } = useLanguage();
   const id = useId();
   const [shown, setShown] = useState(false);
   return <div className="control-field">
     <label className="control-label" htmlFor={id}>{pick(en, te)}</label>
     <div className="password-control">
-      <input className="input" {...props} id={id} type={shown ? 'text' : 'password'} autoCapitalize="none" spellCheck={false} />
+      <input className="input" {...props} ref={inputRef} id={id} type={shown ? 'text' : 'password'} autoCapitalize="none" spellCheck={false} aria-invalid={error ? true : undefined} aria-describedby={error ? `${id}-error` : undefined} />
       <button type="button" className="password-toggle" aria-controls={id} aria-pressed={shown} aria-label={pick('Show password', 'పాస్‌వర్డ్ చూపించు')} onClick={() => setShown(value => !value)}>
         {shown ? <EyeClosedIcon aria-hidden="true" /> : <EyeOpenIcon aria-hidden="true" />}
       </button>
     </div>
+    <FieldError id={`${id}-error`} error={error} />
   </div>;
 }
 
-function MemberAccess({ member, disabled, saving, onSave }) {
+function MemberAccess({ member, disabled, saving, onSave, onDirty }) {
   const { pick } = useLanguage();
   const [role, setRole] = useState(member.role);
   const [active, setActive] = useState(member.active);
   const changed = role !== member.role || active !== member.active;
+  useEffect(() => { onDirty?.(`member:${member.id}`, changed); }, [onDirty, member.id, changed]);
+  useEffect(() => () => onDirty?.(`member:${member.id}`, false), [onDirty, member.id]);
   function submit(e) {
     e.preventDefault();
-    if (member.active && !active && !window.confirm(pick(`Remove workspace access for ${member.name}? They won't be able to open this workspace.`, `${member.name} కి వర్క్‌స్పేస్ యాక్సెస్ తొలగించాలా? వారు ఈ వర్క్‌స్పేస్ తెరవలేరు.`))) return;
+    if (member.active && !active && !window.confirm(pick(`Remove workspace access for ${member.name}? They won’t be able to open this workspace.`, `${member.name} కి వర్క్‌స్పేస్ యాక్సెస్ తొలగించాలా? వారు ఈ వర్క్‌స్పేస్ తెరవలేరు.`))) return;
     onSave(member, { role, active });
   }
   return <form className="st-access" onSubmit={submit}>
@@ -67,8 +70,8 @@ function DeleteAccount({ user, onDeleted }) {
       {!open && <button type="button" className="st-danger-button" onClick={() => setOpen(true)}>{pick('Delete…', 'తొలగించు…')}</button>}
     </div>
     {open && <form className="st-danger-confirm" onSubmit={submit}>
-      <label htmlFor={inputId}>{pick('Type your email to confirm:', 'నిర్ధారించడానికి మీ ఇమెయిల్ టైప్ చేయండి:')} <b>{user.email}</b></label>
-      <input id={inputId} className="input" autoComplete="off" autoCapitalize="none" spellCheck={false} maxLength={254} value={confirm} onChange={e => setConfirm(e.target.value)} autoFocus />
+      <label htmlFor={inputId}>{pick('Type your email to confirm:', 'నిర్ధారించడానికి మీ ఇమెయిల్ టైప్ చేయండి:')} <b translate="no">{user.email}</b></label>
+      <input id={inputId} name="confirmEmail" type="email" inputMode="email" className="input" autoComplete="off" autoCapitalize="none" spellCheck={false} maxLength={254} value={confirm} onChange={e => setConfirm(e.target.value)} autoFocus />
       <ErrorMessage error={error} />
       <div className="st-danger-actions">
         <button type="button" className="st-link" disabled={busy} onClick={() => { setOpen(false); setConfirm(''); setError(''); }}>{pick('Cancel', 'రద్దు')}</button>
@@ -91,6 +94,23 @@ export default function AccountSettings({ settings, user, section, onDeleted, on
   const roleLabel = role => pick(role, ROLES.find(([en]) => en === role)?.[1] || role);
   const showError = (key, err) => setMessage({ section: key, error: err.message });
   const showNotice = (key, text) => setMessage({ section: key, notice: text });
+  // Typed passwords and unsaved member access edits are lost on reload; warn while any exist.
+  const [dirty, setDirty] = useState(() => new Set());
+  const markDirty = useCallback((key, on) => setDirty(current => {
+    if (current.has(key) === on) return current;
+    const next = new Set(current);
+    if (on) next.add(key); else next.delete(key);
+    return next;
+  }), []);
+  useEffect(() => {
+    if (!dirty.size) return;
+    const warn = event => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+  // Password errors are shown under the field they concern.
+  const [passwordError, setPasswordError] = useState(null);
+  const currentPasswordInput = useRef(null), newPasswordInput = useRef(null);
 
   useEffect(() => {
     if (admin) request('/auth/users').then(setUsers).catch(err => setMessage({ section: 'team', error: err.message })).finally(() => setLoadingTeam(false));
@@ -108,7 +128,7 @@ export default function AccountSettings({ settings, user, section, onDeleted, on
       setCopied(true); clearTimeout(copiedTimer.current);
       copiedTimer.current = setTimeout(() => setCopied(false), 2000);
     }
-    catch { showNotice('general', pick('Select and copy the organization ID below.', 'క్రింద సంస్థ ఐడీని ఎంచుకుని కాపీ చేయండి.')); }
+    catch { showNotice('general', pick('Select and copy the organization ID above.', 'పైన ఉన్న సంస్థ ఐడీని ఎంచుకుని కాపీ చేయండి.')); }
   }
   async function refreshTeam() {
     if (refreshing) return; setRefreshing(true); setMessage(null);
@@ -119,7 +139,7 @@ export default function AccountSettings({ settings, user, section, onDeleted, on
     const name = after.name || before.name;
     if (before.active && !after.active) return pick(`Access removed. ${name} has been signed out.`, `యాక్సెస్ తొలగించబడింది. ${name} లాగ్ అవుట్ అయ్యారు.`);
     if (!before.active && after.active) return pick(`Access restored. ${name} can sign in as ${after.role}.`, `యాక్సెస్ పునరుద్ధరించబడింది. ${name} ${roleLabel(after.role)} గా లాగిన్ అవ్వచ్చు.`);
-    return pick(`${name} is now a ${after.role}. They'll sign in again to continue.`, `${name} ఇప్పుడు ${roleLabel(after.role)}. కొనసాగడానికి మళ్ళీ లాగిన్ అవ్వాలి.`);
+    return pick(`${name} is now a ${after.role}. They’ll sign in again to continue.`, `${name} ఇప్పుడు ${roleLabel(after.role)}. కొనసాగడానికి మళ్ళీ లాగిన్ అవ్వాలి.`);
   }
   async function saveUser(member, body) {
     if (busy) return; setBusy(`member:${member.id}`); setMessage(null);
@@ -133,17 +153,23 @@ export default function AccountSettings({ settings, user, section, onDeleted, on
   }
   const passwordFree = user.hasPassword === false; // undefined (older API) falls back to the safe "Change password" form.
   async function savePassword(e) {
-    e.preventDefault(); if (busy) return; setBusy('password'); setMessage(null);
+    e.preventDefault(); if (busy) return; setBusy('password'); setMessage(null); setPasswordError(null);
     try {
       await request('/auth/password', { method: 'POST', body: Object.fromEntries(new FormData(e.currentTarget)) });
       e.target.reset();
+      markDirty('password', false);
       showNotice('account', passwordFree
         ? pick('Password set. You can now also log in with email and password.', 'పాస్‌వర్డ్ సెట్ అయింది. ఇప్పుడు ఇమెయిల్ మరియు పాస్‌వర్డ్‌తో కూడా లాగిన్ అవ్వచ్చు.')
         : pick('Password updated. Other sessions have been signed out.', 'పాస్‌వర్డ్ మార్చబడింది. ఇతర పరికరాలలో లాగ్ అవుట్ అయింది.'));
       // The server confirmed success; fall back to local state if the refresh read fails.
       request('/auth/me').then(d => onUserChange?.(d.user)).catch(() => onUserChange?.({ ...user, hasPassword: true }));
     }
-    catch (err) { showError('account', err); } finally { setBusy(''); }
+    catch (err) {
+      // "Current password" problems belong to that field; everything else to the new password.
+      const field = !passwordFree && /current/i.test(err.message || '') ? 'currentPassword' : 'password';
+      setPasswordError({ field, message: err.message });
+      requestAnimationFrame(() => (field === 'currentPassword' ? currentPasswordInput : newPasswordInput).current?.focus());
+    } finally { setBusy(''); }
   }
   async function sendResetLink() {
     if (busy) return; setBusy('reset-link'); setMessage(null);
@@ -160,7 +186,7 @@ export default function AccountSettings({ settings, user, section, onDeleted, on
   const head = (key, en, te, den, dte, extra) => <header className="st-head">
     <div>
       <h2 id={`settings-${key}-heading`} tabIndex={-1}>{pick(en, te)}</h2>
-      {den && <p>{pick(den, dte)}</p>}
+      {den && <p>{typeof den === 'string' ? pick(den, dte) : den}</p>}
     </div>
     {extra}
   </header>;
@@ -198,11 +224,11 @@ export default function AccountSettings({ settings, user, section, onDeleted, on
         {users.map(member => <li key={member.id} className="st-row st-member">
           <div className="st-person">
             <span className="st-avatar" aria-hidden="true">{member.name?.[0]?.toUpperCase()}</span>
-            <div><strong>{member.name}{!member.active && <span className="st-member-off">{pick('No access', 'యాక్సెస్ లేదు')}</span>}</strong><small>{member.email}</small></div>
+            <div><strong>{member.name}{!member.active && <span className="st-member-off">{pick('No access', 'యాక్సెస్ లేదు')}</span>}</strong><small translate="no">{member.email}</small></div>
           </div>
           {member.isOwner || member.id === user.id
             ? <span className="st-muted">{member.isOwner ? pick('Owner · Admin', 'యజమాని · అడ్మిన్') : roleLabel(member.role)}</span>
-            : <MemberAccess member={member} disabled={!!busy} saving={busy === `member:${member.id}`} onSave={saveUser} />}
+            : <MemberAccess member={member} disabled={!!busy} saving={busy === `member:${member.id}`} onSave={saveUser} onDirty={markDirty} />}
           {message?.member === member.id && <div className="st-member-status">{feedback('team', member.id)}</div>}
         </li>)}
       </ul>}
@@ -210,19 +236,19 @@ export default function AccountSettings({ settings, user, section, onDeleted, on
     </section>}
 
     <section id="settings-account" className="st-section" aria-labelledby="settings-account-heading">
-      {head('account', 'Your account', 'మీ ఖాతా', `${user.name} · ${user.email} · ${roleLabel(user.role)}`, `${user.name} · ${user.email} · ${roleLabel(user.role)}`)}
+      {head('account', 'Your account', 'మీ ఖాతా', <>{user.name} · <span translate="no">{user.email}</span> · {roleLabel(user.role)}</>)}
       {passwordFree
-        ? <form key="set" className="st-password st-card" onSubmit={savePassword}>
+        ? <form key="set" className="st-password st-card" onSubmit={savePassword} onInput={() => { markDirty('password', true); setPasswordError(null); }}>
             <h3 className="st-password-heading">{pick('Set a password', 'పాస్‌వర్డ్ సెట్ చేయండి')}</h3>
             <p>{pick('You sign in with Google. Add a password to also log in with your email.', 'మీరు Googleతో లాగిన్ అవుతారు. ఇమెయిల్‌తో కూడా లాగిన్ అవ్వడానికి పాస్‌వర్డ్ జోడించండి.')}</p>
             <input type="text" autoComplete="username" value={user.email || ''} readOnly hidden />
-            <PasswordField name="password" en="New password (12+ characters)" te="కొత్త పాస్‌వర్డ్ (12+ అక్షరాలు)" autoComplete="new-password" minLength={12} maxLength={128} required />
+            <PasswordField name="password" inputRef={newPasswordInput} error={passwordError?.field === 'password' ? passwordError.message : ''} en="New password (12+ characters)" te="కొత్త పాస్‌వర్డ్ (12+ అక్షరాలు)" autoComplete="new-password" minLength={12} maxLength={128} required />
             <div><Button type="submit" disabled={!!busy} en={busy === 'password' ? 'Setting…' : 'Set password'} te={busy === 'password' ? 'సెట్ చేస్తోంది…' : 'పాస్‌వర్డ్ సెట్ చేయండి'} /></div>
           </form>
-        : <form key="change" className="st-password st-card" onSubmit={savePassword}>
+        : <form key="change" className="st-password st-card" onSubmit={savePassword} onInput={() => { markDirty('password', true); setPasswordError(null); }}>
             <input type="text" autoComplete="username" value={user.email || ''} readOnly hidden />
-            <PasswordField name="currentPassword" en="Current password" te="ప్రస్తుత పాస్‌వర్డ్" autoComplete="current-password" maxLength={128} required />
-            <PasswordField name="password" en="New password (12+ characters)" te="కొత్త పాస్‌వర్డ్ (12+ అక్షరాలు)" autoComplete="new-password" minLength={12} maxLength={128} required />
+            <PasswordField name="currentPassword" inputRef={currentPasswordInput} error={passwordError?.field === 'currentPassword' ? passwordError.message : ''} en="Current password" te="ప్రస్తుత పాస్‌వర్డ్" autoComplete="current-password" maxLength={128} required />
+            <PasswordField name="password" inputRef={newPasswordInput} error={passwordError?.field === 'password' ? passwordError.message : ''} en="New password (12+ characters)" te="కొత్త పాస్‌వర్డ్ (12+ అక్షరాలు)" autoComplete="new-password" minLength={12} maxLength={128} required />
             <div><Button type="submit" disabled={!!busy} en={busy === 'password' ? 'Updating…' : 'Update password'} te={busy === 'password' ? 'మారుస్తోంది…' : 'పాస్‌వర్డ్ మార్చండి'} /></div>
             {user.hasGoogle === true && <div className="st-password-reset">
               <p>{pick('Signed up with Google and never chose a password? Email yourself a reset link to set one.', 'Googleతో నమోదు చేసి ఎప్పుడూ పాస్‌వర్డ్ ఎంచుకోలేదా? పాస్‌వర్డ్ సెట్ చేయడానికి రీసెట్ లింక్‌ను మీ ఇమెయిల్‌కు పంపుకోండి.')}</p>

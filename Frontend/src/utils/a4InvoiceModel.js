@@ -11,6 +11,30 @@ const patterns = [
 
 export const AREA_ROUNDING_NOTE = 'Areas are shown to 2 decimals. Subtotals and totals use unrounded measurements, so displayed areas may differ slightly when added.';
 
+// Sample-mode bank grid (3 columns x 2 rows, row-major). Placeholders only.
+export const SAMPLE_BANK_PAIRS = [['Holder', '[Account holder name]'], ['Bank', '[Bank name]'], ['A/c no.', '[Account number]'],
+  ['IFSC', '[IFSC code]'], ['Branch', '[Branch — optional]'], ['UPI', '[UPI ID — optional]']];
+
+// Splits the free-text bank details on newlines, " · ", "|" or ";". A segment is
+// further split on commas only when every comma part is itself a "Label: value".
+export function bankDetailSegments(text) {
+  return String(text ?? '').trim().split(/\r?\n|\s+·\s+|\s*\|\s*|\s*;\s*/).map(part => part.trim()).filter(Boolean)
+    .flatMap(segment => {
+      const parts = segment.split(',').map(part => part.trim());
+      return parts.length > 1 && parts.every(part => part && part.includes(':')) ? parts : [segment];
+    });
+}
+
+// [label, value] pairs when every segment is written as "Label: value"; otherwise null.
+export function bankDetailPairs(text) {
+  const segments = bankDetailSegments(text);
+  const pairs = segments.map(segment => {
+    const at = segment.indexOf(':');
+    return at < 0 ? null : [segment.slice(0, at).trim(), segment.slice(at + 1).trim()];
+  });
+  return pairs.length && pairs.every(pair => pair && pair[0] && pair[1]) ? pairs : null;
+}
+
 function required(value, name) {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`${name} is required.`);
   return value.trim();

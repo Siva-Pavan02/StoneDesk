@@ -1,5 +1,5 @@
 import { useLanguage } from '../../i18n/LanguageContext';
-import React from 'react';
+import React, { useId, useRef } from 'react';
 import { Button, Card, Field, FieldError } from './Controls.jsx';
 import Icon from './Icon.jsx';
 import { parseFraction, decimalToFraction } from '../../utils/fractionParser.js';
@@ -15,30 +15,45 @@ export default function MeasurementEntry({ products, entry, onChange, onAdd, err
   function fraction(key, amount) {
     onChange({ ...entry, [key]: decimalToFraction((parseFraction(entry[key])?.numeric || 0) + amount) });
   }
-  function add() { onAdd(); }
+  // Keyboard flow: Enter moves Length → Width → Quantity → Add entry; adding a row returns to Length.
+  const baseId = useId();
+  const ids = { length: `${baseId}-length`, width: `${baseId}-width`, quantity: `${baseId}-quantity`, rate: `${baseId}-rate`, add: `${baseId}-add` };
+  const focusField = key => document.getElementById(ids[key])?.focus();
+  const enterTo = next => e => {
+    if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+    e.preventDefault();
+    focusField(next);
+  };
+  // Quantity is selected on entry so typing replaces it instead of appending.
+  const justFocused = useRef(false);
+  const selectAll = e => e.target.select();
+  // A click that focuses the field would otherwise drop the selection on mouseup.
+  const markClickFocus = e => { justFocused.current = document.activeElement !== e.target; };
+  const keepSelection = e => { if (justFocused.current) { e.preventDefault(); justFocused.current = false; } };
+  function add() { if (onAdd() !== false) focusField('length'); }
   return <Card className="gap-4">
     <h2>{pick('Measurements', 'కొలతలు')}</h2>
     <div className="row-bar">
       <div className="row-stepper">
         <button type="button" className="row-step" aria-label={pick('Previous row', 'ముందు వరుస')} disabled={rowNo <= 1} onClick={() => setRow(rowNo - 1)}><Icon name="prev" /></button>
-        <p className="row-bar-current"><span className="row-bar-label">{pick('Row', 'వరుస')}</span><strong>{rowNo}</strong></p>
+        <p className="row-bar-current" aria-live="polite" aria-atomic="true"><span className="row-bar-label">{pick('Row', 'వరుస')}</span><strong>{rowNo}</strong></p>
         <button type="button" className="row-step" aria-label={pick('Next row', 'తర్వాత వరుస')} disabled={rowNo >= MAX_ROW} onClick={() => setRow(rowNo + 1)}><Icon name="next" /></button>
       </div>
       <span className="row-bar-placement">{entry.category === 'TOP' ? pick('Top', 'టాప్') : pick('Regular', 'సాధారణ')}</span>
     </div>
-    <Field en="Product / finish" te="రకం / ఫినిష్" error={errors.productId}><select className="input rounded-xl" value={entry.productId} onChange={e => {
+    <Field en="Product / finish" te="రకం / ఫినిష్" error={errors.productId}><select name="productId" className="input rounded-xl" value={entry.productId} onChange={e => {
       const p = products.find(item => item.id === e.target.value);
       onChange({ ...entry, productId: e.target.value, rate: String(p?.defaultRate ?? '') });
     }}><option value="">{pick('Select product', 'రకం ఎంచుకోండి')}</option>{products.map(p => <option key={p.id} value={p.id}>{p.stoneType} · {p.finish}</option>)}</select></Field>
-    <div className="control-field placement-field"><span className="control-label" id="placement-label">{pick('Placement in row', 'వరుసలో స్థానం')}</span>
-      <div className="placement-switch" role="group" aria-labelledby="placement-label">{[['Regular', 'Regular', 'సాధారణ'], ['TOP', 'Top', 'టాప్']].map(([value, en, te]) => <button key={value} type="button" aria-pressed={entry.category === value} onClick={() => onChange({ ...entry, category: value })}>{pick(en, te)}</button>)}</div></div>
+    <div className="control-field placement-field"><span className="control-label" id={`${baseId}-placement-label`}>{pick('Placement in row', 'వరుసలో స్థానం')}</span>
+      <div className="placement-switch" role="group" aria-labelledby={`${baseId}-placement-label`}>{[['Regular', 'Regular', 'సాధారణ'], ['TOP', 'Top', 'టాప్']].map(([value, en, te]) => <button key={value} type="button" aria-pressed={entry.category === value} onClick={() => onChange({ ...entry, category: value })}>{pick(en, te)}</button>)}</div></div>
     <div className="grid grid-cols-2 gap-3">
-      {['length', 'width'].map(key => <div key={key} className="space-y-2"><Field en={key === 'length' ? 'Length (ft)' : 'Width (ft)'} te={key === 'length' ? 'పొడవు' : 'వెడల్పు'} value={entry[key]} onChange={update(key)} inputMode="decimal" placeholder="3½" error={errors[key]} />
+      {['length', 'width'].map(key => <div key={key} className="space-y-2"><Field en={key === 'length' ? 'Length (ft)' : 'Width (ft)'} te={key === 'length' ? 'పొడవు' : 'వెడల్పు'} id={ids[key]} value={entry[key]} onChange={update(key)} onKeyDown={enterTo(key === 'length' ? 'width' : 'quantity')} enterKeyHint="next" inputMode="decimal" name={key} autoComplete="off" spellCheck={false} placeholder="3½…" error={errors[key]} />
         <details className="measurement-fractions"><summary>{pick('Add fraction', 'భిన్నం జోడించండి')}</summary><div className="grid grid-cols-3 gap-1">{[[.25, '¼'], [.5, '½'], [.75, '¾']].map(([amount, label]) => <button key={label} type="button" aria-label={pick(`Add ${label} foot to ${key}`, `${key === 'length' ? 'పొడవుకు' : 'వెడల్పుకు'} ${label} అడుగు జోడించండి`)} className="btn min-w-0 px-0 text-base bg-white border-gray-300" onClick={() => fraction(key, amount)}>+{label}</button>)}</div></details>
       </div>)}
     </div>
-    <div className="grid grid-cols-2 gap-3"><Field en="Quantity" te="ముక్కల సంఖ్య" type="number" min="1" max="100000" step="1" value={entry.quantity} onChange={update('quantity')} error={errors.quantity} /><Field en="Rate / sq ft (₹)" te="చదరపు అడుగు ధర" type="number" min="0" step="0.01" value={entry.rate} onChange={update('rate')} error={errors.rate} /></div>
+    <div className="grid grid-cols-2 gap-3"><Field en="Quantity" te="ముక్కల సంఖ్య" type="number" min="1" max="100000" step="1" name="quantity" id={ids.quantity} value={entry.quantity} onChange={update('quantity')} onFocus={selectAll} onMouseDown={markClickFocus} onMouseUp={keepSelection} onKeyDown={enterTo('add')} enterKeyHint="next" error={errors.quantity} /><Field en="Rate / sq ft (₹)" te="చదరపు అడుగు ధర" type="number" min="0" step="0.01" name="rate" id={ids.rate} value={entry.rate} onChange={update('rate')} onKeyDown={enterTo('add')} enterKeyHint="next" error={errors.rate} /></div>
     <FieldError role="alert" className="field-error-block" error={notice} />
-    <Button primary en="Add entry" te="కొలత జోడించండి" onClick={add} />
+    <Button primary id={ids.add} en="Add entry" te="కొలత జోడించండి" onClick={add} />
   </Card>;
 }

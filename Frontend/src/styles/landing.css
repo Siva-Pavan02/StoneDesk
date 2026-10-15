@@ -6,8 +6,15 @@
   font-family: 'Geist', 'Noto Telugu', ui-sans-serif, system-ui, sans-serif;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
 }
+/* The sticky public header must not cover focused content or in-page anchors. */
+html:has(.marketing) { scroll-padding-top: 96px; }
+.marketing :where(button, a, summary, label) { touch-action: manipulation; }
+.marketing :where(h1, h2, h3) { text-wrap: balance; }
 .marketing :where(button, a, [tabindex]):focus-visible { outline: 3px solid #22796f; outline-offset: 4px; }
+/* The teal ring disappears on the teal CTA gradient. */
+.marketing .mk-cta-band :focus-visible { outline-color: #fff; }
 .marketing button { cursor: pointer; }
 .marketing button:disabled { cursor: default; opacity: .65; }
 .marketing .mk-section { padding-block: 64px; }
@@ -20,7 +27,8 @@
 }
 .sample-badge-float {
   display: inline-flex;
-  animation: badge-float 4s ease-in-out infinite;
+  /* Two gentle floats, then rest: no endless motion beside reading content. */
+  animation: badge-float 4s ease-in-out 2;
   will-change: transform;
 }
 .marketing .mk-bento-card { position: relative; display: flex; flex-direction: column; min-width: 0; padding: 28px; border: 1px solid #dce6e1; border-radius: 22px; background: #fff; overflow: hidden; transition: border-color 300ms var(--ui-ease), transform 500ms var(--ui-ease); }
@@ -187,5 +195,5 @@
   .marketing .mk-nav { background: white; backdrop-filter: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .marketing *, .marketing *::before, .marketing *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  .marketing *, .marketing *::before, .marketing *::after, .marketing .mk-dialog::backdrop { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }

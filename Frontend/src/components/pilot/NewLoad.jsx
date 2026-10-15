@@ -1,5 +1,5 @@
 import { useLanguage } from "../../i18n/LanguageContext";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { request, reviseDispatch } from "../../lib/pilotApi.js";
 import {
   newDraft,
@@ -8,6 +8,8 @@ import {
   clearDraft,
   flushDraft,
   hasDraftContent,
+  DRAFTS_FULL,
+  MAX_DRAFTS,
   makeRow,
   payload,
   detailErrors,
@@ -27,7 +29,6 @@ import {
 import MeasurementEntry from "./MeasurementEntry.jsx";
 import LoadSummary from "./LoadSummary.jsx";
 import { decimalToFraction } from "../../utils/fractionParser.js";
-import { fixed2 } from "../../utils/loadMath.js";
 
 export default function NewLoad({
   settings,
@@ -38,7 +39,8 @@ export default function NewLoad({
   recentLoads = [],
   user,
 }) {
-  const { pick } = useLanguage();
+  const { pick, language } = useLanguage();
+  const locale = language === "te" ? "te-IN" : "en-IN";
   const [draft, setDraft] = useState(
     () =>
       initialDraft || {
@@ -114,26 +116,88 @@ export default function NewLoad({
   useEffect(() => {
     if (!recoveryReady || lock.current || reviseOf) return;
     const value = { ...draft, entry };
+    // Every change is saved on this device, so a closed tab or ended session
+    // keeps the load. Each load has its own slot, keyed by clientRequestId.
     const operation = hasDraftContent(value)
       ? writeDraft(value, settings.id)
-      : clearDraft(settings.id);
+      : clearDraft(settings.id, localStorage, draft.clientRequestId);
     let cancelled = false;
     operation.then((ok) => {
       if (!cancelled)
         setStorageError(
-          ok
+          ok === true
             ? ""
-            : "This browser cannot keep a recovery copy. Save your draft before leaving.",
+            : ok === DRAFTS_FULL
+              ? pick(
+                  `This phone already keeps ${MAX_DRAFTS} unfinished loads. Save or delete one so this load is kept.`,
+                  `ఈ ఫోన్‌లో ఇప్పటికే ${MAX_DRAFTS} పూర్తి కాని లోడ్లు ఉన్నాయి. ఈ లోడ్ ఉండాలంటే ఒకదాన్ని సేవ్ చేయండి లేదా తొలగించండి.`,
+                )
+              : "This browser cannot keep a recovery copy. Save your draft before leaving.",
         );
     });
     return () => {
       cancelled = true;
     };
-  }, [draft, entry, settings.id, recoveryReady, reviseOf]);
+  }, [draft, entry, settings.id, recoveryReady, reviseOf, pick]);
+  // Autosave keeps ordinary loads on this phone. Two cases are not kept and get
+  // a leave warning: an admin revision (never stored locally) with edits, and a
+  // load the phone could not store (drafts full or storage unavailable).
+  const [openedRevision] = useState(() => JSON.stringify(draft.rows));
+  const revisionDirty =
+    Boolean(reviseOf) &&
+    (JSON.stringify(draft.rows) !== openedRevision ||
+      Boolean(entry.length || entry.width) ||
+      ["partyName", "truckNumber", "date", "buyerDestination", "supervisor", "fee"].some(
+        (key) => String(draft[key] ?? "") !== String(initialDraft?.[key] ?? ""),
+      ));
+  const unstored =
+    !reviseOf && Boolean(storageError) && hasDraftContent({ ...draft, entry });
+  const mayLoseWork = !busy && (revisionDirty || unstored);
+  useEffect(() => {
+    if (!mayLoseWork) return;
+    const warn = (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [mayLoseWork]);
   async function goBack() {
+    if (
+      mayLoseWork &&
+      !window.confirm(
+        revisionDirty
+          ? pick(
+              "Leave without saving your invoice changes?",
+              "బిల్లు మార్పులు సేవ్ చేయకుండా వెళ్ళాలా?",
+            )
+          : pick(
+              "This load is not stored on this phone. Leave without saving it?",
+              "ఈ లోడ్ ఈ ఫోన్‌లో నిల్వ కాలేదు. సేవ్ చేయకుండా వెళ్ళాలా?",
+            ),
+      )
+    )
+      return;
     if (!reviseOf) await flushDraft(settings.id);
     onBack();
   }
+  // The edit and review screens swap the button that was clicked; move focus to the heading.
+  const heading = useRef(null);
+  function showReview(value) {
+    setReview(value);
+    requestAnimationFrame(() => heading.current?.focus({ preventScroll: true }));
+  }
+  // Last removed entry, offered back for a few seconds.
+  const [removed, setRemoved] = useState(null);
+  useEffect(() => {
+    if (!removed) return;
+    const timer = setTimeout(() => setRemoved(null), 6000);
+    return () => clearTimeout(timer);
+  }, [removed]);
+  const focusLength = () =>
+    requestAnimationFrame(() =>
+      root.current?.querySelector('input[name="length"]')?.focus(),
+    );
   // Move focus to the first field with an inline error (the browser scrolls it
   // into view). With no invalid field, bring the measurements message into view.
   function focusFirstProblem() {
@@ -209,8 +273,48 @@ export default function NewLoad({
       setBusy(false);
     }
   }
-  const rows = previewRows(draft.rows);
-  const summary = summarize(draft.rows, draft.fee);
+  // Typing in Length/Width re-renders this screen; only recompute rows when they change.
+  const rows = useMemo(() => previewRows(draft.rows), [draft.rows]);
+  const summary = useMemo(
+    () => summarize(draft.rows, draft.fee),
+    [draft.rows, draft.fee],
+  );
+  const rowGroups = useMemo(() => {
+    const lastIndex = new Map();
+    rows.forEach((r, i) => lastIndex.set(r.rowNo, i));
+    return [...lastIndex.keys()]
+      .sort((a, b) => (review ? a - b : lastIndex.get(b) - lastIndex.get(a)))
+      .map((no) => {
+        const lines = rows
+          .map((r, i) => ({ r, i }))
+          .filter(({ r }) => r.rowNo === no)
+          .map((line, order) => ({ ...line, order }));
+        lines.sort((a, b) =>
+          review
+            ? (a.r.category === "TOP") - (b.r.category === "TOP")
+            : b.i - a.i,
+        );
+        return { no, lines };
+      });
+  }, [rows, review]);
+  const areaFormat = useMemo(
+    () =>
+      new Intl.NumberFormat(locale, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }),
+    [locale],
+  );
+  const countFormat = useMemo(() => new Intl.NumberFormat(locale), [locale]);
+  const reviewDate = (iso) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso || "")) return iso;
+    return new Intl.DateTimeFormat(locale, {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      timeZone: "Asia/Kolkata",
+    }).format(new Date(`${iso}T00:00:00+05:30`));
+  };
   const change = (key) => (e) => {
     setDraft({ ...draft, [key]: e.target.value });
     if (fieldErrors[key])
@@ -241,7 +345,7 @@ export default function NewLoad({
     if (!checkLoad("Add the measurement row you are entering before reviewing"))
       return;
     setError("");
-    setReview(true);
+    showReview(true);
     window.scrollTo(0, 0);
   }
   async function save(finalize) {
@@ -291,7 +395,8 @@ export default function NewLoad({
         record = await request(`/dispatches/${record.id}/finalize`, {
           method: "POST",
         });
-      if (settings.id) await clearDraft(settings.id);
+      if (settings.id)
+        await clearDraft(settings.id, localStorage, draft.clientRequestId);
       onSaved(record);
     } catch (err) {
       setError(err.message);
@@ -309,7 +414,7 @@ export default function NewLoad({
   return (
     <div className="space-y-4" ref={root}>
       <div className="screen-heading">
-        <h1>
+        <h1 ref={heading} tabIndex={-1}>
           {review
             ? reviseOf
               ? pick("Review changes", "మార్పులు తనిఖీ చేయండి")
@@ -322,7 +427,7 @@ export default function NewLoad({
           type="button"
           className="text-button"
           disabled={busy}
-          onClick={review ? () => setReview(false) : goBack}
+          onClick={review ? () => showReview(false) : goBack}
         >
           {review
             ? pick("Back to edit", "వివరాలు మార్చండి")
@@ -358,6 +463,7 @@ export default function NewLoad({
             <ComboField
               en="Party name"
               te="పార్టీ పేరు"
+              name="partyName"
               required
               maxLength={120}
               options={choices("partyName")}
@@ -368,6 +474,8 @@ export default function NewLoad({
             <ComboField
               en="Truck number"
               te="లారీ నంబర్"
+              name="truckNumber"
+              spellCheck={false}
               required
               maxLength={40}
               autoCapitalize="characters"
@@ -379,6 +487,7 @@ export default function NewLoad({
             <DateField
               en="Load date"
               te="తేదీ"
+              name="date"
               required
               error={fieldErrors.date}
               value={draft.date}
@@ -387,6 +496,7 @@ export default function NewLoad({
             <ComboField
               en="Destination"
               te="గమ్యస్థానం"
+              name="buyerDestination"
               required
               maxLength={200}
               options={choices("buyerDestination", settings.savedDestinations)}
@@ -399,6 +509,8 @@ export default function NewLoad({
             <Field
               en="Supervisor"
               te="సూపర్‌వైజర్"
+              name="supervisor"
+              autoComplete="off"
               required
               maxLength={120}
               error={fieldErrors.supervisor}
@@ -421,7 +533,7 @@ export default function NewLoad({
             {[
               [pick("Party", "పార్టీ"), draft.partyName, true],
               [pick("Truck", "లారీ"), draft.truckNumber],
-              [pick("Date", "తేదీ"), draft.date],
+              [pick("Date", "తేదీ"), reviewDate(draft.date)],
               [pick("Destination", "గమ్యస్థానం"), draft.buyerDestination],
               [pick("Supervisor", "సూపర్‌వైజర్"), draft.supervisor],
             ].map(([label, value, strong]) => (
@@ -433,45 +545,49 @@ export default function NewLoad({
           </dl>
         </Card>
       )}
-      {[...new Set(rows.map((r) => r.rowNo))]
-        .sort((a, b) =>
-          review
-            ? a - b
-            : rows.findLastIndex((r) => r.rowNo === b) -
-              rows.findLastIndex((r) => r.rowNo === a),
-        )
-        .map((no) => {
-          const lines = rows
-            .map((r, i) => ({ r, i }))
-            .filter(({ r }) => r.rowNo === no)
-            .map((line, order) => ({ ...line, order }));
-          lines.sort((a, b) =>
-            review
-              ? (a.r.category === "TOP") - (b.r.category === "TOP")
-              : b.i - a.i,
-          );
+      {removed && !review && (
+        <p role="status" aria-live="polite" className="measurement-undo">
+          {pick("Entry removed.", "కొలత తొలగించబడింది.")}{" "}
+          <button
+            type="button"
+            className="text-button"
+            onClick={() => {
+              const rowsBack = [...draft.rows];
+              rowsBack.splice(Math.min(removed.index, rowsBack.length), 0, removed.row);
+              setDraft({ ...draft, rows: rowsBack });
+              setRemoved(null);
+            }}
+          >
+            {pick("Undo", "రద్దు చేయండి")}
+          </button>
+        </p>
+      )}
+      {rowGroups.map(({ no, lines }) => {
+          const titleId = `row-group-${no}-title`;
           return (
             <section
               key={no}
               className="row-group"
-              aria-label={`${pick("Row", "వరుస")} ${no}`}
+              aria-labelledby={titleId}
             >
-              <h2 className="row-group-title">
+              <h2 className="row-group-title" id={titleId}>
                 {pick("Row", "వరుస")} {no}
               </h2>
-              {lines.map(({ r, i, order }, n) => (
+              {lines.map(({ r, i, order }, n) => {
+                const position = (review ? n : order) + 1;
+                return (
                 <Card key={i} className="measurement-record gap-2">
                   <strong className="break-words">
-                    {(review ? n : order) + 1}. {r.stoneType} · {r.finish}
+                    {position}. {r.stoneType} · {r.finish}
                     {r.category === "TOP" ? ` · ${pick("Top", "టాప్")}` : ""}
                   </strong>
                   <p>
                     {decimalToFraction(r.lengthFt)} ×{" "}
-                    {decimalToFraction(r.widthFt)} {pick("ft", "అడుగులు")} ×{" "}
-                    {r.quantity} {pick("pieces", "ముక్కలు")}
+                    {decimalToFraction(r.widthFt)}{"\u00A0"}{pick("ft", "అడుగులు")} ×{" "}
+                    {countFormat.format(r.quantity)}{"\u00A0"}{pick("pieces", "ముక్కలు")}
                   </p>
                   <p className="font-semibold">
-                    {fixed2(r.sqFt)} {pick("sq ft", "చ.అ.")} ·{" "}
+                    {areaFormat.format(r.sqFt)}{"\u00A0"}{pick("sq\u00A0ft", "చ.అ.")} ·{" "}
                     {money(r.lineTotal)}
                   </p>
                   {!review && (
@@ -479,6 +595,10 @@ export default function NewLoad({
                       <Button
                         en="Edit entry"
                         te="కొలత మార్చండి"
+                        aria-label={pick(
+                          `Edit entry ${position}, row ${no}`,
+                          `కొలత మార్చండి ${position}, వరుస ${no}`,
+                        )}
                         onClick={() => {
                           if (entry.length || entry.width) {
                             setNotice(
@@ -506,22 +626,34 @@ export default function NewLoad({
                             ...draft,
                             rows: draft.rows.filter((_, index) => index !== i),
                           });
+                          setRemoved(null);
+                          focusLength();
                         }}
                       />
                       <Button
                         en="Remove entry"
                         te="కొలత తొలగించండి"
-                        onClick={() =>
+                        aria-label={pick(
+                          `Remove entry ${position}, row ${no}`,
+                          `కొలత తొలగించండి ${position}, వరుస ${no}`,
+                        )}
+                        onClick={() => {
                           setDraft({
                             ...draft,
                             rows: draft.rows.filter((_, index) => index !== i),
-                          })
-                        }
+                          });
+                          setRemoved({ row: draft.rows[i], index: i });
+                          // Focus moves to the Undo offer, which names what happened.
+                          requestAnimationFrame(() =>
+                            root.current?.querySelector(".measurement-undo button")?.focus(),
+                          );
+                        }}
                       />
                     </div>
                   )}
                 </Card>
-              ))}
+                );
+              })}
             </section>
           );
         })}
@@ -533,6 +665,7 @@ export default function NewLoad({
             type="number"
             min="0"
             step="0.01"
+            name="fee"
             error={fieldErrors.fee}
             value={draft.fee}
             onChange={change("fee")}

@@ -5,6 +5,19 @@ import { Button, Card } from "./Controls.jsx";
 import Icon from "./Icon.jsx";
 import DashboardAnalytics from "./DashboardAnalytics.jsx";
 
+// Hash links: let Cmd/Ctrl/Shift/middle-click open a new tab, handle plain clicks in-app.
+const isPlainClick = (e) =>
+  e.button === 0 && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey);
+// The table and the mobile cards render the same controls; focus the copy that is on screen.
+function focusShown(selector) {
+  requestAnimationFrame(() => {
+    const target = [...document.querySelectorAll(selector)].find(
+      (element) => element.getClientRects().length > 0,
+    );
+    target?.focus();
+  });
+}
+
 export default function LoadHub({
   loads,
   view,
@@ -16,8 +29,10 @@ export default function LoadHub({
   onLoadMore,
   hasMore,
   loading,
-  recovery,
+  recoveries = [],
+  maxDrafts = 5,
   onContinue,
+  onDeleteRecovery,
   onNavigate,
   onNew,
   updatedAt,
@@ -82,6 +97,7 @@ export default function LoadHub({
     try {
       await onDelete(id);
       setConfirmId(null);
+      focusShown("#workspace-main");
     } catch (err) {
       const message =
         err?.status === 409
@@ -95,27 +111,66 @@ export default function LoadHub({
                 "బిల్లులను తొలగించడానికి మీకు అనుమతి లేదు.",
               )
             : err?.message ||
-              pick("Could not delete the invoice.", "బిల్లును తొలగించలేకపోయాము.");
+              pick(
+                "Could not delete the invoice. Check your connection and try again.",
+                "బిల్లును తొలగించలేకపోయాము. కనెక్షన్ తనిఖీ చేసి మళ్ళీ ప్రయత్నించండి.",
+              );
       setDeleteError({ id, message });
     } finally {
       setDeletingId(null);
     }
   }
+  function openConfirm(id) {
+    setConfirmId(id);
+    setDeleteError(null);
+    focusShown(`[data-delete-cancel="${id}"]`);
+  }
+  function cancelConfirm(id) {
+    setConfirmId(null);
+    setDeleteError(null);
+    focusShown(`[data-delete-trigger="${id}"]`);
+  }
+  // Unsaved phone drafts use the same inline confirm as invoice rows.
+  const [confirmRecovery, setConfirmRecovery] = useState(null);
+  async function deleteRecovery(item) {
+    const deleted = await onDeleteRecovery(item);
+    setConfirmRecovery(null);
+    if (deleted === false)
+      focusShown(`[data-recovery-trigger="${item.clientRequestId}"]`);
+    else focusShown("#resume-heading, #workspace-main");
+  }
+  // Navigation stays a real link (new tab, copy address) while plain clicks stay in-app.
+  const billLink = (id) => ({
+    href: `#bill/${id}`,
+    onClick: (event) => {
+      if (!isPlainClick(event)) return;
+      event.preventDefault();
+      onOpen(id);
+    },
+  });
+  const pageLink = (target) => ({
+    href: `#${target}`,
+    onClick: (event) => {
+      if (!isPlainClick(event)) return;
+      event.preventDefault();
+      onNavigate(target);
+    },
+  });
   const deleteControl = (item) => {
     if (!canDelete(item)) return null;
     const busy = deletingId === item.id;
     const lorry = item.logistics?.truckNumber || "";
     const error = deleteError?.id === item.id ? deleteError.message : "";
     return (
-      <div className="load-delete flex flex-wrap items-center justify-end gap-2 text-sm">
+      <div className="load-delete" data-state={confirmId === item.id ? "confirming" : "idle"}>
         {confirmId === item.id ? (
           <>
-            <span className="text-gray-700">
+            <span className="load-delete-question" role="status">
               {pick("Delete this invoice?", "ఈ బిల్లును తొలగించాలా?")}
             </span>
             <button
               type="button"
-              className="text-button text-red-700"
+              className="load-delete-confirm"
               disabled={busy}
               aria-busy={busy}
               onClick={(event) => {
@@ -126,15 +181,16 @@ export default function LoadHub({
               {busy
                 ? pick("Deleting…", "తొలగిస్తోంది…")
                 : pick("Yes, delete", "అవును, తొలగించండి")}
+              <span className="sr-only">{` ${lorry}`}</span>
             </button>
             <button
               type="button"
-              className="text-button"
+              className="load-delete-cancel"
+              data-delete-cancel={item.id}
               disabled={busy}
               onClick={(event) => {
                 event.stopPropagation();
-                setConfirmId(null);
-                setDeleteError(null);
+                cancelConfirm(item.id);
               }}
             >
               {pick("Cancel", "రద్దు")}
@@ -143,23 +199,24 @@ export default function LoadHub({
         ) : (
           <button
             type="button"
-            className="text-button text-red-700"
+            className="icon-delete-button"
+            data-delete-trigger={item.id}
             disabled={deletingId !== null}
             aria-label={pick(
               `Delete invoice ${lorry}`,
               `${lorry} బిల్లును తొలగించండి`,
             )}
+            title={pick("Delete", "తొలగించు")}
             onClick={(event) => {
               event.stopPropagation();
-              setConfirmId(item.id);
-              setDeleteError(null);
+              openConfirm(item.id);
             }}
           >
-            {pick("Delete", "తొలగించు")}
+            <Icon name="trash" className="h-4 w-4" />
           </button>
         )}
         {error && (
-          <p role="alert" className="control-error w-full text-right">
+          <p role="alert" className="control-error load-delete-error">
             {error}
           </p>
         )}
@@ -244,37 +301,94 @@ export default function LoadHub({
       </header>
       {view === "home" && (
         <>
-          {recovery && (
+          {recoveries.length > 0 && (
             <section
-              className="dashboard-resume"
+              className="dashboard-resume-list"
               aria-labelledby="resume-heading"
             >
-              <div className="dashboard-resume-text">
-                <div className="dashboard-resume-top">
-                  <h2 id="resume-heading" className="surface-kicker">
-                    {pick("Pick up where you left off", "మీ లోడ్ కొనసాగించండి")}
-                  </h2>
-                  <span className="priority-status is-pending">
-                    {pick("Unsaved", "సేవ్ కాలేదు")}
-                  </span>
-                </div>
-                <p className="dashboard-resume-name">
-                  {recovery.partyName ||
-                    recovery.truckNumber ||
-                    pick(
-                      "An unfinished load is saved on this phone.",
-                      "ఈ ఫోన్‌లో పూర్తి కాని లోడ్ సేవ్ అయింది.",
-                    )}
-                </p>
+              <div className="dashboard-resume-top">
+                <h2 id="resume-heading" className="surface-kicker" tabIndex={-1}>
+                  {pick("Pick up where you left off", "మీ లోడ్ కొనసాగించండి")}
+                </h2>
+                <span className="priority-status is-pending">
+                  {pick(
+                    `${recoveries.length} of ${maxDrafts} unsaved`,
+                    `${maxDrafts} లో ${recoveries.length} సేవ్ కాలేదు`,
+                  )}
+                </span>
               </div>
-              <Button
-                className="dashboard-resume-action"
-                en="Continue unsaved load"
-                te="లోడ్ కొనసాగించండి"
-                onClick={onContinue}
-              >
-                <Icon name="arrow" className="h-4 w-4" />
-              </Button>
+              <ul className="dashboard-resume-items">
+                {recoveries.map((item, index) => {
+                  const name =
+                    item.partyName ||
+                    item.truckNumber ||
+                    pick("Unfinished load", "పూర్తి కాని లోడ్");
+                  return (
+                    <li key={item.clientRequestId} className="dashboard-resume" style={{ "--index": index }}>
+                      <div className="dashboard-resume-text">
+                        <p className="dashboard-resume-name">{name}</p>
+                        <p className="queue-sub">
+                          {item.rows.length} {pick("rows", "వరుసలు")}
+                          {item.savedAt
+                            ? ` · ${pick("saved", "సేవ్")} ${dateFormat.format(new Date(item.savedAt))}`
+                            : ""}
+                        </p>
+                      </div>
+                      <div className="dashboard-resume-actions">
+                        {confirmRecovery === item.clientRequestId ? (
+                          <div className="load-delete" data-state="confirming">
+                            <span className="load-delete-question" role="status">
+                              {pick("Delete this unsaved load?", "ఈ సేవ్ కాని లోడ్ తొలగించాలా?")}
+                            </span>
+                            <button
+                              type="button"
+                              className="load-delete-confirm"
+                              onClick={() => deleteRecovery(item)}
+                            >
+                              {pick("Yes, delete", "అవును, తొలగించండి")}
+                              <span className="sr-only">{` ${name}`}</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="load-delete-cancel"
+                              data-recovery-cancel={item.clientRequestId}
+                              onClick={() => {
+                                setConfirmRecovery(null);
+                                focusShown(`[data-recovery-trigger="${item.clientRequestId}"]`);
+                              }}
+                            >
+                              {pick("Cancel", "రద్దు")}
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            className="icon-delete-button dashboard-resume-delete"
+                            data-recovery-trigger={item.clientRequestId}
+                            aria-label={pick(`Delete unsaved load ${name}`, `సేవ్ కాని లోడ్ ${name} తొలగించండి`)}
+                            title={pick("Delete", "తొలగించండి")}
+                            onClick={() => {
+                              setConfirmRecovery(item.clientRequestId);
+                              focusShown(`[data-recovery-cancel="${item.clientRequestId}"]`);
+                            }}
+                          >
+                            <Icon name="trash" className="h-4 w-4" />
+                          </button>
+                        )}
+                        {confirmRecovery !== item.clientRequestId && <Button
+                          className="dashboard-resume-action"
+                          en="Continue"
+                          te="కొనసాగించండి"
+                          aria-label={pick(`Continue ${name}`, `${name} కొనసాగించండి`)}
+                          onClick={() => onContinue(item)}
+                        >
+                          <Icon name="arrow" className="h-4 w-4" />
+                        </Button>}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             </section>
           )}
           <div className="dashboard-overview">
@@ -314,13 +428,12 @@ export default function LoadHub({
                 <ul className="dashboard-queue">
                   {oldestDrafts.map((item) => (
                     <li key={item.id}>
-                      <button
-                        type="button"
+                      <a
                         className="dashboard-queue-row"
-                        onClick={() => onOpen(item.id)}
+                        {...billLink(item.id)}
                       >
                         <span className="queue-main">
-                          <span className="queue-lorry">
+                          <span className="queue-lorry" translate="no">
                             {item.logistics?.truckNumber || "—"}
                           </span>
                           <span className="queue-sub">
@@ -336,7 +449,7 @@ export default function LoadHub({
                           </span>
                           <span className="queue-sub">{age(item.date)}</span>
                         </span>
-                      </button>
+                      </a>
                     </li>
                   ))}
                 </ul>
@@ -368,9 +481,9 @@ export default function LoadHub({
               )}
             </section>
             <div className="dashboard-supporting">
-              <section className="dashboard-support-metric">
+              <section className="dashboard-support-metric" aria-labelledby="road-metric-label">
                 <div className="dashboard-metric-label">
-                  <span>
+                  <span id="road-metric-label">
                     {pick("On the road", "ప్రయాణంలో")} · {transit.length}
                   </span>
                   <Icon name="truck" />
@@ -381,13 +494,12 @@ export default function LoadHub({
                       const days = daysSince(item.date);
                       return (
                         <li key={item.id}>
-                          <button
-                            type="button"
+                          <a
                             className="dashboard-queue-row"
-                            onClick={() => onOpen(item.id)}
+                            {...billLink(item.id)}
                           >
                             <span className="queue-main">
-                              <span className="queue-lorry">
+                              <span className="queue-lorry" translate="no">
                                 {item.logistics?.truckNumber || "—"}
                               </span>
                               <span className="queue-sub">
@@ -401,7 +513,7 @@ export default function LoadHub({
                             >
                               {age(item.date)}
                             </span>
-                          </button>
+                          </a>
                         </li>
                       );
                     })}
@@ -411,18 +523,17 @@ export default function LoadHub({
                     {pick("No lorries on the road.", "ప్రయాణంలో లారీలు లేవు.")}
                   </p>
                 )}
-                <button
-                  type="button"
+                <a
                   className="dashboard-metric-link"
-                  onClick={() => onNavigate("entries?status=Dispatched")}
+                  {...pageLink("entries?status=Dispatched")}
                 >
                   {pick("Loads in transit", "ప్రయాణంలో లోడ్లు")}
                   <Icon name="arrow" />
-                </button>
+                </a>
               </section>
-              <section className="dashboard-support-metric">
+              <section className="dashboard-support-metric" aria-labelledby="billed-metric-label">
                 <div className="dashboard-metric-label">
-                  <span>{pick("Billed this month", "ఈ నెల బిల్లులు")}</span>
+                  <span id="billed-metric-label">{pick("Billed this month", "ఈ నెల బిల్లులు")}</span>
                   <Icon name="bill" />
                 </div>
                 <strong className="dashboard-metric-value">
@@ -434,14 +545,13 @@ export default function LoadHub({
                     `${monthBills.length} బిల్లులు · మొత్తం ${money(sumBilled(invoices))}`,
                   )}
                 </p>
-                <button
-                  type="button"
+                <a
                   className="dashboard-metric-link"
-                  onClick={() => onNavigate("entries")}
+                  {...pageLink("entries")}
                 >
                   {pick("All loads", "అన్ని లోడ్లు")}
                   <Icon name="arrow" />
-                </button>
+                </a>
               </section>
             </div>
           </div>
@@ -598,7 +708,7 @@ export default function LoadHub({
                 {visible.map((item) => (
                   <tr key={item.id}>
                     <th scope="row">
-                      <strong>{item.logistics.truckNumber}</strong>
+                      <strong translate="no">{item.logistics.truckNumber}</strong>
                       <span className="record-party">
                         {item.partyName || item.logistics.buyerDestination}
                       </span>
@@ -617,19 +727,20 @@ export default function LoadHub({
                     <td className="numeric">
                       {money(item.summary.netBillableAmount)}
                     </td>
-                    <td>
-                      <button
-                        type="button"
+                    <td className="load-actions-cell">
+                      <div className="load-actions">
+                      {deleteControl(item)}
+                      <a
                         className="table-open-button"
                         aria-label={pick(
                           `Open load ${item.logistics.truckNumber}`,
                           `${item.logistics.truckNumber} లోడ్ తెరవండి`,
                         )}
-                        onClick={() => onOpen(item.id)}
+                        {...billLink(item.id)}
                       >
                         <Icon name="arrow" />
-                      </button>
-                      {deleteControl(item)}
+                      </a>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -646,7 +757,7 @@ export default function LoadHub({
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 className="break-words text-lg font-bold">
+                  <h3 className="break-words text-lg font-bold" translate="no">
                     {item.logistics.truckNumber}
                   </h3>
                   <p className="mt-1 break-words text-sm text-gray-700">
@@ -669,36 +780,42 @@ export default function LoadHub({
                   {money(item.summary.netBillableAmount)}
                 </strong>
               </div>
-              <Button
-                className="w-full justify-between"
-                en={item.status === "Draft" ? "Review draft" : "View invoice"}
-                te={
-                  item.status === "Draft" ? "డ్రాఫ్ట్ చూడండి" : "బిల్లు చూడండి"
-                }
-                onClick={() => onOpen(itemId)}
-              >
-                <Icon name="arrow" />
-              </Button>
-              {deleteControl(item)}
+              <div className="load-actions load-actions-card">
+                <a
+                  className="btn control-button control-button-secondary load-open-wide justify-between"
+                  {...billLink(itemId)}
+                >
+                  <span className="control-label">
+                    {item.status === "Draft"
+                      ? pick("Review draft", "డ్రాఫ్ట్ చూడండి")
+                      : pick("View invoice", "బిల్లు చూడండి")}
+                  </span>
+                  <Icon name="arrow" />
+                </a>
+                {deleteControl(item)}
+              </div>
             </Card>
           );
         })}
         {view === "home" && loads.length > 5 && (
-          <Button
-            className="w-full"
-            en="View all loads"
-            te="అన్ని లోడ్లు చూడండి"
-            onClick={() => onNavigate("entries")}
-          />
+          <a
+            className="btn control-button control-button-secondary w-full"
+            {...pageLink("entries")}
+          >
+            <span className="control-label">
+              {pick("View all loads", "అన్ని లోడ్లు చూడండి")}
+            </span>
+          </a>
         )}
       </section>
       {view !== "home" && hasMore && (
         <Button
           className="w-full"
-          en="Load more"
-          te="మరిన్ని చూడండి"
+          en={loading ? "Loading…" : "Load more"}
+          te={loading ? "లోడ్ అవుతోంది…" : "మరిన్ని చూడండి"}
           onClick={onLoadMore}
           disabled={loading}
+          aria-busy={loading}
         />
       )}
       {updatedAt && (

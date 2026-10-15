@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { AREA_ROUNDING_NOTE, formatA4Dimension, formatA4Number, formatA4Rate } from './a4InvoiceModel.js';
+import { AREA_ROUNDING_NOTE, SAMPLE_BANK_PAIRS, bankDetailPairs, bankDetailSegments, formatA4Dimension, formatA4Number } from './a4InvoiceModel.js';
 import { planA4Invoice } from './a4InvoicePagination.js';
 
 // Vector PDF of the approved A4 buyer invoice. It draws the same prepared model
@@ -14,10 +14,12 @@ import { planA4Invoice } from './a4InvoicePagination.js';
 
 const ink = [32, 61, 54], muted = [82, 102, 97], accent = [23, 100, 93];
 const border = [226, 232, 229], rule = [238, 242, 240], tint = [241, 246, 243], totalTint = [224, 236, 230];
+// Grayscale palette for the final-page settlement block and the page footer only.
+const sumInk = [34, 34, 34], sumMuted = [102, 102, 102], sumLine = [227, 227, 227], sumTint = [244, 244, 244];
 
 const LEFT = 12, RIGHT = 198, WIDTH = RIGHT - LEFT;
 const DIVIDER_Y = 49, COLUMNS_TOP = 53, CONTENT_BOTTOM = 276, FOOT_LINE = 280;
-const CONTINUATION_H = 7, SUMMARY_H = 38, SUMMARY_GAP = 4;
+const CONTINUATION_H = 7, SUMMARY_H = 42, SUMMARY_GAP = 4;
 const COLUMN_GAP = 4, COLUMN_W = (WIDTH - 2 * COLUMN_GAP) / 3;
 const COLUMN_X = [0, 1, 2].map(i => LEFT + i * (COLUMN_W + COLUMN_GAP));
 const HEADING_H = 5.5, THEAD_H = 4.6, ROW_H = 4.3, BLOCK_GAP = 4;
@@ -25,7 +27,6 @@ const HEADING_H = 5.5, THEAD_H = 4.6, ROW_H = 4.3, BLOCK_GAP = 4;
 const CELL_SHARES = [0.16, 0.2, 0.2, 0.14, 0.3];
 
 const rs = value => `Rs. ${formatA4Number(value)}`;
-const rate = value => formatA4Rate(value).replace('₹', 'Rs. ');
 
 function cells(x) {
   const edges = [x];
@@ -145,76 +146,115 @@ function drawGroup(doc, x, y, group, from, to) {
   }
 }
 
-// Amount in words, bank details, rounding note and signature. Returns its height and a painter.
+// Lowers the current font size until text fits maxW (or reaches min); returns the size used.
+function fit(doc, text, maxW, size, min = 7) {
+  doc.setFontSize(size);
+  while (size > min && doc.getTextWidth(text) > maxW) doc.setFontSize(size -= 0.5);
+  return size;
+}
+
+const BANK_W = 0.7 * WIDTH, BANK_ROW = 4.4;
+
+// Amount in words, rounding note, bank details and signature. Returns its height and a painter.
 function closingBlock(doc, model) {
-  const textW = 120;
-  doc.setFont('helvetica', 'bold').setFontSize(8);
-  const words = lines(doc, model.amountWords, textW, 3);
-  const bank = model.seller.bankDetails;
-  doc.setFont('helvetica', 'normal').setFontSize(7.5);
-  const bankLines = bank ? lines(doc, bank, textW, 3) : [];
-  doc.setFontSize(6);
-  const note = lines(doc, AREA_ROUNDING_NOTE, textW, 3);
-  const textH = 4.5 + words.length * 3.7 + (bankLines.length ? 4.5 + bankLines.length * 3.4 : 0) + 1.5 + note.length * 2.7;
-  const height = Math.max(textH, 18) + 3;
+  const sample = model.mode === 'sample';
+  const bankText = model.seller.bankDetails;
+  const pairs = sample ? SAMPLE_BANK_PAIRS : bankText ? bankDetailPairs(bankText) : null;
+  const showBank = sample || Boolean(bankText);
+  doc.setFont('helvetica', 'bold').setFontSize(6);
+  const wordsLabelW = doc.getTextWidth('AMOUNT IN WORDS') + 15 * 0.3;
+  const wordsX = LEFT + wordsLabelW + 2.5;
+  doc.setFontSize(8);
+  const words = lines(doc, model.amountWords, RIGHT - wordsX, 2);
+  doc.setFont('helvetica', 'normal').setFontSize(6);
+  const note = lines(doc, AREA_ROUNDING_NOTE, WIDTH, 2);
+  doc.setFont('helvetica', 'bold').setFontSize(7.5);
+  const bankLines = showBank && !pairs ? lines(doc, bankDetailSegments(bankText).join(' · '), BANK_W, 2) : [];
+  const bankH = !showBank ? 0 : 4 + (pairs ? Math.ceil(pairs.length / 3) * BANK_ROW : bankLines.length * 3.4);
+  // Offsets from the block top: words baseline, note baseline, hairline above bank + signature.
+  const wordsY = 4.5, noteY = wordsY + (words.length - 1) * 3.6 + 4.2, footTopY = noteY + (note.length - 1) * 2.7 + 3;
+  const footH = Math.max(bankH, 14);
+  const height = footTopY + footH + 3;
   const draw = y => {
-    doc.setDrawColor(...border).setLineWidth(0.2).line(LEFT, y, RIGHT, y);
-    let cursor = y + 4.5;
-    doc.setFont('helvetica', 'normal').setFontSize(6).setTextColor(...muted).text('AMOUNT IN WORDS', LEFT, cursor);
-    doc.setFont('helvetica', 'bold').setFontSize(8).setTextColor(...ink).text(words, LEFT, cursor + 3.8, { lineHeightFactor: 1.3 });
-    cursor += 3.8 + words.length * 3.7;
-    if (bankLines.length) {
-      doc.setFont('helvetica', 'normal').setFontSize(6).setTextColor(...muted).text('BANK / UPI DETAILS', LEFT, cursor + 1);
-      doc.setFontSize(7.5).setTextColor(...ink).text(bankLines, LEFT, cursor + 4.5, { lineHeightFactor: 1.3 });
-      cursor += 4.5 + bankLines.length * 3.4;
+    doc.setFont('helvetica', 'bold').setFontSize(6).setTextColor(...sumMuted).text('AMOUNT IN WORDS', LEFT, y + wordsY, { charSpace: 0.3 });
+    // 8pt text at lineHeightFactor 1.27 advances ~3.6 mm per line; 6pt at 1.27 ~2.7 mm.
+    doc.setFont('helvetica', 'bold').setFontSize(8).setTextColor(...sumInk).text(words, wordsX, y + wordsY, { lineHeightFactor: 1.27 });
+    doc.setFont('helvetica', 'normal').setFontSize(6).setTextColor(...sumMuted).text(note, LEFT, y + noteY, { lineHeightFactor: 1.27 });
+    const footTop = y + footTopY;
+    doc.setDrawColor(...sumLine).setLineWidth(0.2).line(LEFT, footTop, RIGHT, footTop);
+    if (showBank) {
+      const labelY = footTop + 4.5;
+      doc.setFont('helvetica', 'bold').setFontSize(6).setTextColor(...sumMuted).text('BANK DETAILS', LEFT, labelY, { charSpace: 0.3 });
+      if (sample) {
+        const after = LEFT + doc.getTextWidth('BANK DETAILS') + 12 * 0.3 + 2;
+        doc.setFont('helvetica', 'normal').setFontSize(6).text('Preview placeholders only', after, labelY);
+      }
+      if (pairs) {
+        const cellW = BANK_W / 3;
+        pairs.forEach(([label, value], i) => {
+          const x = LEFT + (i % 3) * cellW, base = labelY + 4.4 + Math.floor(i / 3) * BANK_ROW;
+          doc.setFont('helvetica', 'normal').setFontSize(6.5).setTextColor(...sumMuted).text(`${label}:`, x, base);
+          const labelW = doc.getTextWidth(`${label}:`);
+          doc.setFont('helvetica', 'bold').setFontSize(7).setTextColor(...sumInk).text(lines(doc, value, Math.max(4, cellW - labelW - 3), 1), x + labelW + 1.2, base);
+        });
+      } else {
+        doc.setFont('helvetica', 'bold').setFontSize(7.5).setTextColor(...sumInk).text(bankLines, LEFT, labelY + 4.4, { lineHeightFactor: 1.27 });
+      }
     }
-    doc.setFont('helvetica', 'normal').setFontSize(6).setTextColor(...muted).text(note, LEFT, cursor + 1.5, { lineHeightFactor: 1.3 });
-    const signX = 150, signY = y + height - 7;
-    doc.setDrawColor(...ink).setLineWidth(0.25).line(signX, signY, RIGHT, signY);
-    const [strong, caption] = model.mode === 'sample' ? ['Sample only', 'Not valid for payment'] : [model.seller.signatoryName, 'Authorized signatory'];
-    if (strong) doc.setFont('helvetica', 'bold').setFontSize(8).setTextColor(...ink).text(lines(doc, strong, RIGHT - signX, 1), RIGHT, signY - 1.5, { align: 'right' });
-    doc.setFont('helvetica', 'normal').setFontSize(7).setTextColor(...muted).text(caption, RIGHT, signY + 3.5, { align: 'right' });
+    // Signature: hairline above the name and caption, like the HTML `.sign` border-top.
+    const signX = 150, signY = y + height - 12;
+    doc.setDrawColor(...sumLine).setLineWidth(0.25).line(signX, signY, RIGHT, signY);
+    const [strong, caption] = sample ? ['Sample only', 'Not valid for payment'] : [model.seller.signatoryName, 'Authorized signatory'];
+    if (strong) doc.setFont('helvetica', 'bold').setFontSize(8).setTextColor(...sumInk).text(lines(doc, strong, RIGHT - signX, 1), RIGHT, signY + 4.5, { align: 'right' });
+    doc.setFont('helvetica', 'normal').setFontSize(7).setTextColor(...sumMuted).text(caption, RIGHT, strong ? signY + 8.5 : signY + 4.5, { align: 'right' });
   };
   return { height, draw };
 }
 
+const SPLIT_X = LEFT + 0.55 * WIDTH, PAY_X = SPLIT_X + 5;
+
 function drawSummary(doc, model, y) {
   const totals = model.totals;
-  doc.setDrawColor(...ink).setLineWidth(0.35).line(LEFT, y, RIGHT, y);
+  doc.setDrawColor(...sumLine).setLineWidth(0.2).line(LEFT, y, RIGHT, y).line(SPLIT_X, y + 3, SPLIT_X, y + 40);
   // Order summary (left).
-  const orderW = 88;
-  doc.setFont('helvetica', 'bold').setFontSize(7.5).setTextColor(...ink).text('ORDER SUMMARY', LEFT, y + 6);
-  [['Total pieces', String(totals.pieces)], ['Total area · sq ft', formatA4Number(totals.area)]].forEach(([label, value], i) => {
-    const x = LEFT + i * (orderW / 2);
-    doc.setFont('helvetica', 'normal').setFontSize(6.5).setTextColor(...muted).text(label, x, y + 12);
-    doc.setFont('helvetica', 'bold').setFontSize(14).setTextColor(...ink).text(value, x, y + 19);
-  });
-  doc.setDrawColor(...border).setLineWidth(0.2).line(LEFT, y + 23, LEFT + orderW, y + 23);
-  doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(...muted).text('Material total', LEFT, y + 28);
-  doc.setFont('helvetica', 'bold').setTextColor(...ink).text(rs(totals.materialTotal), LEFT + orderW, y + 28, { align: 'right' });
+  const leftRight = SPLIT_X - 5, leftW = leftRight - LEFT;
+  doc.setFont('helvetica', 'bold').setFontSize(6.5).setTextColor(...sumMuted).text('ORDER SUMMARY', LEFT, y + 6, { charSpace: 0.3 });
+  const pieces = String(totals.pieces), area = formatA4Number(totals.area);
+  doc.setFont('helvetica', 'normal');
+  fit(doc, pieces, 40, 18);
+  const statX = LEFT + Math.max(30, doc.getTextWidth(pieces) + 6);
+  doc.setFont('helvetica', 'normal').setFontSize(6.5).setTextColor(...sumMuted).text('Total pieces', LEFT, y + 12).text('Total area · sq ft', statX, y + 12);
+  fit(doc, pieces, 40, 18);
+  doc.setTextColor(...sumInk).text(pieces, LEFT, y + 20.5);
+  fit(doc, area, leftRight - statX, 18);
+  doc.text(area, statX, y + 20.5);
+  doc.setDrawColor(...sumLine).setLineWidth(0.2).line(statX - 3, y + 9.5, statX - 3, y + 21.5);
+  doc.setFillColor(...sumTint).rect(LEFT, y + 25, leftW, 9, 'F');
+  doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...sumMuted).text('Material total', LEFT + 2.5, y + 30.6);
+  doc.setFont('helvetica', 'bold').setFontSize(10.5).setTextColor(...sumInk).text(rs(totals.materialTotal), leftRight - 2.5, y + 31, { align: 'right' });
 
-  // Payment summary (right).
-  const payX = 110;
-  doc.setFont('helvetica', 'bold').setFontSize(7.5).setTextColor(...ink).text('PAYMENT SUMMARY', payX, y + 6);
-  const rates = [...new Set(model.groups.flatMap(group => group.entries.map(entry => entry.ratePerSqFt)))];
-  const rows = [['Material amount', rs(totals.materialTotal)]];
-  if (model.mode === 'production') rows.push([rates.length === 1 ? 'Rate / sq ft' : 'Rates / sq ft', rates.map(value => value == null ? 'Not recorded' : rate(value)).join(' · ')]);
-  rows.push(['Loading / royalty', rs(model.loadingRoyalty)]);
-  rows.forEach(([label, value], i) => {
-    const base = y + 12 + i * 4.6;
-    doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...muted).text(label, payX, base);
-    doc.setTextColor(...ink).text(lines(doc, value, 52, 1), RIGHT, base, { align: 'right' });
+  // Payment summary (right). Material (Regular) + Top material = Material total.
+  doc.setFont('helvetica', 'bold').setFontSize(6.5).setTextColor(...sumMuted).text('PAYMENT SUMMARY', PAY_X, y + 6, { charSpace: 0.3 });
+  [['Material amount', rs(totals.regularAmount)], ['Top material amount', rs(totals.topAmount)], ['Loading / royalty', rs(model.loadingRoyalty)]].forEach(([label, value], i) => {
+    const base = y + 12 + i * 5.6;
+    doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...sumMuted).text(label, PAY_X, base);
+    doc.setFontSize(8).setTextColor(...sumInk).text(value, RIGHT, base, { align: 'right' });
+    doc.setDrawColor(...sumLine).setLineWidth(0.2).line(PAY_X, base + 2.2, RIGHT, base + 2.2);
   });
-  doc.setFillColor(...tint).roundedRect(payX, y + 27, RIGHT - payX, 9, 1.2, 1.2, 'F');
-  doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(...accent).text('NET PAYABLE', payX + 2.5, y + 32.8);
-  doc.setFontSize(11).text(rs(totals.netPayable), RIGHT - 2.5, y + 33, { align: 'right' });
+  doc.setFillColor(...sumTint).rect(PAY_X, y + 28, RIGHT - PAY_X, 11, 'F');
+  doc.setFillColor(...sumInk).rect(PAY_X, y + 28, 0.8, 11, 'F');
+  doc.setFont('helvetica', 'bold').setFontSize(7.5).setTextColor(...sumInk).text('NET PAYABLE', PAY_X + 3.5, y + 34.8);
+  const labelEnd = PAY_X + 3.5 + doc.getTextWidth('NET PAYABLE') + 3;
+  const net = rs(totals.netPayable);
+  fit(doc, net, RIGHT - 2.5 - labelEnd, 15);
+  doc.text(net, RIGHT - 2.5, y + 35.4, { align: 'right' });
 }
 
 function drawFooter(doc, model, page, pages) {
-  doc.setDrawColor(...border).setLineWidth(0.2).line(LEFT, FOOT_LINE, RIGHT, FOOT_LINE);
+  doc.setDrawColor(...sumLine).setLineWidth(0.2).line(LEFT, FOOT_LINE, RIGHT, FOOT_LINE);
   const base = FOOT_LINE + 4.5;
-  doc.setFont('helvetica', 'bold').setFontSize(6.5).setTextColor(...ink).text(model.mode === 'sample' ? 'SAMPLE · FICTIONAL DATA · NOT FOR PAYMENT' : 'BUYER INVOICE', LEFT, base);
-  doc.setFont('helvetica', 'normal').setTextColor(...muted).text('All amounts in INR · Dimensions in feet', LEFT + WIDTH / 2, base, { align: 'center' });
+  doc.setFont('helvetica', 'bold').setFontSize(6.5).setTextColor(...sumInk).text(model.mode === 'sample' ? 'SAMPLE · FICTIONAL DATA · NOT FOR PAYMENT' : 'BUYER INVOICE', LEFT, base, { charSpace: 0.2 });
+  doc.setFont('helvetica', 'normal').setTextColor(...sumMuted).text('All amounts in INR · Dimensions in feet', LEFT + WIDTH / 2, base, { align: 'center' });
   doc.text(`Page ${page} of ${pages}`, RIGHT, base, { align: 'right' });
 }
 

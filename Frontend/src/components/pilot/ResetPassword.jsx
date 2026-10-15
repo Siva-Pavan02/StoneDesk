@@ -30,19 +30,21 @@ export default function ResetPassword({ link, onDone, onLogin, onHome }) {
     <Card className="mx-auto max-w-lg gap-5">
       {link.done
         ? <>
+            <h1 className="sr-only">{pick('Password updated', 'పాస్‌వర్డ్ మార్చబడింది')}</h1>
             <p role="status">{pick('Password updated. Log in with your new password.', 'పాస్‌వర్డ్ మార్చబడింది. కొత్త పాస్‌వర్డ్‌తో లాగిన్ అవ్వండి.')}</p>
             <Button primary en="Log in" te="లాగిన్" onClick={onLogin} />
             <Button en="Back to home" te="హోమ్‌కు తిరిగి వెళ్ళండి" onClick={onHome} />
           </>
         : !validResetLink(link)
           ? <>
+              <h1 className="sr-only">{pick('Reset link not valid', 'రీసెట్ లింక్ చెల్లదు')}</h1>
               <p>{pick('This reset link is incomplete or invalid. Request a new one from Log in → Forgot password?', 'ఈ రీసెట్ లింక్ అసంపూర్ణం లేదా చెల్లదు. లాగిన్ → పాస్‌వర్డ్ మర్చిపోయారా? నుండి కొత్తది అభ్యర్థించండి.')}</p>
               <Button primary en="Log in" te="లాగిన్" onClick={onLogin} />
               <Button en="Back to home" te="హోమ్‌కు తిరిగి వెళ్ళండి" onClick={onHome} />
             </>
           : <form className="flex flex-col gap-5" onSubmit={submit}>
               <h1 className="text-xl font-semibold">{pick('Choose a new password', 'కొత్త పాస్‌వర్డ్ ఎంచుకోండి')}</h1>
-              <p>{pick('Account:', 'ఖాతా:')} <strong>{link.email}</strong></p>
+              <p>{pick('Account:', 'ఖాతా:')} <strong translate="no">{link.email}</strong></p>
               <input type="text" autoComplete="username" value={link.email} readOnly hidden />
               <Field en="New password (12+ characters)" te="కొత్త పాస్‌వర్డ్ (12+ అక్షరాలు)">
                 <input className="input" name="password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" autoCapitalize="none" spellCheck={false} minLength={12} maxLength={128} required />

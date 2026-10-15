@@ -19,6 +19,14 @@ export default function App() {
   const [googleSignup, setGoogleSignup] = useState(null);
   const [welcome, setWelcome] = useState(window.location.hash === '#welcome');
   const [confirmingLogout, setConfirmingLogout] = useState(false);
+  // Pending-approval view: "Check approval" shows progress, then says if approval is still pending.
+  const [approval, setApproval] = useState('idle');
+  async function checkApproval() {
+    if (approval === 'checking') return;
+    setApproval('checking');
+    await checkSession();
+    setApproval('checked');
+  }
   function checkSession() {
     return request('/auth/session').then(data => { setUser(data.user); setError(''); })
       .catch(err => { if (err.status !== 401) setError(err.message); else setUser(null); })
@@ -57,7 +65,7 @@ export default function App() {
     {view === 'reset' ? <ResetPassword link={reset} onDone={resetDone} onLogin={() => setAuthMode('login')} onHome={() => setReset(null)} /> :
       view === 'loading' ? <div className="pilot min-h-dvh bg-gray-50 p-6 text-gray-900" role="status">{pick('Opening StoneDesk…', 'StoneDesk తెరుస్తోంది…')}</div> :
       view === 'landing' ? <LandingPage user={user} onWorkspace={workspace} onStart={() => setAuthMode('signup')} onLogin={() => setAuthMode('login')} /> :
-      view === 'pending' ? <div className="pilot min-h-dvh bg-gray-50 px-4 py-12"><Card className="mx-auto max-w-lg gap-5"><h1 className="text-2xl font-bold">{pick('Your account is ready for approval', 'మీ ఖాతా ఆమోదం కోసం సిద్ధంగా ఉంది')}</h1><p>{pick('Ask your business administrator to approve your account in Settings → Team & access.', 'సెట్టింగ్స్ → బృందం మరియు యాక్సెస్‌లో మీ ఖాతాను ఆమోదించమని అడ్మిన్‌ను అడగండి.')}</p><p className="break-all font-semibold">{user.email}</p><Button primary en="Check approval" te="ఆమోదం తనిఖీ చేయండి" onClick={checkSession} /><Button en="Log out" te="లాగ్ అవుట్" onClick={() => setConfirmingLogout(true)} /></Card></div> :
+      view === 'pending' ? <div className="pilot min-h-dvh bg-gray-50 px-4 py-12"><Card className="mx-auto max-w-lg gap-5"><h1 className="text-2xl font-bold">{pick('Your account is ready for approval', 'మీ ఖాతా ఆమోదం కోసం సిద్ధంగా ఉంది')}</h1><p>{pick('Ask your business administrator to approve your account in Settings → Team & access.', 'సెట్టింగ్స్ → బృందం మరియు యాక్సెస్‌లో మీ ఖాతాను ఆమోదించమని అడ్మిన్‌ను అడగండి.')}</p><p className="break-all font-semibold" translate="no">{user.email}</p><Button primary disabled={approval === 'checking'} aria-busy={approval === 'checking' || undefined} en={approval === 'checking' ? 'Checking…' : 'Check approval'} te={approval === 'checking' ? 'తనిఖీ చేస్తోంది…' : 'ఆమోదం తనిఖీ చేయండి'} onClick={checkApproval} /><p role="status" className="text-sm text-gray-700">{approval === 'checked' ? pick('Still waiting for approval. Try again after your administrator approves you.', 'ఇంకా ఆమోదం కోసం వేచి ఉంది. అడ్మిన్ ఆమోదించిన తర్వాత మళ్ళీ ప్రయత్నించండి.') : ''}</p><Button en="Log out" te="లాగ్ అవుట్" onClick={() => setConfirmingLogout(true)} /></Card></div> :
       <PilotApp user={user} onLogout={logout} onUserChange={setUser} />}
     </Suspense>
     {view === 'pending' && <LogoutDialog open={confirmingLogout} onCancel={() => setConfirmingLogout(false)} onConfirm={async () => { await logout(); setConfirmingLogout(false); }} />}

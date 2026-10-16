@@ -1,4 +1,5 @@
-// Truck plate helpers shared by the saved-references panel. Logic copied from SettingsScreen.jsx.
+// Truck plate helpers used by the New load truck suggestions. Logic copied from SettingsScreen.jsx;
+// Backend/utils/savedReferences.js has a port that must match.
 
 export const compactPlate = value => value.toUpperCase().replace(/[\s.-]/g, '');
 

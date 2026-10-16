@@ -1,4 +1,3 @@
-import { useLanguage } from "../../i18n/LanguageContext";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { deleteDispatch, request, settingsPath } from "../../lib/pilotApi.js";
 import {
@@ -6,16 +5,16 @@ import {
   newDraft,
   readDrafts,
   clearDraft,
+  flushDraft,
   MAX_DRAFTS,
 } from "../../utils/pilotDraft.js";
-import { Button, Card, ErrorMessage } from "./Controls.jsx";
+import { BackButton, Button, Card, ErrorMessage } from "./Controls.jsx";
 import BusinessSetup from "./BusinessSetup.jsx";
-import ProductsAndPlaces from "./ProductsAndPlaces.jsx";
 import NewLoad from "./NewLoad.jsx";
 import WorkspaceShell from "./WorkspaceShell.jsx";
 import LoadHub from "./LoadHub.jsx";
 import AccountSettings from "./AccountSettings.jsx";
-import { legacyRoutes, profileSaveTarget, resolveRoute } from "../../utils/workspaceRoutes.js";
+import { NEW_LOAD_ROUTE, profileSaveTarget, resolveRoute } from "../../utils/workspaceRoutes.js";
 const BillView = lazy(() => import("./BillView.jsx"));
 const LoadingRequirements = lazy(() => import("../LoadingListScreen.jsx"));
 const route = () => {
@@ -25,7 +24,6 @@ const route = () => {
 };
 
 export default function PilotApp({ user, onLogout, onUserChange }) {
-  const { pick } = useLanguage();
   const [settings, setSettings] = useState(null),
     [loads, setLoads] = useState([]);
   const [view, setView] = useState(route),
@@ -39,7 +37,6 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
     [updatedAt, setUpdatedAt] = useState(null);
   const [nextCursor, setNextCursor] = useState(null);
   const [recoveries, setRecoveries] = useState([]);
-  const [onboarding, setOnboarding] = useState(false);
   const [analytics, setAnalytics] = useState({
     data: null,
     error: "",
@@ -66,7 +63,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
   const admin = user.role === "Admin",
     canFinalize = user.role !== "Yard Manager";
   function navigate(target) {
-    const next = Object.hasOwn(legacyRoutes, target) ? legacyRoutes[target] : target;
+    const next = resolveRoute(target).route;
     window.location.hash = next;
     setView(next);
     setError("");
@@ -127,10 +124,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
   }
   const load = useCallback(() => {
     return request(settingsPath(user.organizationId))
-      .then((data) => {
-        setSettings(data);
-        setOnboarding(!data.businessName || !data.stoneRates.length);
-      })
+      .then(setSettings)
       .catch((err) => setError(err.message))
       .finally(() => setBusy(false));
   }, [user.organizationId]);
@@ -153,28 +147,27 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
       cancelled = true;
     };
   }, [settings?.id, view]);
-  const draftsFullMessage = pick(
-    `This phone already keeps ${MAX_DRAFTS} unfinished loads. Continue or delete one before starting another.`,
-    `ఈ ఫోన్‌లో ఇప్పటికే ${MAX_DRAFTS} పూర్తి కాని లోడ్లు ఉన్నాయి. కొత్తది ప్రారంభించే ముందు ఒకదాన్ని కొనసాగించండి లేదా తొలగించండి.`,
-  );
+  const draftsFullMessage = `This phone already keeps ${MAX_DRAFTS} unfinished loads. Continue or delete one before starting another.`;
   // LoadHub asks for confirmation inline before calling this; returns whether it was removed.
   async function deleteRecovery(draft) {
     if (!(await clearDraft(settings.id, undefined, draft.clientRequestId))) {
-      setError("Unable to delete the recovery copy. Check browser storage.");
+      setError(
+        "Could not delete the unfinished load. Check browser storage.",
+      );
       return false;
     }
     setRecoveries(await readDrafts(undefined, settings.id));
     return true;
   }
   useEffect(() => {
-    if (!view.startsWith("entries") || !settings?.businessName || !settings?.stoneRates.length) return;
+    if (!view.startsWith("entries") || !settings?.businessName) return;
     const interval = setInterval(() => {
       if (document.visibilityState !== "visible") return;
       analyticsStale.current = true;
       refreshLoads();
     }, 30000);
     return () => clearInterval(interval);
-  }, [view, settings?.businessName, settings?.stoneRates.length, refreshLoads]);
+  }, [view, settings?.businessName, refreshLoads]);
   useEffect(() => {
     if (!view.startsWith("bill/")) return;
     const id = view.slice(5);
@@ -195,31 +188,43 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
   function home() {
     navigate("home");
   }
-  async function newLoad() {
-    if (!settings?.businessName) return navigate("profile");
-    if (!settings.stoneRates.length) return navigate("products");
+  // `next` lets business setup pass the settings it just saved. Click handlers pass an
+  // event, so only treat the argument as settings when it looks like settings.
+  async function newLoad(next) {
+    const source = next && (next.id || next.businessName) ? next : settings;
+    if (!source?.businessName) return navigate("profile");
     // Unfinished loads are kept side by side, up to MAX_DRAFTS.
-    if ((await readDrafts(undefined, settings.id)).length >= MAX_DRAFTS) {
+    if ((await readDrafts(undefined, source.id)).length >= MAX_DRAFTS) {
       if (current !== "home") navigate("home");
       setError(draftsFullMessage);
       return;
     }
     setInitialDraft({
-      ...newDraft(settings.defaultRoyaltyFee),
+      ...newDraft(source.defaultRoyaltyFee),
       supervisor: user.name,
     });
-    navigate("load");
+    navigate(NEW_LOAD_ROUTE);
   }
   async function resume(value) {
-    // The server copy wins over an older phone copy of the same draft.
     const list = await readDrafts(undefined, settings.id);
     const local = list.find((d) => d.serverId === value.id);
+    // A phone copy edited after the last server save holds the user's newest
+    // work; open it instead of silently discarding it. If the draft changed on
+    // the server since (another device), the server copy wins.
+    if (local && local.savedAt >= new Date(value.updatedAt).getTime()) {
+      const { savedAt: _savedAt, ...draft } = local;
+      setInitialDraft(draft);
+      navigate("load");
+      return;
+    }
     if (!local && list.length >= MAX_DRAFTS) {
       setError(draftsFullMessage);
       return;
     }
     if (local && !(await clearDraft(settings.id, undefined, local.clientRequestId))) {
-      setError("Unable to replace the recovery copy. Check browser storage.");
+      setError(
+        "Could not replace the copy on this phone. Check browser storage.",
+      );
       return;
     }
     setInitialDraft(fromDispatch(value));
@@ -273,21 +278,35 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
     // On 403/409 the error propagates and the row stays so LoadHub can explain why.
     await deleteDispatch(id);
     removeLoad(id);
+    await dropLocalCopies(id);
     if (current === "home") refreshAnalytics();
+  }
+  // A deleted server draft must not live on as an unfinished load on this phone.
+  async function dropLocalCopies(id) {
+    if (!settings?.id) return;
+    const local = (await readDrafts(undefined, settings.id)).filter((d) => d.serverId === id);
+    for (const d of local) await clearDraft(settings.id, undefined, d.clientRequestId);
+    if (local.length) setRecoveries(await readDrafts(undefined, settings.id));
+  }
+  // Let any in-flight autosave finish before the session ends.
+  async function logout() {
+    if (settings?.id) await flushDraft(settings.id);
+    return onLogout();
   }
   // BillView may call onDeleted() or onDeleted(id); fall back to the open record.
   function deleted(id) {
     const target = typeof id === "string" || typeof id === "number" ? id : record?.id;
-    if (target) removeLoad(target);
+    if (target) {
+      removeLoad(target);
+      dropLocalCopies(target);
+    }
     home();
   }
-  const needsSetup =
-    settings && (!settings.businessName || !settings.stoneRates.length);
+  // Only a missing business name blocks the workspace; New load offers to add the first product.
+  const needsSetup = settings && !settings.businessName;
   const current =
     needsSetup && !["settings", "profile"].includes(view)
-      ? !settings.businessName
-        ? "profile"
-        : "products"
+      ? "profile"
       : view.split(/[/?]/)[0];
   useEffect(() => {
     // Settings, setup and bill pages do not use dispatch lists.
@@ -306,10 +325,10 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
     content = (
       <div role="status" className="space-y-4">
         <p className="font-semibold">
-          {pick("Loading workspace…", "వర్క్‌స్పేస్ లోడ్ అవుతోంది…")}
+          {"Loading workspace…"}
         </p>
-        <div className="h-24 rounded-2xl bg-gray-200" />
-        <div className="h-44 rounded-2xl bg-gray-200" />
+        <div className="h-24 rounded-2xl bg-surface-container-high" />
+        <div className="h-44 rounded-2xl bg-surface-container-high" />
       </div>
     );
   else if (!settings)
@@ -317,23 +336,17 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
       <>
         {!error && (
           <p role="alert" className="control-error">
-            {pick(
-              "Couldn’t load your workspace. Check your connection, then retry.",
-              "వర్క్‌స్పేస్ లోడ్ కాలేదు. కనెక్షన్ తనిఖీ చేసి మళ్ళీ ప్రయత్నించండి.",
-            )}
+            {"Couldn’t load your workspace. Check your connection, then retry."}
           </p>
         )}
-        <Button en="Retry connection" te="మళ్ళీ ప్రయత్నించండి" onClick={load} />
+        <Button label="Retry connection" onClick={load} />
       </>
     );
-  else if (["profile", "products"].includes(current) && !admin)
+  else if (current === "profile" && !admin)
     content = (
       <Card>
         <p>
-          {pick(
-            "Ask your administrator to complete business setup or update products.",
-            "వ్యాపార వివరాలు లేదా రకాలను మార్చడానికి అడ్మిన్‌ను సంప్రదించండి.",
-          )}
+          {"Ask your administrator to complete business setup."}
         </p>
       </Card>
     );
@@ -345,33 +358,17 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
         onSaved={(data) => {
           setSettings(data);
           const to = profileSaveTarget(data);
-          if (to) navigate(to);
-        }}
-      />
-    );
-  // current is the first path segment, so this also covers products/trucks and products/destinations.
-  else if (current === "products")
-    content = (
-      <ProductsAndPlaces
-        view={view}
-        settings={settings}
-        user={user}
-        onChanged={setSettings}
-        navigate={navigate}
-        onboarding={onboarding || needsSetup}
-        onFinishOnboarding={() => {
-          navigate("home");
-          setOnboarding(false);
+          if (to === NEW_LOAD_ROUTE) newLoad(data);
+          else if (to) navigate(to);
         }}
       />
     );
   else if (current === "requirements")
     content = (
       <Suspense
-        fallback={<p role="status">{pick("Loading…", "లోడ్ అవుతోంది…")}</p>}
+        fallback={<p role="status">{"Loading…"}</p>}
       >
         <LoadingRequirements
-          embedded
           organizationId={user.organizationId}
           settings={settings}
           onClose={() => navigate("entries")}
@@ -393,13 +390,14 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
         canFinalize={canFinalize}
         onBack={initialDraft?.reviseOf ? closeRevise : home}
         onSaved={saved}
+        onSettingsChanged={setSettings}
       />
     );
   else if (current === "bill")
     content =
       record && record.id === view.slice(5) ? (
         <Suspense
-          fallback={<p role="status">{pick("Loading bill…", "బిల్లు లోడ్ అవుతోంది…")}</p>}
+          fallback={<p role="status">{"Loading bill…"}</p>}
         >
           <BillView
             record={record}
@@ -413,9 +411,8 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
           />
         </Suspense>
       ) : (
-        <Button
-          en="Back to dashboard"
-          te="డ్యాష్‌బోర్డ్‌కు వెళ్ళండి"
+        <BackButton
+          label="Back to dashboard"
           onClick={home}
         />
       );
@@ -425,6 +422,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
         settings={settings}
         user={user}
         section={view.split("/")[1]}
+        onChanged={setSettings}
         onDeleted={onLogout}
         onUserChange={onUserChange}
       />
@@ -481,7 +479,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
       user={user}
       view={current}
       navigate={navigate}
-      onLogout={onLogout}
+      onLogout={logout}
       onNew={newLoad}
       query={query}
       setQuery={setQuery}

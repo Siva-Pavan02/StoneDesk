@@ -1,296 +1,369 @@
 import { jsPDF } from 'jspdf';
-import { AREA_ROUNDING_NOTE, SAMPLE_BANK_PAIRS, bankDetailPairs, bankDetailSegments, formatA4Dimension, formatA4Number } from './a4InvoiceModel.js';
-import { planA4Invoice } from './a4InvoicePagination.js';
+import { pdfFontStyle } from './a4InvoiceFonts.js';
+import { invoiceFontsReady, mountA4Host } from './a4InvoiceMeasure.js';
+import { A4, COPIES } from './a4InvoicePagination.js';
+import { loadInvoicePdfFonts } from './a4InvoicePdfFonts.js';
+import { renderA4Pages } from './a4InvoiceRender.js';
 
-// Vector PDF of the approved A4 buyer invoice. It draws the same prepared model
-// as the HTML invoice (a4InvoiceModel.js) and packs rows with the same planner
-// (a4InvoicePagination.js), using fixed millimetre heights instead of DOM
-// measurement, so it also runs outside the browser.
+// Vector PDF of the A4 bill: selectable text, no rasterised pages.
 //
-// Layout mirrors a4InvoiceRender.js: header, three measurement columns with
-// Regular / Top subtotals per row, then the order and payment summary and the
-// closing block on the final page. The built-in Helvetica font has no ₹ glyph,
-// so amounts print as "Rs.".
+// The export renders the shared measured plan (a4InvoicePagination.js, the same
+// pages the preview and the print window use) into the offscreen A4 host, reads
+// the real element boxes and text runs out of that DOM, and redraws them with
+// jsPDF at the measured millimetre positions. The PDF therefore matches the
+// preview page for page, line break for line break, instead of re-deriving a
+// layout. The embedded Noto Sans faces (a4InvoicePdfFonts.js) are the same
+// files the browser renders with, so ₹, ×, = and ¼ ½ ¾ come out right and the
+// glyph advances agree with the measured ones.
+//
+// Three layers, all in this file so the painter stays testable in Node:
+//   paintA4Pdf(pages, fonts, { title })  pure jsPDF drawing of collected ops
+//   collectA4PdfPages(sheets, opts)      browser: DOM boxes and text runs -> ops
+//   a4InvoicePdf(model, pages, copy, filename)  browser orchestrator
+//
+// Driver copies never read a money field: the markup they draw comes from
+// projectCopy(model, 'driver'), which carries no amounts, bank details or words.
 
-const ink = [32, 61, 54], muted = [82, 102, 97], accent = [23, 100, 93];
-const border = [226, 232, 229], rule = [238, 242, 240], tint = [241, 246, 243], totalTint = [224, 236, 230];
-// Grayscale palette for the final-page settlement block and the page footer only.
-const sumInk = [34, 34, 34], sumMuted = [102, 102, 102], sumLine = [227, 227, 227], sumTint = [244, 244, 244];
+const PDF_FONT = 'InvoiceSans';
+const PX_TO_MM = 25.4 / 96;
+const PT_PER_PX = 0.75;
+// A line of text is redrawn word by word when jsPDF's advance differs from the
+// browser's by more than this (mm), e.g. where CSS asks for tabular figures.
+const WIDTH_TOLERANCE = 0.25;
+// Noto Sans hhea ascender (1069/1000 em); only a fallback for
+// measureBaselineRatio, which measures the real ratio in the browser.
+const DEFAULT_BASELINE_RATIO = 1.069;
+// Bottom of the printable area inside an A4 sheet: 12 mm margin + 272.5 mm body.
+const CONTENT_BOTTOM_MM = A4.marginMm + A4.pageHeightMm;
+const BORDER_SIDES = ['Top', 'Right', 'Bottom', 'Left'];
 
-const LEFT = 12, RIGHT = 198, WIDTH = RIGHT - LEFT;
-const DIVIDER_Y = 49, COLUMNS_TOP = 53, CONTENT_BOTTOM = 276, FOOT_LINE = 280;
-const CONTINUATION_H = 7, SUMMARY_H = 42, SUMMARY_GAP = 4;
-const COLUMN_GAP = 4, COLUMN_W = (WIDTH - 2 * COLUMN_GAP) / 3;
-const COLUMN_X = [0, 1, 2].map(i => LEFT + i * (COLUMN_W + COLUMN_GAP));
-const HEADING_H = 5.5, THEAD_H = 4.6, ROW_H = 4.3, BLOCK_GAP = 4;
-// Type, L, W, Qty, Sq ft as fractions of the column width (same split as the CSS).
-const CELL_SHARES = [0.16, 0.2, 0.2, 0.14, 0.3];
+const mm = value => value * PX_TO_MM;
 
-const rs = value => `Rs. ${formatA4Number(value)}`;
+/* ------------------------------------------------------------------ painter */
 
-function cells(x) {
-  const edges = [x];
-  for (const share of CELL_SHARES) edges.push(edges.at(-1) + share * COLUMN_W);
-  return { type: x + 0.8, l: (edges[1] + edges[2]) / 2, w: (edges[2] + edges[3]) / 2, qty: (edges[3] + edges[4]) / 2, area: edges[5] - 0.8 };
+function registerFonts(doc, fonts) {
+  if (!Array.isArray(fonts) || !fonts.length) throw new Error('The PDF export needs the embedded invoice fonts.');
+  for (const face of fonts) {
+    if (!face?.file || !face?.style || !face?.base64) throw new Error('Every invoice font face needs a file, a style and its base64 bytes.');
+    doc.addFileToVFS(face.file, face.base64);
+    doc.addFont(face.file, PDF_FONT, face.style);
+  }
 }
 
-// First `max` wrapped lines of text, with an ellipsis when it was cut short.
-function lines(doc, text, width, max) {
-  const all = doc.splitTextToSize(String(text ?? ''), width);
-  if (all.length <= max) return all;
-  const kept = all.slice(0, max);
-  let last = kept[max - 1];
-  while (last && doc.getTextWidth(`${last}…`) > width) last = last.slice(0, -1);
-  kept[max - 1] = `${last.trimEnd()}…`;
-  return kept;
+function paintRect(doc, op) {
+  if (!(op.w > 0) || !(op.h > 0)) return;
+  const mode = op.fill && op.stroke ? 'FD' : op.fill ? 'F' : op.stroke ? 'S' : null;
+  if (!mode) return;
+  if (op.fill) doc.setFillColor(...op.fill);
+  if (op.stroke) doc.setDrawColor(...op.stroke).setLineWidth(op.lineWidth ?? 0.2);
+  if (op.dash) doc.setLineDashPattern(op.dash, 0);
+  if (op.radius > 0) doc.roundedRect(op.x, op.y, op.w, op.h, op.radius, op.radius, mode);
+  else doc.rect(op.x, op.y, op.w, op.h, mode);
+  if (op.dash) doc.setLineDashPattern([], 0);
 }
 
-const lastIndex = (group, type) => group.entries.findLastIndex(entry => entry.type === type);
-
-// Height of one row fragment, matching what drawGroup paints.
-function fragmentHeight(group, from, to) {
-  const lastRegular = lastIndex(group, 'regular'), lastTop = lastIndex(group, 'top');
-  let rows = to - from;
-  if (lastRegular >= from && lastRegular < to) rows++;
-  if (lastTop >= from && lastTop < to) rows++;
-  return HEADING_H + THEAD_H + rows * ROW_H + BLOCK_GAP;
-}
-
-function drawLogo(doc, source, x, y, size) {
-  if (source) {
-    try {
-      const image = doc.getImageProperties(source);
-      const scale = Math.min(size / image.width, size / image.height);
-      const w = image.width * scale, h = image.height * scale;
-      doc.addImage(source, image.fileType || 'PNG', x + (size - w) / 2, y + (size - h) / 2, w, h, undefined, 'FAST');
+function paintText(doc, op) {
+  if (!op.text) return;
+  doc.setFont(PDF_FONT, op.style || 'normal');
+  doc.setFontSize(op.size);
+  doc.setTextColor(...(op.color || [0, 0, 0]));
+  const charSpace = op.charSpace || 0;
+  const options = charSpace ? { baseline: 'alphabetic', charSpace } : { baseline: 'alphabetic' };
+  // Same text, same measured width: one run keeps the text layer intact.
+  if (Number.isFinite(op.width) && op.words?.length > 1) {
+    const drawn = doc.getTextWidth(op.text) + charSpace * Math.max(0, op.text.length - 1);
+    if (Math.abs(drawn - op.width) > WIDTH_TOLERANCE) {
+      for (const word of op.words) if (word.text) doc.text(word.text, word.x, op.y, options);
       return;
-    } catch {
-      // An unreadable saved logo falls back to the printed placeholder, like the HTML invoice.
     }
   }
-  doc.setFillColor(...tint).setDrawColor(...border).setLineWidth(0.25).roundedRect(x, y, size, size, 2, 2, 'FD');
-  doc.setFont('helvetica', 'bold').setFontSize(6.5).setTextColor(...muted).text('LOGO', x + size / 2, y + size / 2 + 1.1, { align: 'center' });
-}
-
-function drawHeader(doc, model) {
-  const seller = model.seller;
-  drawLogo(doc, seller.logo, LEFT, 12, 18);
-  const brandX = LEFT + 22, brandW = 72;
-  doc.setFont('helvetica', 'bold').setFontSize(13).setTextColor(...ink);
-  const name = lines(doc, seller.name, brandW, 2);
-  doc.text(name, brandX, 17, { lineHeightFactor: 1.15 });
-  const contact = [seller.location, seller.contactLine, seller.phone].filter(Boolean).join('\n');
-  if (contact) {
-    doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...muted);
-    doc.text(lines(doc, contact, brandW, 3), brandX, 17 + name.length * 5.3 + 0.5, { lineHeightFactor: 1.3 });
-  }
-
-  const panelX = 110, panelW = RIGHT - panelX;
-  doc.setFont('helvetica', 'bold').setFontSize(10.5).setTextColor(...accent).text(model.title.toUpperCase(), panelX, 16);
-  doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(...ink).text(model.invoiceDate.label, RIGHT, 16, { align: 'right' });
-  const state = model.mode === 'sample' ? 'SAMPLE' : model.status === 'Dispatched' ? 'IN TRANSIT' : model.status.toUpperCase();
-  doc.setFont('helvetica', 'bold').setFontSize(6.3);
-  const stateW = doc.getTextWidth(state) + 3.6;
-  doc.setFillColor(...tint).roundedRect(RIGHT - stateW, 18, stateW, 4, 1.2, 1.2, 'F');
-  doc.setTextColor(...accent).text(state, RIGHT - stateW / 2, 20.9, { align: 'center' });
-  const reference = `No. ${model.invoiceNumber}${model.mode === 'sample' ? ' · Fictional data — not for payment' : ''}`;
-  doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...muted).text(lines(doc, reference, panelW - stateW - 3, 1), panelX, 21.5);
-
-  const boxY = 25, boxH = 21, cellW = panelW / 2;
-  doc.setFillColor(...tint).setDrawColor(...border).setLineWidth(0.2).roundedRect(panelX, boxY, panelW, boxH, 1.5, 1.5, 'FD');
-  doc.setDrawColor(...border).setLineWidth(0.15).line(panelX + cellW, boxY + 2, panelX + cellW, boxY + boxH - 2).line(panelX + 2, boxY + boxH / 2, RIGHT - 2, boxY + boxH / 2);
-  [['PARTY', model.party], ['LORRY NO.', model.lorryNumber], ['DESTINATION', model.destination], ['SUPERVISOR', model.supervisor]].forEach(([label, value], i) => {
-    const x = panelX + 3 + (i % 2) * cellW, y = boxY + (i < 2 ? 0 : boxH / 2);
-    doc.setFont('helvetica', 'normal').setFontSize(5.8).setTextColor(...muted).text(label, x, y + 3.9);
-    doc.setFont(i === 1 ? 'courier' : 'helvetica', 'bold').setFontSize(8).setTextColor(...ink).text(lines(doc, value, cellW - 6, 1), x, y + 8.1);
-  });
-  doc.setDrawColor(...ink).setLineWidth(0.35).line(LEFT, DIVIDER_Y, RIGHT, DIVIDER_Y);
-}
-
-function drawGroup(doc, x, y, group, from, to) {
-  const c = cells(x);
-  doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(...ink).text(String(group.id), x, y + 3.8);
-  let ruleStart = x + doc.getTextWidth(String(group.id)) + 2;
-  if (from) {
-    doc.setFont('helvetica', 'normal').setFontSize(6).setTextColor(...muted).text('(continued)', ruleStart - 0.5, y + 3.8);
-    ruleStart += doc.getTextWidth('(continued)') + 1.5;
-  }
-  doc.setDrawColor(...border).setLineWidth(0.2).line(ruleStart, y + 2.6, x + COLUMN_W, y + 2.6);
-
-  const headBase = y + HEADING_H + 3.2;
-  doc.setFont('helvetica', 'normal').setFontSize(6.3).setTextColor(...muted);
-  doc.text('Type', c.type, headBase);
-  doc.text('L (ft)', c.l, headBase, { align: 'center' }); doc.text('W (ft)', c.w, headBase, { align: 'center' });
-  doc.text('Qty', c.qty, headBase, { align: 'center' }); doc.text('Sq ft', c.area, headBase, { align: 'right' });
-  doc.setDrawColor(...border).setLineWidth(0.25).line(x, y + HEADING_H + THEAD_H, x + COLUMN_W, y + HEADING_H + THEAD_H);
-
-  const lastRegular = lastIndex(group, 'regular'), lastTop = lastIndex(group, 'top');
-  let rowTop = y + HEADING_H + THEAD_H;
-  const subtotal = (label, values) => {
-    doc.setFillColor(...totalTint).rect(x, rowTop, COLUMN_W, ROW_H, 'F');
-    const base = rowTop + 3;
-    doc.setFont('helvetica', 'bold').setFontSize(7).setTextColor(...ink).text(label, c.type, base);
-    doc.text(String(values.pieces), c.qty, base, { align: 'center' }); doc.text(formatA4Number(values.area), c.area, base, { align: 'right' });
-    rowTop += ROW_H;
-  };
-  for (let index = from; index < to; index++) {
-    const entry = group.entries[index], base = rowTop + 3;
-    if (entry.type === 'top') doc.setFont('helvetica', 'normal').setFontSize(6.5).setTextColor(...accent).text('Top', c.type, base);
-    doc.setFont('helvetica', 'normal').setFontSize(7.2).setTextColor(...ink);
-    doc.text(formatA4Dimension(entry.lengthFt), c.l, base, { align: 'center' }); doc.text(formatA4Dimension(entry.widthFt), c.w, base, { align: 'center' });
-    doc.text(String(entry.quantity), c.qty, base, { align: 'center' }); doc.text(formatA4Number(entry.area), c.area, base, { align: 'right' });
-    doc.setDrawColor(...rule).setLineWidth(0.15).line(x, rowTop + ROW_H, x + COLUMN_W, rowTop + ROW_H);
-    rowTop += ROW_H;
-    if (index === lastRegular) subtotal('Regular subtotal', group.regular);
-    if (index === lastTop) subtotal('Top subtotal', group.top);
-  }
-}
-
-// Lowers the current font size until text fits maxW (or reaches min); returns the size used.
-function fit(doc, text, maxW, size, min = 7) {
-  doc.setFontSize(size);
-  while (size > min && doc.getTextWidth(text) > maxW) doc.setFontSize(size -= 0.5);
-  return size;
-}
-
-const BANK_W = 0.7 * WIDTH, BANK_ROW = 4.4;
-
-// Amount in words, rounding note, bank details and signature. Returns its height and a painter.
-function closingBlock(doc, model) {
-  const sample = model.mode === 'sample';
-  const bankText = model.seller.bankDetails;
-  const pairs = sample ? SAMPLE_BANK_PAIRS : bankText ? bankDetailPairs(bankText) : null;
-  const showBank = sample || Boolean(bankText);
-  doc.setFont('helvetica', 'bold').setFontSize(6);
-  const wordsLabelW = doc.getTextWidth('AMOUNT IN WORDS') + 15 * 0.3;
-  const wordsX = LEFT + wordsLabelW + 2.5;
-  doc.setFontSize(8);
-  const words = lines(doc, model.amountWords, RIGHT - wordsX, 2);
-  doc.setFont('helvetica', 'normal').setFontSize(6);
-  const note = lines(doc, AREA_ROUNDING_NOTE, WIDTH, 2);
-  doc.setFont('helvetica', 'bold').setFontSize(7.5);
-  const bankLines = showBank && !pairs ? lines(doc, bankDetailSegments(bankText).join(' · '), BANK_W, 2) : [];
-  const bankH = !showBank ? 0 : 4 + (pairs ? Math.ceil(pairs.length / 3) * BANK_ROW : bankLines.length * 3.4);
-  // Offsets from the block top: words baseline, note baseline, hairline above bank + signature.
-  const wordsY = 4.5, noteY = wordsY + (words.length - 1) * 3.6 + 4.2, footTopY = noteY + (note.length - 1) * 2.7 + 3;
-  const footH = Math.max(bankH, 14);
-  const height = footTopY + footH + 3;
-  const draw = y => {
-    doc.setFont('helvetica', 'bold').setFontSize(6).setTextColor(...sumMuted).text('AMOUNT IN WORDS', LEFT, y + wordsY, { charSpace: 0.3 });
-    // 8pt text at lineHeightFactor 1.27 advances ~3.6 mm per line; 6pt at 1.27 ~2.7 mm.
-    doc.setFont('helvetica', 'bold').setFontSize(8).setTextColor(...sumInk).text(words, wordsX, y + wordsY, { lineHeightFactor: 1.27 });
-    doc.setFont('helvetica', 'normal').setFontSize(6).setTextColor(...sumMuted).text(note, LEFT, y + noteY, { lineHeightFactor: 1.27 });
-    const footTop = y + footTopY;
-    doc.setDrawColor(...sumLine).setLineWidth(0.2).line(LEFT, footTop, RIGHT, footTop);
-    if (showBank) {
-      const labelY = footTop + 4.5;
-      doc.setFont('helvetica', 'bold').setFontSize(6).setTextColor(...sumMuted).text('BANK DETAILS', LEFT, labelY, { charSpace: 0.3 });
-      if (sample) {
-        const after = LEFT + doc.getTextWidth('BANK DETAILS') + 12 * 0.3 + 2;
-        doc.setFont('helvetica', 'normal').setFontSize(6).text('Preview placeholders only', after, labelY);
-      }
-      if (pairs) {
-        const cellW = BANK_W / 3;
-        pairs.forEach(([label, value], i) => {
-          const x = LEFT + (i % 3) * cellW, base = labelY + 4.4 + Math.floor(i / 3) * BANK_ROW;
-          doc.setFont('helvetica', 'normal').setFontSize(6.5).setTextColor(...sumMuted).text(`${label}:`, x, base);
-          const labelW = doc.getTextWidth(`${label}:`);
-          doc.setFont('helvetica', 'bold').setFontSize(7).setTextColor(...sumInk).text(lines(doc, value, Math.max(4, cellW - labelW - 3), 1), x + labelW + 1.2, base);
-        });
-      } else {
-        doc.setFont('helvetica', 'bold').setFontSize(7.5).setTextColor(...sumInk).text(bankLines, LEFT, labelY + 4.4, { lineHeightFactor: 1.27 });
-      }
-    }
-    // Signature: hairline above the name and caption, like the HTML `.sign` border-top.
-    const signX = 150, signY = y + height - 12;
-    doc.setDrawColor(...sumLine).setLineWidth(0.25).line(signX, signY, RIGHT, signY);
-    const [strong, caption] = sample ? ['Sample only', 'Not valid for payment'] : [model.seller.signatoryName, 'Authorized signatory'];
-    if (strong) doc.setFont('helvetica', 'bold').setFontSize(8).setTextColor(...sumInk).text(lines(doc, strong, RIGHT - signX, 1), RIGHT, signY + 4.5, { align: 'right' });
-    doc.setFont('helvetica', 'normal').setFontSize(7).setTextColor(...sumMuted).text(caption, RIGHT, strong ? signY + 8.5 : signY + 4.5, { align: 'right' });
-  };
-  return { height, draw };
-}
-
-const SPLIT_X = LEFT + 0.55 * WIDTH, PAY_X = SPLIT_X + 5;
-
-function drawSummary(doc, model, y) {
-  const totals = model.totals;
-  doc.setDrawColor(...sumLine).setLineWidth(0.2).line(LEFT, y, RIGHT, y).line(SPLIT_X, y + 3, SPLIT_X, y + 40);
-  // Order summary (left).
-  const leftRight = SPLIT_X - 5, leftW = leftRight - LEFT;
-  doc.setFont('helvetica', 'bold').setFontSize(6.5).setTextColor(...sumMuted).text('ORDER SUMMARY', LEFT, y + 6, { charSpace: 0.3 });
-  const pieces = String(totals.pieces), area = formatA4Number(totals.area);
-  doc.setFont('helvetica', 'normal');
-  fit(doc, pieces, 40, 18);
-  const statX = LEFT + Math.max(30, doc.getTextWidth(pieces) + 6);
-  doc.setFont('helvetica', 'normal').setFontSize(6.5).setTextColor(...sumMuted).text('Total pieces', LEFT, y + 12).text('Total area · sq ft', statX, y + 12);
-  fit(doc, pieces, 40, 18);
-  doc.setTextColor(...sumInk).text(pieces, LEFT, y + 20.5);
-  fit(doc, area, leftRight - statX, 18);
-  doc.text(area, statX, y + 20.5);
-  doc.setDrawColor(...sumLine).setLineWidth(0.2).line(statX - 3, y + 9.5, statX - 3, y + 21.5);
-  doc.setFillColor(...sumTint).rect(LEFT, y + 25, leftW, 9, 'F');
-  doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...sumMuted).text('Material total', LEFT + 2.5, y + 30.6);
-  doc.setFont('helvetica', 'bold').setFontSize(10.5).setTextColor(...sumInk).text(rs(totals.materialTotal), leftRight - 2.5, y + 31, { align: 'right' });
-
-  // Payment summary (right). Material (Regular) + Top material = Material total.
-  doc.setFont('helvetica', 'bold').setFontSize(6.5).setTextColor(...sumMuted).text('PAYMENT SUMMARY', PAY_X, y + 6, { charSpace: 0.3 });
-  [['Material amount', rs(totals.regularAmount)], ['Top material amount', rs(totals.topAmount)], ['Loading / royalty', rs(model.loadingRoyalty)]].forEach(([label, value], i) => {
-    const base = y + 12 + i * 5.6;
-    doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...sumMuted).text(label, PAY_X, base);
-    doc.setFontSize(8).setTextColor(...sumInk).text(value, RIGHT, base, { align: 'right' });
-    doc.setDrawColor(...sumLine).setLineWidth(0.2).line(PAY_X, base + 2.2, RIGHT, base + 2.2);
-  });
-  doc.setFillColor(...sumTint).rect(PAY_X, y + 28, RIGHT - PAY_X, 11, 'F');
-  doc.setFillColor(...sumInk).rect(PAY_X, y + 28, 0.8, 11, 'F');
-  doc.setFont('helvetica', 'bold').setFontSize(7.5).setTextColor(...sumInk).text('NET PAYABLE', PAY_X + 3.5, y + 34.8);
-  const labelEnd = PAY_X + 3.5 + doc.getTextWidth('NET PAYABLE') + 3;
-  const net = rs(totals.netPayable);
-  fit(doc, net, RIGHT - 2.5 - labelEnd, 15);
-  doc.text(net, RIGHT - 2.5, y + 35.4, { align: 'right' });
-}
-
-function drawFooter(doc, model, page, pages) {
-  doc.setDrawColor(...sumLine).setLineWidth(0.2).line(LEFT, FOOT_LINE, RIGHT, FOOT_LINE);
-  const base = FOOT_LINE + 4.5;
-  doc.setFont('helvetica', 'bold').setFontSize(6.5).setTextColor(...sumInk).text(model.mode === 'sample' ? 'SAMPLE · FICTIONAL DATA · NOT FOR PAYMENT' : 'BUYER INVOICE', LEFT, base, { charSpace: 0.2 });
-  doc.setFont('helvetica', 'normal').setTextColor(...sumMuted).text('All amounts in INR · Dimensions in feet', LEFT + WIDTH / 2, base, { align: 'center' });
-  doc.text(`Page ${page} of ${pages}`, RIGHT, base, { align: 'right' });
+  doc.text(op.text, op.x, op.y, options);
 }
 
 /**
- * Builds the buyer invoice PDF from a prepared A4 model (prepareA4Invoice /
- * a4InvoiceFromDispatch). Returns { blob, filename, pages }.
+ * Draws collected pages (one array of ops per A4 page) with the embedded faces
+ * and returns the jsPDF document. Runs in Node, so it is unit-testable.
  */
-export function a4InvoicePdf(model, filename = 'Invoice.pdf') {
-  const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: false });
-  doc.setProperties({ title: `${model.title} - ${model.invoiceNumber}`, creator: 'StoneDesk' });
-  const closing = closingBlock(doc, model);
-  const reserve = SUMMARY_H + closing.height + SUMMARY_GAP;
-  const regular = CONTENT_BOTTOM - CONTINUATION_H - COLUMNS_TOP;
-  const final = CONTENT_BOTTOM - reserve - COLUMNS_TOP;
-  if (final < 0) throw new Error('The header and final summary cannot fit together on a single A4 page.');
-  const pages = planA4Invoice(model, fragmentHeight, { regular, final });
-
-  pages.forEach((page, index) => {
+export function paintA4Pdf(pages, fonts, { title = 'Invoice' } = {}) {
+  if (!Array.isArray(pages) || !pages.length || pages.some(page => !Array.isArray(page))) throw new Error('The PDF needs one list of drawing operations per page.');
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true, putOnlyUsedFonts: true });
+  registerFonts(doc, fonts);
+  doc.setProperties({ title, creator: 'StoneDesk' });
+  pages.forEach((ops, index) => {
     if (index) doc.addPage();
-    drawHeader(doc, model);
-    let columnsBottom = COLUMNS_TOP;
-    page.columns.forEach((column, columnIndex) => {
-      let y = COLUMNS_TOP;
-      for (const { group, from, to } of column) { drawGroup(doc, COLUMN_X[columnIndex], y, group, from, to); y += fragmentHeight(group, from, to); }
-      columnsBottom = Math.max(columnsBottom, y);
-    });
-    if (page.summary) {
-      // Directly below the tallest column; the planner kept every column within `final`, so this always fits.
-      const summaryY = Math.min(columnsBottom, CONTENT_BOTTOM - reserve) + SUMMARY_GAP;
-      drawSummary(doc, model, summaryY);
-      closing.draw(summaryY + SUMMARY_H);
-    } else {
-      doc.setFont('helvetica', 'normal').setFontSize(7).setTextColor(...muted)
-        .text('Continued on the next page. Order totals and payment summary appear on the final page.', LEFT, CONTENT_BOTTOM - 2);
+    for (const op of ops) {
+      if (op?.type === 'rect') paintRect(doc, op);
+      else if (op?.type === 'text') paintText(doc, op);
+      else if (op?.type === 'image') doc.addImage(op.dataUrl, op.format || 'PNG', op.x, op.y, op.w, op.h, undefined, 'FAST');
     }
-    drawFooter(doc, model, index + 1, pages.length);
   });
-  return { blob: doc.output('blob'), filename, pages: pages.length };
+  return doc;
+}
+
+/* ---------------------------------------------------------------- collector */
+
+function parseColor(value) {
+  const parts = String(value || '').match(/[\d.]+/g);
+  if (!parts || parts.length < 3) return null;
+  if (parts.length > 3 && Number.parseFloat(parts[3]) < 0.05) return null;
+  return parts.slice(0, 3).map(part => Math.round(Number.parseFloat(part)));
+}
+
+const pxValue = value => Number.parseFloat(value) || 0;
+
+function backgroundOp(style, box) {
+  const fill = parseColor(style.backgroundColor);
+  if (!fill) return null;
+  return { type: 'rect', x: box.x, y: box.y, w: box.w, h: box.h, fill, radius: mm(pxValue(style.borderTopLeftRadius)) };
+}
+
+// Sides of the border box, as filled strips. Table cells inherit collapsed
+// borders, which Chrome paints centred on the shared edge, so those strips are
+// centred too; everything else draws inside its own border box.
+function sideStrip(side, box, width, color, collapsed) {
+  const shift = collapsed ? width / 2 : 0;
+  if (side === 'Top') return { type: 'rect', x: box.x, y: box.y - shift, w: box.w, h: width, fill: color };
+  if (side === 'Bottom') return { type: 'rect', x: box.x, y: box.y + box.h - width + shift, w: box.w, h: width, fill: color };
+  if (side === 'Left') return { type: 'rect', x: box.x - shift, y: box.y, w: width, h: box.h, fill: color };
+  return { type: 'rect', x: box.x + box.w - width + shift, y: box.y, w: width, h: box.h, fill: color };
+}
+
+function borderOps(style, box, collapsed) {
+  const sides = BORDER_SIDES.map(side => ({
+    side,
+    width: pxValue(style[`border${side}Width`]),
+    line: style[`border${side}Style`],
+    color: parseColor(style[`border${side}Color`]),
+  })).filter(side => side.width > 0 && side.line !== 'none' && side.line !== 'hidden' && side.color);
+  if (!sides.length) return [];
+  const radius = mm(pxValue(style.borderTopLeftRadius));
+  const [first] = sides;
+  const uniform = sides.length === 4 && sides.every(side => side.width === first.width && side.line === first.line && String(side.color) === String(first.color));
+  if (uniform && (radius > 0 || first.line === 'dashed')) {
+    // One stroked outline, centred on the border box like the browser paints it.
+    const width = mm(first.width);
+    return [{
+      type: 'rect', x: box.x + width / 2, y: box.y + width / 2, w: box.w - width, h: box.h - width,
+      stroke: first.color, lineWidth: width, radius: radius > 0 ? Math.max(0, radius - width / 2) : 0,
+      dash: first.line === 'dashed' ? [width * 2, width * 2] : undefined,
+    }];
+  }
+  return sides.map(side => sideStrip(side.side, box, mm(side.width), side.color, collapsed));
+}
+
+function imageOp(element, style, origin) {
+  const source = element.currentSrc || element.getAttribute('src') || '';
+  if (!source) return null;
+  const rect = element.getBoundingClientRect();
+  const left = rect.left + pxValue(style.borderLeftWidth) + pxValue(style.paddingLeft);
+  const top = rect.top + pxValue(style.borderTopWidth) + pxValue(style.paddingTop);
+  const width = rect.width - pxValue(style.borderLeftWidth) - pxValue(style.borderRightWidth) - pxValue(style.paddingLeft) - pxValue(style.paddingRight);
+  const height = rect.height - pxValue(style.borderTopWidth) - pxValue(style.borderBottomWidth) - pxValue(style.paddingTop) - pxValue(style.paddingBottom);
+  if (!(width > 0) || !(height > 0)) return null;
+  const natural = element.naturalWidth && element.naturalHeight ? { w: element.naturalWidth, h: element.naturalHeight } : null;
+  // object-fit: contain — the same box the browser fits the logo into.
+  const scale = natural && style.objectFit !== 'fill' ? Math.min(width / natural.w, height / natural.h) : 0;
+  const drawn = scale ? { w: natural.w * scale, h: natural.h * scale } : { w: width, h: height };
+  const data = pdfImageSource(element, source, drawn);
+  if (!data) return null;
+  return {
+    type: 'image', dataUrl: data.dataUrl, format: data.format,
+    x: mm(left - origin.x + (width - drawn.w) / 2), y: mm(top - origin.y + (height - drawn.h) / 2),
+    w: mm(drawn.w), h: mm(drawn.h),
+  };
+}
+
+// jsPDF reads PNG and JPEG; anything else (an SVG or WebP logo) is repainted
+// once into a canvas of the logo's own size. Only the logo is ever an image.
+function pdfImageSource(element, source, drawn) {
+  const match = /^data:image\/(png|jpe?g);/i.exec(source);
+  if (match) return { dataUrl: source, format: /png/i.test(match[1]) ? 'PNG' : 'JPEG' };
+  try {
+    const canvas = element.ownerDocument.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(element.naturalWidth || drawn.w * 4));
+    canvas.height = Math.max(1, Math.round(element.naturalHeight || drawn.h * 4));
+    canvas.getContext('2d').drawImage(element, 0, 0, canvas.width, canvas.height);
+    return { dataUrl: canvas.toDataURL('image/png'), format: 'PNG' };
+  } catch {
+    // An unreadable or cross-origin logo is skipped; its placeholder box stays.
+    return null;
+  }
+}
+
+function transformChar(char, textTransform) {
+  if (textTransform === 'uppercase') {
+    const upper = char.toUpperCase();
+    return upper.length === 1 ? upper : char;
+  }
+  if (textTransform === 'lowercase') {
+    const lower = char.toLowerCase();
+    return lower.length === 1 ? lower : char;
+  }
+  return char;
+}
+
+// Per-character client rects, so wrapped lines, collapsed whitespace and
+// uppercase transforms land exactly where the browser put them.
+function textRuns(node, style, origin, ratio) {
+  const raw = node.nodeValue;
+  if (!raw || !/\S/.test(raw)) return [];
+  const doc = node.ownerDocument;
+  const range = doc.createRange();
+  const chars = [];
+  for (let index = 0; index < raw.length; index++) {
+    range.setStart(node, index);
+    range.setEnd(node, index + 1);
+    const rect = range.getClientRects()[0];
+    if (!rect || rect.width <= 0) continue;
+    chars.push({ char: transformChar(raw[index], style.textTransform), left: rect.left, right: rect.right, top: rect.top });
+  }
+  if (!chars.length) return [];
+  const lines = [[chars[0]]];
+  for (const char of chars.slice(1)) {
+    const line = lines.at(-1);
+    if (Math.abs(char.top - line[0].top) > 0.5) lines.push([char]);
+    else line.push(char);
+  }
+  const size = pxValue(style.fontSize);
+  const color = parseColor(style.color) || [0, 0, 0];
+  const pdfStyle = pdfFontStyle(style.fontWeight);
+  const charSpace = style.letterSpacing === 'normal' ? 0 : mm(pxValue(style.letterSpacing));
+  return lines.map(line => {
+    let start = 0, end = line.length;
+    while (start < end && !/\S/.test(line[start].char)) start++;
+    while (end > start && !/\S/.test(line[end - 1].char)) end--;
+    const kept = line.slice(start, end);
+    if (!kept.length) return null;
+    const words = [];
+    let open = false;
+    for (const char of kept) {
+      if (/\s/.test(char.char)) { open = false; continue; }
+      if (open) words.at(-1).text += char.char;
+      else { words.push({ text: char.char, x: mm(char.left - origin.x) }); open = true; }
+    }
+    return {
+      type: 'text', text: kept.map(char => char.char).join(''),
+      x: mm(kept[0].left - origin.x), y: mm(kept[0].top - origin.y + ratio * size),
+      size: size * PT_PER_PX, style: pdfStyle, color, charSpace,
+      width: mm(kept.at(-1).right - kept[0].left), words,
+    };
+  }).filter(Boolean);
+}
+
+function walk(element, context, ops) {
+  const style = context.view.getComputedStyle(element);
+  if (style.display === 'none' || element.classList?.contains('sr-only')) return;
+  const rect = element.getBoundingClientRect();
+  const box = { x: mm(rect.left - context.origin.x), y: mm(rect.top - context.origin.y), w: mm(rect.width), h: mm(rect.height) };
+  if (rect.width > 0 && rect.height > 0) {
+    const background = backgroundOp(style, box);
+    if (background) ops.push(background);
+    ops.push(...borderOps(style, box, context.collapsed));
+  }
+  if (element.tagName === 'IMG') {
+    const image = imageOp(element, style, context.origin);
+    if (image) ops.push(image);
+    return;
+  }
+  const collapsed = element.tagName === 'TABLE' ? style.borderCollapse === 'collapse' : context.collapsed;
+  const inner = collapsed === context.collapsed ? context : { ...context, collapsed };
+  for (const child of element.childNodes) {
+    if (child.nodeType === 3) ops.push(...textRuns(child, style, context.origin, context.ratio));
+    else if (child.nodeType === 1) walk(child, inner, ops);
+  }
+}
+
+/**
+ * The baseline offset of a text line as a fraction of its font size, measured
+ * in the invoice font (Chrome reports a text range's top at the ascent line, so
+ * the PDF baseline is that top plus this ratio times the font size).
+ */
+export function measureBaselineRatio(doc = document) {
+  const probe = 100;
+  const host = doc.createElement('div');
+  host.className = 'a4-invoice a4-measure-host';
+  host.setAttribute('aria-hidden', 'true');
+  const sheet = doc.createElement('div');
+  sheet.className = 'paper sample-sheet';
+  const body = doc.createElement('div');
+  body.className = 'page-body';
+  const line = doc.createElement('p');
+  line.style.fontSize = `${probe}px`;
+  line.style.lineHeight = '1';
+  line.style.whiteSpace = 'nowrap';
+  const text = doc.createTextNode('Hxp');
+  // A zero-sized inline-block sits on the text baseline.
+  const marker = doc.createElement('span');
+  marker.style.display = 'inline-block';
+  marker.style.width = '0px';
+  marker.style.height = '0px';
+  line.append(text, marker);
+  body.append(line);
+  sheet.append(body);
+  host.append(sheet);
+  doc.body.appendChild(host);
+  try {
+    const range = doc.createRange();
+    range.selectNodeContents(text);
+    const rect = range.getClientRects()[0] || range.getBoundingClientRect();
+    const ratio = (marker.getBoundingClientRect().bottom - rect.top) / probe;
+    return ratio > 0.5 && ratio < 1.5 ? ratio : DEFAULT_BASELINE_RATIO;
+  } catch {
+    return DEFAULT_BASELINE_RATIO;
+  } finally {
+    host.remove();
+  }
+}
+
+/**
+ * Walks the rendered `.sample-sheet` articles and returns one list of drawing
+ * operations per page, positioned in millimetres from the sheet's top-left
+ * corner. Nothing is ever clipped: a page whose body outgrows the printable
+ * area throws instead.
+ */
+export function collectA4PdfPages(sheets, { baselineRatio = DEFAULT_BASELINE_RATIO } = {}) {
+  const pages = [...(sheets || [])];
+  if (!pages.length) throw new Error('The PDF export needs at least one rendered A4 page.');
+  return pages.map((sheet, index) => {
+    const view = sheet.ownerDocument.defaultView;
+    const rect = sheet.getBoundingClientRect();
+    const ops = [];
+    walk(sheet, { view, origin: { x: rect.left, y: rect.top }, ratio: baselineRatio, collapsed: false }, ops);
+    const body = sheet.querySelector('.page-body')?.getBoundingClientRect();
+    if (body && mm(body.top + body.height - rect.top) > CONTENT_BOTTOM_MM + 0.5) throw new Error(`Page ${index + 1} content is taller than an A4 page`);
+    return ops;
+  });
+}
+
+/* -------------------------------------------------------------- orchestrator */
+
+/** Warms the font cache so a later Share stays inside the user activation. */
+export function preloadA4PdfAssets() {
+  return loadInvoicePdfFonts().catch(() => {});
+}
+
+/**
+ * Builds the bill PDF for one copy from the prepared model (prepareA4Invoice /
+ * a4InvoiceFromDispatch, projected with projectCopy) and the shared measured
+ * page plan the preview and the print window use. Browser only: the layout is
+ * read from the rendered DOM. Returns { blob, filename, pages }.
+ */
+export async function a4InvoicePdf(model, pages, copy = 'buyer', filename = 'Invoice.pdf') {
+  if (!COPIES.includes(copy)) throw new Error(`Unknown bill copy "${copy}". Expected "buyer" or "driver".`);
+  if (!Array.isArray(pages) || !pages.length) throw new Error('The PDF export needs the measured page plan of this copy.');
+  const doc = globalThis.document;
+  if (!doc?.body) throw new Error('The PDF export needs a browser document.');
+  const fonts = await loadInvoicePdfFonts();
+  await invoiceFontsReady(doc);
+  const host = mountA4Host(doc, renderA4Pages(model, pages, copy, 'pdf-export'));
+  let collected;
+  try {
+    const images = [...host.querySelectorAll('img')];
+    await Promise.all(images.map(image => image.decode?.().catch(() => {})));
+    collected = collectA4PdfPages(host.querySelectorAll('.sample-sheet'), { baselineRatio: measureBaselineRatio(doc) });
+  } finally {
+    host.remove();
+  }
+  const output = paintA4Pdf(collected, fonts, { title: `${model.title} - ${model.invoiceNumber}` });
+  return { blob: output.output('blob'), filename, pages: pages.length };
 }

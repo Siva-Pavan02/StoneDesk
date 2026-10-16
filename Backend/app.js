@@ -46,6 +46,9 @@ apiRouter.use('/loading-lists', auth.requireSession, auth.requireActive, loading
 
 app.use('/api', apiRouter);
 
+// Content-addressed logos (historical and current) for the session's organization.
+// Other methods and deeper paths fall through to the current-logo route below (404).
+app.get('/uploads/logos/:file', auth.requireSession, auth.requireActive, require('./utils/serveContentLogo'));
 app.use('/uploads', auth.requireSession, auth.requireActive, require('./utils/requireOrganizationLogo'), async (req, res, next) => {
   const storage = require('./utils/logoStorage');
   if (!storage.cloudEnabled()) return next();

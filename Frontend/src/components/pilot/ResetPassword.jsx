@@ -1,13 +1,11 @@
 import { useId, useState } from 'react';
-import { useLanguage } from '../../i18n/LanguageContext';
 import { request } from '../../lib/pilotApi.js';
 import { validResetLink } from '../../lib/authFlow.js';
-import { Button, Card, ErrorMessage, Field } from './Controls.jsx';
+import { BackButton, Button, Card, ErrorMessage, Field } from './Controls.jsx';
 
 // Pre-authentication reset screen. App renders this when consumeResetLink() found a link.
-// Props: { link, onDone, onLogin, onHome }. All text is bilingual via pick().
+// Props: { link, onDone, onLogin, onHome }. All text is bilingual via .
 export default function ResetPassword({ link, onDone, onLogin, onHome }) {
-  const { pick } = useLanguage();
   const showId = useId();
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -26,35 +24,34 @@ export default function ResetPassword({ link, onDone, onLogin, onHome }) {
     catch (err) { setError(err.message); setBusy(false); }
   }
 
-  return <div className="pilot min-h-dvh bg-gray-50 px-4 py-12">
+  return <div className="pilot min-h-dvh bg-surface px-4 py-12">
     <Card className="mx-auto max-w-lg gap-5">
+      <BackButton label="Back to home" onClick={onHome} />
       {link.done
         ? <>
-            <h1 className="sr-only">{pick('Password updated', 'పాస్‌వర్డ్ మార్చబడింది')}</h1>
-            <p role="status">{pick('Password updated. Log in with your new password.', 'పాస్‌వర్డ్ మార్చబడింది. కొత్త పాస్‌వర్డ్‌తో లాగిన్ అవ్వండి.')}</p>
-            <Button primary en="Log in" te="లాగిన్" onClick={onLogin} />
-            <Button en="Back to home" te="హోమ్‌కు తిరిగి వెళ్ళండి" onClick={onHome} />
+            <h1 className="sr-only">Password updated</h1>
+            <p role="status">Password updated. Log in with your new password.</p>
+            <Button primary label="Log in" onClick={onLogin} />
           </>
         : !validResetLink(link)
           ? <>
-              <h1 className="sr-only">{pick('Reset link not valid', 'రీసెట్ లింక్ చెల్లదు')}</h1>
-              <p>{pick('This reset link is incomplete or invalid. Request a new one from Log in → Forgot password?', 'ఈ రీసెట్ లింక్ అసంపూర్ణం లేదా చెల్లదు. లాగిన్ → పాస్‌వర్డ్ మర్చిపోయారా? నుండి కొత్తది అభ్యర్థించండి.')}</p>
-              <Button primary en="Log in" te="లాగిన్" onClick={onLogin} />
-              <Button en="Back to home" te="హోమ్‌కు తిరిగి వెళ్ళండి" onClick={onHome} />
+              <h1 className="sr-only">Reset link not valid</h1>
+              <p>This reset link is incomplete or invalid. Request a new one from Log in → Forgot password?</p>
+              <Button primary label="Log in" onClick={onLogin} />
             </>
           : <form className="flex flex-col gap-5" onSubmit={submit}>
-              <h1 className="text-xl font-semibold">{pick('Choose a new password', 'కొత్త పాస్‌వర్డ్ ఎంచుకోండి')}</h1>
-              <p>{pick('Account:', 'ఖాతా:')} <strong translate="no">{link.email}</strong></p>
+              <h1 className="text-xl font-semibold">Choose a new password</h1>
+              <p>Account: <strong translate="no">{link.email}</strong></p>
               <input type="text" autoComplete="username" value={link.email} readOnly hidden />
-              <Field en="New password (12+ characters)" te="కొత్త పాస్‌వర్డ్ (12+ అక్షరాలు)">
+              <Field label="New password (12+ characters)">
                 <input className="input" name="password" type={showPassword ? 'text' : 'password'} autoComplete="new-password" autoCapitalize="none" spellCheck={false} minLength={12} maxLength={128} required />
               </Field>
               <label className="flex items-center gap-2" htmlFor={showId}>
                 <input id={showId} type="checkbox" checked={showPassword} onChange={e => setShowPassword(e.target.checked)} />
-                {pick('Show password', 'పాస్‌వర్డ్ చూపండి')}
+                Show password
               </label>
               <ErrorMessage error={error} />
-              <Button primary type="submit" disabled={busy} aria-busy={busy || undefined} en={busy ? 'Please wait…' : 'Save new password'} te={busy ? 'దయచేసి వేచి ఉండండి…' : 'కొత్త పాస్‌వర్డ్ సేవ్ చేయండి'} />
+              <Button primary type="submit" disabled={busy} aria-busy={busy || undefined} label={busy ? 'Please wait…' : 'Save new password'} />
             </form>}
     </Card>
   </div>;

@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useLanguage } from '../../i18n/LanguageContext';
 import { Button, ErrorMessage } from './Controls.jsx';
 import { money } from '../../utils/pilotDraft.js';
 import { getInvoicePayments } from '../../lib/pilotApi.js';
@@ -9,7 +8,6 @@ const formatDate = (iso) =>
   iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 
 export default function PaymentSection({ dispatchId, canRecordPayment = true }) {
-  const { pick } = useLanguage();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -38,7 +36,7 @@ export default function PaymentSection({ dispatchId, canRecordPayment = true }) 
         }
       })
       .catch((err) => {
-        // Keep the raw detail; the sentence around it is chosen at render so it follows the language.
+        // Keep the raw detail; the sentence around it is added at render.
         if (active) setError(err?.message || String(err));
       })
       .finally(() => {
@@ -57,7 +55,7 @@ export default function PaymentSection({ dispatchId, canRecordPayment = true }) 
   if (loading && !data) {
     return (
       <section className="payment-section-card payment-panel" aria-busy="true">
-        <p className="payment-panel-loading" role="status">{pick('Loading payment details…', 'చెల్లింపు వివరాలు లోడ్ అవుతున్నాయి…')}</p>
+        <p className="payment-panel-loading" role="status">Loading payment details…</p>
       </section>
     );
   }
@@ -65,8 +63,8 @@ export default function PaymentSection({ dispatchId, canRecordPayment = true }) 
   if (error && !data) {
     return (
       <section className="payment-section-card payment-panel">
-        <ErrorMessage error={pick(`Payment details couldn’t be loaded. Check your connection and try again. (${error})`, `చెల్లింపు వివరాలు లోడ్ కాలేదు. కనెక్షన్ తనిఖీ చేసి మళ్ళీ ప్రయత్నించండి. (${error})`)} />
-        <Button en="Try again" te="మళ్ళీ ప్రయత్నించండి" onClick={retry} />
+        <ErrorMessage error={`Payment details couldn’t be loaded. Check your connection and try again. (${error})`} />
+        <Button label="Try again" onClick={retry} />
       </section>
     );
   }
@@ -79,15 +77,15 @@ export default function PaymentSection({ dispatchId, canRecordPayment = true }) 
 
   const statusConfig = {
     PAYMENT_DUE: {
-      text: pick('Payment Due', 'చెల్లించవలసినది'),
+      text: 'Payment Due',
       tone: 'due'
     },
     PARTIALLY_PAID: {
-      text: pick('Partially Paid', 'పాక్షికంగా చెల్లించబడింది'),
+      text: 'Partially Paid',
       tone: 'partial'
     },
     PAID: {
-      text: pick('Paid', 'చెల్లించబడింది'),
+      text: 'Paid',
       tone: 'paid'
     }
   };
@@ -99,7 +97,7 @@ export default function PaymentSection({ dispatchId, canRecordPayment = true }) 
     <section className="payment-section-card payment-panel" aria-labelledby="payment-panel-title">
       <header className="payment-panel-head">
         <div className="payment-panel-heading">
-          <h2 id="payment-panel-title" ref={heading} tabIndex={-1}>{pick('Payment', 'చెల్లింపు')}</h2>
+          <h2 id="payment-panel-title" ref={heading} tabIndex={-1}>Payment</h2>
           <span className="payment-status" data-tone={badge.tone} role="status">{badge.text}</span>
         </div>
         {canRecordPayment && balance > 0 && (
@@ -109,22 +107,22 @@ export default function PaymentSection({ dispatchId, canRecordPayment = true }) 
             className="btn control-button control-button-primary payment-add-button"
             onClick={() => setDialogOpen(true)}
           >
-            <span aria-hidden="true">+</span> {pick('Add Payment', 'చెల్లింపును జోడించండి')}
+            <span aria-hidden="true">+</span> Add Payment
           </button>
         )}
       </header>
 
       <dl className="payment-stats">
         <div className="payment-stat">
-          <dt>{pick('Invoice Total', 'ఇన్వాయిస్ మొత్తం')}</dt>
+          <dt>Invoice Total</dt>
           <dd>{money(invoiceTotal)}</dd>
         </div>
         <div className="payment-stat" data-tone="received">
-          <dt>{pick('Received', 'స్వీకరించినది')}</dt>
+          <dt>Received</dt>
           <dd>{money(received)}</dd>
         </div>
         <div className="payment-stat" data-tone={balance > 0 ? 'due' : 'paid'}>
-          <dt>{pick('Balance Due', 'మిగిలినది')}</dt>
+          <dt>Balance Due</dt>
           <dd>{money(balance)}</dd>
         </div>
       </dl>
@@ -132,7 +130,7 @@ export default function PaymentSection({ dispatchId, canRecordPayment = true }) 
 
       {payments.length > 0 && (
         <div className="payment-history-block">
-          <h3>{pick('Payment History', 'చెల్లింపు చరిత్ర')}</h3>
+          <h3>Payment History</h3>
           <ul>
             {payments.map((p) => (
               <li key={p.id}>
@@ -142,7 +140,7 @@ export default function PaymentSection({ dispatchId, canRecordPayment = true }) 
                 </div>
                 <div className="payment-meta">
                   <span>{formatDate(p.createdAt)}</span>
-                  {p.createdBy && <span className="payment-by" title={p.createdBy}>{pick('by ', '')}<span translate="no">{p.createdBy}</span>{pick('', ' ద్వారా')}</span>}
+                  {p.createdBy && <span className="payment-by" title={p.createdBy}>{'by '}<span translate="no">{p.createdBy}</span></span>}
                 </div>
               </li>
             ))}

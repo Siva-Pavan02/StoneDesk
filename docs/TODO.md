@@ -29,7 +29,7 @@
 - [x] Load list, search, status filter and dashboard analytics.
 - [x] Local draft recovery.
 - [x] Loading requirements screen.
-- [x] English and Telugu interface.
+- [x] English-only interface (the second interface language was removed).
 
 ## Phase 5: Document Generation and Export (Completed)
 - [x] Buyer invoice PDF and Excel (jsPDF, AutoTable, SheetJS).
@@ -39,7 +39,7 @@
 - [x] Native sharing through the Web Share API.
 
 ## Phase 6: Open Items
-- [ ] Remove or archive legacy components not used by the app: `DispatchTracker.jsx`, `DispatchHistory.jsx`, `LanguageToggle.jsx` and unused `components/dispatch/*` files (keep `FractionChips.jsx`, used by `LoadingListScreen.jsx`).
+- [x] Remove legacy components not used by the app (only `components/dispatch/FractionChips.jsx`, used by `LoadingListScreen.jsx`, remains).
 - [ ] Decide whether `lib/api.js` and `lib/loadingListApi.js` should move to `lib/pilotApi.js`.
 - [ ] Bilingual English/Tamil headers for buyer exports (listed in the PRD, not implemented).
 - [ ] Production deployment and environment documentation.

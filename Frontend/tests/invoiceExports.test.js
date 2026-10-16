@@ -1,34 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buyerPdf, driverPdf, buyerExcel } from '../src/utils/pilotExports.js';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { billRows, rowGroups } from '../src/utils/billData.js';
-import * as XLSX from 'xlsx';
-import { testLogo } from './invoiceFixtures.js';
+import { a4InvoiceFromDispatch, projectCopy } from '../src/utils/a4InvoiceModel.js';
+import { renderA4Invoice } from '../src/utils/a4InvoiceRender.js';
+import { planSynthetic } from './helpers/a4Generators.js';
+import * as ledgerPdfModule from '../src/utils/ledgerPdf.js';
+
+const { billFilename } = ledgerPdfModule;
+const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
+
 export const largeBill = {
   id:'sample',status:'Dispatched',date:'2026-10-08',dispatchSlipNumber:'QA-15-ROWS',partyName:'Sample buyer',supervisor:'Sample supervisor',
   businessSnapshot:{businessName:'Kadapa Stone Yard',address:'Kadapa, Andhra Pradesh'},logistics:{truckNumber:'AP 04 AB 6638',buyerDestination:'Hyderabad'},
   inventory:Array.from({length:15},(_,i)=>({stoneType:`Stone row ${i+1}`,finish:'Polished',ratePerSqFt:40.5,totalSqFt:166.5,lineTotal:6743.25,measurementRows:[{rowNo:i+1,lengthFt:3,widthFt:2,quantity:19,category:'Regular',sqFt:114,lineTotal:4617},{rowNo:i+1,lengthFt:3.5,widthFt:1.5,quantity:10,category:'TOP',sqFt:52.5,lineTotal:2126.25}]})),
   summary:{totalPieces:435,totalDispatchVolumeSqFt:2497.5,baseMaterialTotal:101148.75,loadingAndRoyaltyFees:50,netBillableAmount:101198.75}
 };
-test('15-row invoice exports preserve totals, show no batch wording and hide driver prices',async()=>{
-  const buyer=await buyerPdf(largeBill).blob.text(),driver=await driverPdf(largeBill).blob.text();
-  assert.doesNotMatch(buyer,/ROW \d|Row \d|S\.No\./); assert.match(buyer,/\(Total\)/); assert.match(buyer,/Reg\. subtotal/); assert.match(buyer,/Top subtotal/); assert.match(buyer,/NET PAYABLE/);assert.match(buyer,/1,01,198.75/);
-  assert.match(buyer,/Material Amount/); assert.match(buyer,/69,255.00/); assert.match(buyer,/Top Material Amount/); assert.match(buyer,/31,893.75/);
-  assert.match(buyer,/ORDER SUMMARY/); assert.match(buyer,/PAYMENT SUMMARY/); assert.match(buyer,/Authorized Signatory/);
-  assert.doesNotMatch(buyer,/batch/i); assert.doesNotMatch(driver,/batch/i);
-  // This older PDF engine may fit all fifteen compact groups on one sheet;
-  // validate the first and final rows instead of enforcing its former page count.
-  assert.ok((buyer.match(/\/Type \/Page\b/g)||[]).length>=1);
-  assert.match(buyer,/\(1\)/); assert.match(buyer,/\(15\)/);
-  assert.match(driver,/\(15\)/); assert.doesNotMatch(driver,/ROW \d|Row \d|S\.No\./); assert.doesNotMatch(driver,/NET PAYABLE|PAYMENT SUMMARY|40\.50|1,01,198\.75|Rate \(INR\)/);
-  const book=XLSX.read(await buyerExcel(largeBill).blob.arrayBuffer(),{type:'array'});
-  const rows=XLSX.utils.sheet_to_json(book.Sheets['Buyer Invoice'],{header:1});
-  assert.equal(rows.find(row=>row[0]==='Net payable')[1],101198.75);
-  assert.equal(rows.find(row=>row[0]==='Top Material Amount')[1],31893.75);
-  assert.deepEqual(rows[7].slice(0,2),['#','Type']); assert.deepEqual(rows[8].slice(0,2),[1,'']); assert.deepEqual(rows[9].slice(0,2),[1,'Regular Subtotal']); assert.deepEqual(rows[10].slice(0,2),[1,'Top']); assert.deepEqual(rows[12].slice(0,2),[1,'Total']);
-  assert.equal(typeof rows[8][5],'number');
-  assert.deepEqual(rows[10].slice(2,4),['3½','1½']);
-});
 
 test('Regular and Top lines entered under one row stay together and row numbers are never renumbered',()=>{
   const bill={inventory:[{stoneType:'A',finish:'P',ratePerSqFt:10,measurementRows:[
@@ -43,15 +32,12 @@ test('Regular and Top lines entered under one row stay together and row numbers 
   assert.equal(groups[0].regular.amount,120); assert.equal(groups[1].total.amount,200);
 });
 
-test('a 30-line row splits across pages without losing its totals',async()=>{
+test('a 30-line row keeps its Regular and Top lines grouped',()=>{
   const line=(rowNo,category,i)=>({rowNo,lengthFt:4,widthFt:3,quantity:1+(i%3),category,sqFt:12*(1+(i%3)),lineTotal:480*(1+(i%3))});
   const lines=[...Array.from({length:14},(_,i)=>line(1,'Regular',i)),...Array.from({length:16},(_,i)=>line(1,'TOP',i)),...Array.from({length:12},(_,i)=>line(2,'Regular',i)),...Array.from({length:3},(_,i)=>line(15,'TOP',i))];
   const bill={...largeBill,summary:{...largeBill.summary},inventory:[{stoneType:'A',finish:'P',ratePerSqFt:40,measurementRows:lines}]};
   const groups=rowGroups(billRows(bill));
   assert.deepEqual(groups.map(g=>[g.rowNo,g.regularLines.length,g.topLines.length]),[[1,14,16],[2,12,0],[15,0,3]]);
-  const buyer=await buyerPdf(bill).blob.text();
-  for(const text of ['\\(1\\)','\\(2\\)','\\(15\\)','\\(Total\\)','continued','Reg\\. subtotal','Top subtotal']) assert.match(buyer,new RegExp(text));
-  assert.doesNotMatch(buyer,/ROW \d|Row \d|S\.No\./);
 });
 
 test('records saved before row numbers existed map old batch N to Row N',()=>{
@@ -59,41 +45,60 @@ test('records saved before row numbers existed map old batch N to Row N',()=>{
   assert.deepEqual(rowGroups(billRows(legacy,false)).map(g=>g.rowNo),[1,2]);
 });
 
-test('previous buyer PDF uses a vector logo placeholder or a contained saved logo', async () => {
-  const placeholder = await buyerPdf(largeBill).blob.text();
-  assert.doesNotMatch(placeholder, /\/Subtype \/Image/, 'Without a saved logo the previous PDF draws a compact vector placeholder');
-  assert.doesNotMatch(placeholder, /ISSUED BY/);
-  assert.match(placeholder, /BUYER INVOICE/);
-  const record = { ...largeBill, businessSnapshot: { ...largeBill.businessSnapshot, logoDataUrl: testLogo } };
-  const branded = await buyerPdf(record).blob.text();
-  assert.match(branded, /\/Subtype \/Image/);
-  assert.match(branded, /\/Width 120/);
-  assert.match(branded, /\/Height 48/);
-  const imageTransforms = [...branded.matchAll(/([\d.]+) 0 0 ([\d.]+) [\d.]+ [\d.]+ cm\s*\/I\d+ Do/g)];
-  assert.ok(imageTransforms.length > 0, 'The saved logo is placed in the PDF');
-  for (const [, imageWidth, imageHeight] of imageTransforms) assert.ok(Math.abs(Number(imageWidth) / Number(imageHeight) - 2.5) < 0.001, 'Logo aspect ratio is preserved');
-  assert.match(branded, /1,01,198.75/);
-  assert.equal(record.businessSnapshot.logoDataUrl, testLogo, 'Rendering does not replace saved branding');
-});
-
-test('damaged historical logos fall back without preventing buyer or driver exports', async () => {
-  const record = { ...largeBill, businessSnapshot: { ...largeBill.businessSnapshot, logoDataUrl: 'data:image/png;base64,not-a-real-image' } };
-  const buyer = await buyerPdf(record).blob.text(), driver = await driverPdf(record).blob.text();
-  assert.doesNotMatch(buyer, /\/Subtype \/Image/); assert.match(buyer, /1,01,198.75/);
-  assert.doesNotMatch(driver, /\/Subtype \/Image/); assert.match(driver, /Prices hidden/);
-  assert.doesNotMatch(driver, /NET PAYABLE|40\.50|1,01,198\.75|Rate \(INR\)/);
-});
-
-test('driver slip needs only inventory and never reads financial amounts', async () => {
-  const record = { ...largeBill, businessSnapshot: { ...largeBill.businessSnapshot, logoDataUrl: testLogo } };
-  delete record.summary;
-  record.inventory = largeBill.inventory.map(group => {
-    const safe = { stoneType: group.stoneType, finish: group.finish, measurementRows: group.measurementRows.map(({ rowNo, lengthFt, widthFt, quantity, category, sqFt }) => ({ rowNo, lengthFt, widthFt, quantity, category, sqFt })) };
-    Object.defineProperty(safe, 'ratePerSqFt', { get() { throw new Error('Driver export read a price'); } });
-    Object.defineProperty(safe, 'lineTotal', { get() { throw new Error('Driver export read an amount'); } });
-    return safe;
+// Every app source file under Frontend/src (.js/.jsx/.mjs), as [relative path, text].
+function sourceFiles(dir = SRC) {
+  return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return sourceFiles(path);
+    return /\.(?:js|jsx|mjs)$/.test(entry.name) ? [[relative(SRC, path), readFileSync(path, 'utf8')]] : [];
   });
-  const driver = await driverPdf(record).blob.text();
-  assert.match(driver, /\(15\)/); assert.match(driver, /\/Subtype \/Image/);
-  assert.match(driver, /Prices hidden/); assert.doesNotMatch(driver, /NET PAYABLE|40\.50|1,01,198\.75|Rate \(INR\)/);
+}
+
+test('legacy driverPdf / buyerExcel exports are retired: pilotExports.js is gone and nothing in src references them', () => {
+  assert.equal(existsSync(join(SRC, 'utils', 'pilotExports.js')), false, 'src/utils/pilotExports.js no longer exists');
+  const files = sourceFiles();
+  assert.ok(files.length > 0);
+  for (const [path, text] of files) {
+    assert.doesNotMatch(text, /\bdriverPdf\b/, `${path} references driverPdf`);
+    assert.doesNotMatch(text, /\bbuyerExcel\b/, `${path} references buyerExcel`);
+    assert.doesNotMatch(text, /\bfrom\s+['"][^'"]*pilotExports(?:\.js)?['"]|import\(\s*['"][^'"]*pilotExports/, `${path} imports pilotExports`);
+  }
+});
+
+test('the ledgerPdf layout is retired: ledgerPdf.js exports only billFilename and nothing calls or imports ledgerPdf', () => {
+  assert.deepEqual(Object.keys(ledgerPdfModule), ['billFilename']);
+  for (const [path, text] of sourceFiles()) {
+    assert.doesNotMatch(text, /\bledgerPdf\s*\(/, `${path} calls ledgerPdf(`);
+    for (const [, names] of text.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"][^'"]*ledgerPdf(?:\.js)?['"]/g)) {
+      const imported = names.split(',').map(name => name.trim().split(/\s+as\s+/)[0]).filter(Boolean);
+      assert.deepEqual(imported, ['billFilename'], `${path} imports only billFilename from ledgerPdf.js`);
+    }
+    assert.doesNotMatch(text, /import\s+\w+\s*(?:,|from)\s*[^;]*ledgerPdf/, `${path} default-imports ledgerPdf`);
+  }
+  const billView = readFileSync(join(SRC, 'components', 'pilot', 'BillView.jsx'), 'utf8');
+  assert.doesNotMatch(billView, /\bledgerPdf\s*\(|\bdriverPdf\b|\bbuyerExcel\b/);
+  assert.match(billView, /a4InvoicePdf\(/, 'BillView exports through the A4 engine');
+});
+
+test('15-row bill: buyer and driver copies follow the shared plan with Reg total / Top total rows', () => {
+  const model = a4InvoiceFromDispatch(largeBill);
+  assert.equal(model.groups.length, 15);
+  for (const [copy, kind] of [['buyer', 'Invoice'], ['driver', 'Driver-slip']]) {
+    const view = projectCopy(model, copy), plan = planSynthetic(view, copy);
+    const filename = billFilename(largeBill, kind, 'pdf');
+    assert.match(filename, /\.pdf$/);
+    const html = renderA4Invoice(view, plan, copy, `export-${copy}`);
+    assert.equal((html.match(/class="paper sample-sheet"/g) || []).length, plan.length, `${copy}: pages equal the plan`);
+    // One Reg total and one Top total row per group; no per-group amount row.
+    assert.equal((html.match(/data-subtotal="regular"/g) || []).length, 15, `${copy}: Reg total rows`);
+    assert.equal((html.match(/data-subtotal="top"/g) || []).length, 15, `${copy}: Top total rows`);
+    assert.doesNotMatch(html, /group-total|data-total-row/);
+    if (copy === 'driver') {
+      assert.ok(!html.includes('₹'), 'driver slip carries no rupee value');
+      assert.doesNotMatch(html, /Payment summary|Material total|Net payable|Bank details|Amount in words/);
+    } else {
+      assert.match(html, /₹/);
+      assert.match(html, /<dt>Net payable<\/dt>/);
+    }
+  }
 });

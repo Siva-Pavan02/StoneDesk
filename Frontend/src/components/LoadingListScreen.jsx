@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useLanguage } from '../i18n/LanguageContext';
 import { getMasterSettings } from '../lib/api';
 import { createLoadingList, updateLoadingList, fetchLoadingLists, fetchLoadingList } from '../lib/loadingListApi';
 import { parseFraction, decimalToFraction } from '../utils/fractionParser';
@@ -8,14 +7,12 @@ import { generateLoadingListPdf } from '../utils/generateLoadingListPdf';
 import { generateLoadingListExcel } from '../utils/generateLoadingListExcel';
 import { loadingTotals } from '../utils/loadingListTotals';
 import { round2 } from '../utils/loadMath';
-import { Button, Card, Field } from './pilot/Controls.jsx';
+import { BackButton, Button, Card, Field } from './pilot/Controls.jsx';
 
 // Exported files use the same DD/MM/YYYY India date as invoices, whatever the browser locale.
 const exportDate = () => new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date());
 
-export default function LoadingListScreen({ onClose, embedded = false, organizationId = 'unit_04', settings: providedSettings = null }) {
-  const { t, pick } = useLanguage();
-  const Content = embedded ? 'div' : 'main';
+export default function LoadingListScreen({ onClose, organizationId = 'unit_04', settings: providedSettings = null }) {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const savingLock = useRef(false);
@@ -59,7 +56,7 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
   function leave() {
-    if (dirty && !window.confirm(pick('Leave without saving this loading list?', 'ఈ లోడింగ్ జాబితా సేవ్ చేయకుండా వెళ్ళాలా?'))) return;
+    if (dirty && !window.confirm('Leave without saving this loading list?')) return;
     onClose();
   }
   const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -101,9 +98,9 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
     const qty = Number(reqQty);
 
     const errors = {
-      ...(!pLen && { length: pick('Enter a length like 4 1/2', '4 1/2 లాగా పొడవు నమోదు చేయండి') }),
-      ...(!pWid && { width: pick('Enter a width like 2', '2 లాగా వెడల్పు నమోదు చేయండి') }),
-      ...((!Number.isSafeInteger(qty) || qty <= 0) && { quantity: pick('Enter a whole number of pieces, like 10', '10 లాగా ముక్కల పూర్తి సంఖ్య నమోదు చేయండి') }),
+      ...(!pLen && { length: 'Enter a length like 4 1/2' }),
+      ...(!pWid && { width: 'Enter a width like 2' }),
+      ...((!Number.isSafeInteger(qty) || qty <= 0) && { quantity: 'Enter a whole number of pieces, like 10' }),
     };
     setReqErrors(errors);
     const firstInvalid = ['length', 'width', 'quantity'].find(key => errors[key]);
@@ -180,7 +177,7 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
     let pWid = parseFraction(wDisplay);
     
     if (!pLen || !pWid) {
-      setError(pick('Enter the custom length and width like 4 1/2, then load the piece.', 'కస్టమ్ పొడవు, వెడల్పు 4 1/2 లాగా నమోదు చేసి ముక్క లోడ్ చేయండి.'));
+      setError('Enter the custom length and width like 4 1/2, then load the piece.');
       return false;
     }
     setError('');
@@ -228,7 +225,7 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
     const missing = [['supervisor', supervisor], ['destination', buyerDestination], ['stone-type', stoneType], ['finish', finish]].find(([, value]) => !value);
     if (missing) {
       setNotice('');
-      setError(pick('Fill supervisor, destination, stone type and finish before saving.', 'సేవ్ చేసే ముందు సూపర్‌వైజర్, గమ్యస్థానం, రాయి రకం మరియు ఫినిష్ నింపండి.'));
+      setError('Fill manager, destination, stone type and finish before saving.');
       document.getElementById(`loading-list-${missing[0]}`)?.focus();
       return;
     }
@@ -257,7 +254,7 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
         setSavedLists(lists => [created, ...lists]);
       }
       setSavedSnapshot(savingSnapshot);
-      setNotice(pick('Loading list saved.', 'లోడింగ్ జాబితా సేవ్ అయింది.'));
+      setNotice('Loading list saved.');
     } catch (e) {
       setError(e.message);
     } finally { savingLock.current = false; setSaving(false); }
@@ -294,36 +291,20 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
   const { required: totalRequired, loaded: totalLoaded, pending: totalPending, excess: totalExcess } = loadingTotals(requirements);
 
   return (
-    <div className={embedded ? 'pilot workspace-utility-screen settings-screen space-y-4' : 'pilot min-h-screen bg-slate-50 pb-24'}>
-      {/* Header */}
-      {embedded ? (
-        <header className="screen-heading flex flex-wrap items-center gap-3">
-          <Button en="Back" te="వెనక్కి" onClick={leave} />
-          <h1 className="text-lg font-semibold">{t('loadingList') || 'Loading List'}</h1>
-        </header>
-      ) : <header className="fixed top-0 inset-x-0 z-50 bg-white border-b border-slate-200 shadow-sm pt-safe">
-        <div className="max-w-xl mx-auto w-full px-4 h-14 flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <button type="button" aria-label={pick('Go back', 'వెనక్కి వెళ్ళండి')} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-slate-100" onClick={leave}>
-              <span className="material-symbols-outlined">arrow_back</span>
-            </button>
-            <h1 className="truncate font-bold text-lg text-slate-800">{t('loadingList') || 'Loading List'}</h1>
-          </div>
-          <div className="flex items-center gap-2">
-          <button className="px-4 py-1.5 bg-teal-700 text-white rounded-lg font-semibold text-sm" disabled={saving || opening} onClick={handleSaveList}>
-            {t('save') || 'Save'}
-          </button></div>
-        </div>
-      </header>}
+    <div className="pilot workspace-utility-screen settings-screen space-y-4">
+      <header className="screen-heading">
+        <BackButton label="Back" onClick={leave} />
+        <h1>Loading List</h1>
+      </header>
 
-      <Content className={embedded ? 'space-y-4' : 'pt-20 px-4 max-w-xl mx-auto space-y-4'}>
-        {error && <p role="alert" className="mb-4 rounded-xl border-2 border-red-300 bg-white p-4 text-red-800">{error}</p>}
-        {opening && <p role="status">{pick('Opening loading list…', 'లోడింగ్ జాబితా తెరుస్తోంది…')}</p>}
+      <div className="space-y-4">
+        {error && <p role="alert" className="control-error">{error}</p>}
+        {opening && <p role="status">Opening loading list…</p>}
         <fieldset disabled={opening} className="space-y-4 min-w-0">
-        <Field en="Search loading lists" te="లోడింగ్ జాబితాలు వెతకండి" type="search" name="q" autoComplete="off" spellCheck={false} maxLength={120} value={historySearch} onChange={e => setHistorySearch(e.target.value)} />
-        <Field en="Saved loading lists" te="సేవ్ చేసిన లోడింగ్ జాబితాలు">
-          <select className="input rounded-xl" disabled={saving || opening || historyBusy} value={activeListId || ''} onChange={async event => {
-            if (!window.confirm(pick('Replace the current form with this loading list?', 'ప్రస్తుత వివరాలను మార్చాలా?'))) return;
+        <Field label="Search loading lists" type="search" name="q" autoComplete="off" spellCheck={false} maxLength={120} value={historySearch} onChange={e => setHistorySearch(e.target.value)} />
+        <Field label="Saved loading lists">
+          <select className="input" disabled={saving || opening || historyBusy} value={activeListId || ''} onChange={async event => {
+            if (!window.confirm('Replace the current form with this loading list?')) return;
             const id = event.target.value;
             const ticket = ++detailTicket.current; setOpening(true);
             try {
@@ -337,33 +318,33 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
             setSavedSnapshot(JSON.stringify({ supervisor: list?.supervisor || '', buyerDestination: list?.buyerDestination || '', stoneType: list?.stoneType || '', finish: list?.finish || '', requirements: opened }));
             } catch(e) { if (ticket === detailTicket.current) setError(e.message); }
             finally { if (ticket === detailTicket.current) setOpening(false); }
-          }}><option value="">{pick('New loading list', 'కొత్త లోడింగ్ జాబితా')}</option>{savedLists.map(list => <option key={list.id} value={list.id}>{list.loadingListNumber} · {list.buyerDestination}</option>)}</select>
+          }}><option value="">New loading list</option>{savedLists.map(list => <option key={list.id} value={list.id}>{list.loadingListNumber} · {list.buyerDestination}</option>)}</select>
         </Field>
         
-        {historyBusy && <p role="status">{pick('Loading lists…', 'జాబితాలు లోడ్ అవుతున్నాయి…')}</p>}
-        {nextCursor && <Button onClick={moreLists} disabled={historyBusy} en="Load more lists" te="మరిన్ని జాబితాలు" />}
-        {!historyBusy && savedLists.length === 0 && <p>{pick('No saved lists match.', 'సేవ్ చేసిన జాబితాలు లేవు.')}</p>}
+        {historyBusy && <p role="status">Loading lists…</p>}
+        {nextCursor && <Button onClick={moreLists} disabled={historyBusy} label="Load more lists" />}
+        {!historyBusy && savedLists.length === 0 && <p>No saved lists match.</p>}
         {/* Basic Details */}
         <Card className="gap-4">
-          <h2 className="section-heading text-sm font-semibold">{pick('Loading list details', 'లోడింగ్ జాబితా వివరాలు')}</h2>
+          <h2 className="section-heading">Loading list details</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field en={t('supervisor')} te={t('supervisor')} type="text" id="loading-list-supervisor" name="supervisor" autoComplete="off" value={supervisor} onChange={(e)=>setSupervisor(e.target.value)} />
-            <Field en={t('destination')} te={t('destination')}>
-              <select id="loading-list-destination" name="buyerDestination" className="input rounded-xl" value={buyerDestination} onChange={(e)=>setBuyerDestination(e.target.value)}>
+            <Field label="Manager" type="text" id="loading-list-supervisor" name="supervisor" autoComplete="off" value={supervisor} onChange={(e)=>setSupervisor(e.target.value)} />
+            <Field label="Destination">
+              <select id="loading-list-destination" name="buyerDestination" className="input" value={buyerDestination} onChange={(e)=>setBuyerDestination(e.target.value)}>
                 <option value="">--</option>
                 {settings?.savedDestinations?.map(d => <option key={d}>{d}</option>)}
               </select>
             </Field>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field en={t('stoneType')} te={t('stoneType')}>
-              <select id="loading-list-stone-type" name="stoneType" className="input rounded-xl" value={stoneType} onChange={(e)=>setStoneType(e.target.value)}>
+            <Field label="Stone Type">
+              <select id="loading-list-stone-type" name="stoneType" className="input" value={stoneType} onChange={(e)=>setStoneType(e.target.value)}>
                 <option value="">--</option>
                 {[...new Set(settings?.stoneRates?.map(sr => sr.stoneType))].map(st => <option key={st}>{st}</option>)}
               </select>
             </Field>
-            <Field en={t('finish')} te={t('finish')}>
-              <select id="loading-list-finish" name="finish" className="input rounded-xl" value={finish} onChange={(e)=>setFinish(e.target.value)}>
+            <Field label="Finish">
+              <select id="loading-list-finish" name="finish" className="input" value={finish} onChange={(e)=>setFinish(e.target.value)}>
                 <option value="">--</option>
                 {[...new Set(settings?.stoneRates?.filter(sr => sr.stoneType === stoneType).map(sr => sr.finish))].map(f => <option key={f}>{f}</option>)}
               </select>
@@ -374,95 +355,95 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
         {/* Add Requirement */}
         <Card>
           <div className="flex justify-between items-center mb-3">
-            <h2 className="section-heading text-sm font-semibold text-slate-800">{editIndex !== null ? (t('editRequirement') || 'Edit Requirement') : (t('addRequirement') || 'Add Requirement')}</h2>
-            {editIndex !== null && <Button onClick={handleCancelEdit} en={t('cancel')} te={t('cancel')} />}
+            <h2 className="section-heading text-sm font-semibold text-on-surface">{editIndex !== null ? 'Edit requirement' : 'Add Requirement'}</h2>
+            {editIndex !== null && <Button onClick={handleCancelEdit} label="Cancel" />}
           </div>
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
-              <Field en={t('length')} te={t('length')} type="text" id="requirement-length" name="length" autoComplete="off" spellCheck={false} placeholder="e.g. 4 1/2…" error={reqErrors.length} value={reqLen} onChange={(e)=>setReqLen(e.target.value)} />
-              <FractionChips value={reqLen} setValue={setReqLen} label={t('length')} />
+              <Field label="Length (ft)" type="text" id="requirement-length" name="length" autoComplete="off" spellCheck={false} placeholder="e.g. 4 1/2…" error={reqErrors.length} value={reqLen} onChange={(e)=>setReqLen(e.target.value)} />
+              <FractionChips value={reqLen} setValue={setReqLen} label="Length (ft)" />
             </div>
             <div>
-              <Field en={t('width')} te={t('width')} type="text" id="requirement-width" name="width" autoComplete="off" spellCheck={false} placeholder="e.g. 2…" error={reqErrors.width} value={reqWid} onChange={(e)=>setReqWid(e.target.value)} />
-              <FractionChips value={reqWid} setValue={setReqWid} label={t('width')} />
+              <Field label="Width (ft)" type="text" id="requirement-width" name="width" autoComplete="off" spellCheck={false} placeholder="e.g. 2…" error={reqErrors.width} value={reqWid} onChange={(e)=>setReqWid(e.target.value)} />
+              <FractionChips value={reqWid} setValue={setReqWid} label="Width (ft)" />
             </div>
           </div>
           <div className="mb-4">
-            <Field en={t('pieces')} te={t('pieces')} type="number" id="requirement-quantity" name="quantity" placeholder="e.g. 10…" error={reqErrors.quantity} value={reqQty} onChange={(e)=>setReqQty(e.target.value)} />
+            <Field label="Pieces" type="number" id="requirement-quantity" name="quantity" placeholder="e.g. 10…" error={reqErrors.quantity} value={reqQty} onChange={(e)=>setReqQty(e.target.value)} />
           </div>
-          <Button className="w-full" onClick={handleAddRequirement} en={editIndex !== null ? t('updateRequirement') : t('addRequirement')} te={editIndex !== null ? t('updateRequirement') : t('addRequirement')} />
+          <Button className="w-full" onClick={handleAddRequirement} label={editIndex !== null ? 'Update requirement' : 'Add Requirement'} />
         </Card>
 
         {/* Requirements List */}
         <section className="mb-4">
           <div className="flex justify-between items-center mb-3">
-            <h2 className="section-heading text-sm font-semibold text-slate-800">{t('requirements') || 'Requirements'}</h2>
-            <span className="text-xs text-gray-600">{requirements.length} {pick('lines', 'వరుసలు')}</span>
+            <h2 className="section-heading text-sm font-semibold text-on-surface">Requirements</h2>
+            <span className="text-xs text-on-surface-variant">{requirements.length} lines</span>
           </div>
           
           <div className="space-y-3">
             {requirements.map((req, idx) => {
               const size = `${req.lengthDisplay || decimalToFraction(req.lengthFt)} × ${req.widthDisplay || decimalToFraction(req.widthFt)}`;
               return (
-              <Card key={idx} className={editIndex === idx ? 'ring-2 ring-teal-100' : ''}>
+              <Card key={idx} className={editIndex === idx ? 'ring-2 ring-primary-container' : ''}>
                 {confirmRemove === idx ? (
                   <div className="load-delete mb-3" data-state="confirming">
-                    <span className="load-delete-question" role="status">{pick(`Delete requirement ${size}?`, `${size} అవసరాన్ని తొలగించాలా?`)}</span>
-                    <button type="button" className="load-delete-confirm" onClick={() => handleRemoveRequirement(idx)}>{pick('Yes, delete', 'అవును, తొలగించండి')}</button>
-                    <button type="button" className="load-delete-cancel" data-requirement-cancel={idx} onClick={() => { setConfirmRemove(null); requestAnimationFrame(() => document.querySelector(`[data-requirement-delete="${idx}"]`)?.focus()); }}>{pick('Cancel', 'రద్దు')}</button>
+                    <span className="load-delete-question" role="status">{`Delete requirement ${size}?`}</span>
+                    <Button variant="danger" className="load-delete-confirm" onClick={() => handleRemoveRequirement(idx)} label="Yes, delete" />
+                    <Button className="load-delete-cancel" data-requirement-cancel={idx} onClick={() => { setConfirmRemove(null); requestAnimationFrame(() => document.querySelector(`[data-requirement-delete="${idx}"]`)?.focus()); }} label="Cancel" />
                   </div>
                 ) : <div className="action-row flex flex-wrap justify-end gap-2 mb-3">
-                  <Button onClick={() => handleEditRequirement(idx)} en="Edit" te="మార్చండి" aria-label={pick(`Edit ${size}`, `${size} మార్చండి`)} />
-                  <Button onClick={() => { setConfirmRemove(idx); requestAnimationFrame(() => document.querySelector(`[data-requirement-cancel="${idx}"]`)?.focus()); }} data-requirement-delete={idx} en={t('delete')} te={t('delete')} aria-label={pick(`Delete ${size}`, `${size} ${t('delete')}`)} />
+                  <Button onClick={() => handleEditRequirement(idx)} label="Edit" aria-label={`Edit ${size}`} />
+                  <Button variant="danger-quiet" onClick={() => { setConfirmRemove(idx); requestAnimationFrame(() => document.querySelector(`[data-requirement-cancel="${idx}"]`)?.focus()); }} data-requirement-delete={idx} label="Delete" aria-label={`Delete ${size}`} />
                 </div>}
                 
                 <div className="flex items-center gap-2 mb-3">
-                  <div className="text-lg font-semibold text-slate-800">{req.lengthDisplay || decimalToFraction(req.lengthFt)} <span className="text-slate-400">×</span> {req.widthDisplay || decimalToFraction(req.widthFt)}</div>
-                  {req.balance === 0 && <span className="ml-auto bg-green-100 text-green-800 text-xs font-medium px-2 py-1 rounded">{pick('Complete', 'పూర్తయింది')}</span>}
-                  {req.balance < 0 && <span className="ml-auto bg-orange-100 text-orange-800 text-xs font-medium px-2 py-1 rounded">{Math.abs(req.balance)} {pick('Excess', 'అదనపు')}</span>}
+                  <div className="text-lg font-semibold text-on-surface">{req.lengthDisplay || decimalToFraction(req.lengthFt)} <span className="text-on-surface-variant">×</span> {req.widthDisplay || decimalToFraction(req.widthFt)}</div>
+                  {req.balance === 0 && <span className="ml-auto bg-success-container text-success text-xs font-medium px-2 py-1 rounded">Complete</span>}
+                  {req.balance < 0 && <span className="ml-auto bg-warning-container text-warning text-xs font-medium px-2 py-1 rounded">{Math.abs(req.balance)} Excess</span>}
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 mb-4 bg-slate-50 p-2 rounded-lg">
+                <div className="grid grid-cols-3 gap-2 mb-4 bg-surface p-2 rounded-lg">
                   <div className="text-center">
-                    <div className="text-xs text-gray-600">{pick('Required', 'అవసరం')}</div>
-                    <div className="text-lg font-bold text-slate-700 tabular-nums">{req.requiredQuantity}</div>
+                    <div className="text-xs text-on-surface-variant">Required</div>
+                    <div className="text-lg font-bold text-on-surface tabular-nums">{req.requiredQuantity}</div>
                   </div>
-                  <div className="text-center border-l border-r border-slate-200">
-                    <div className="text-xs text-gray-600">{pick('Loaded', 'లోడ్ చేసినవి')}</div>
-                    <div className="text-lg font-bold text-teal-700 tabular-nums">{req.loadedQuantity}</div>
+                  <div className="text-center border-l border-r border-outline-variant">
+                    <div className="text-xs text-on-surface-variant">Loaded</div>
+                    <div className="text-lg font-bold text-primary tabular-nums">{req.loadedQuantity}</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-xs text-gray-600">{pick('Balance', 'మిగిలినవి')}</div>
-                    <div className={`text-lg font-bold tabular-nums ${req.balance < 0 ? 'text-orange-600' : 'text-slate-700'}`}>{req.balance > 0 ? req.balance : 0}</div>
+                    <div className="text-xs text-on-surface-variant">Balance</div>
+                    <div className={`text-lg font-bold tabular-nums ${req.balance < 0 ? 'text-warning' : 'text-on-surface'}`}>{req.balance > 0 ? req.balance : 0}</div>
                   </div>
                 </div>
 
                 <div className="flex flex-col gap-2">
                   {activeCustomIdx === idx ? (
-                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <div className="bg-surface p-3 rounded-lg border border-outline-variant">
                       <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm font-medium text-slate-700">{pick('Custom piece size', 'కస్టమ్ ముక్క సైజు')}</span>
+                        <span className="text-sm font-medium text-on-surface">Custom piece size</span>
                       </div>
                       <div className="grid grid-cols-2 gap-2 mb-3">
                         <div>
-                          <Field en={t('length')} te={t('length')} type="text" name="customLength" autoComplete="off" spellCheck={false} value={customLen} onChange={e=>setCustomLen(e.target.value)} />
-                          <div className="mt-1"><FractionChips value={customLen} setValue={setCustomLen} label={t('length')} /></div>
+                          <Field label="Length (ft)" type="text" name="customLength" autoComplete="off" spellCheck={false} value={customLen} onChange={e=>setCustomLen(e.target.value)} />
+                          <div className="mt-1"><FractionChips value={customLen} setValue={setCustomLen} label="Length (ft)" /></div>
                         </div>
                         <div>
-                          <Field en={t('width')} te={t('width')} type="text" name="customWidth" autoComplete="off" spellCheck={false} value={customWid} onChange={e=>setCustomWid(e.target.value)} />
-                          <div className="mt-1"><FractionChips value={customWid} setValue={setCustomWid} label={t('width')} /></div>
+                          <Field label="Width (ft)" type="text" name="customWidth" autoComplete="off" spellCheck={false} value={customWid} onChange={e=>setCustomWid(e.target.value)} />
+                          <div className="mt-1"><FractionChips value={customWid} setValue={setCustomWid} label="Width (ft)" /></div>
                         </div>
                       </div>
                       <div className="action-row flex flex-wrap gap-2">
-                        <Button onClick={()=>setActiveCustomIdx(null)} en={t('cancel')} te={t('cancel')} />
-                        <Button primary onClick={()=>handleCustomLoad(idx)} en="Load custom" te="కస్టమ్ ముక్క లోడ్ చేయండి" />
+                        <Button onClick={()=>setActiveCustomIdx(null)} label="Cancel" />
+                        <Button primary onClick={()=>handleCustomLoad(idx)} label="Load custom" />
                       </div>
                     </div>
                   ) : (
                     <div className="action-row flex flex-wrap gap-2">
-                      <Button en="−" te="−" aria-label={pick('Remove last loaded piece', 'చివరిగా లోడ్ చేసిన ముక్క తొలగించండి')} onClick={() => handleRemovePiece(idx)} disabled={req.loadedQuantity === 0} />
-                      <Button primary className="flex-1" en="Load piece" te="ముక్క లోడ్ చేయండి" onClick={() => handleLoadPiece(idx)} />
-                      <Button en="Custom" te="కస్టమ్" aria-label={pick(`Custom piece for ${size}`, `${size} కోసం కస్టమ్ ముక్క`)} onClick={() => handleOpenCustom(idx)} />
+                      <Button label="−" aria-label="Remove last loaded piece" onClick={() => handleRemovePiece(idx)} disabled={req.loadedQuantity === 0} />
+                      <Button primary className="flex-1" label="Load piece" onClick={() => handleLoadPiece(idx)} />
+                      <Button label="Custom" aria-label={`Custom piece for ${size}`} onClick={() => handleOpenCustom(idx)} />
                     </div>
                   )}
                 </div>
@@ -475,49 +456,49 @@ export default function LoadingListScreen({ onClose, embedded = false, organizat
         {/* Summary Footer */}
         {requirements.length > 0 && (
           <Card>
-            <h2 className="section-heading text-sm font-semibold text-slate-800 mb-3">{pick('Loading summary', 'లోడింగ్ సారాంశం')}</h2>
+            <h2 className="section-heading text-sm font-semibold text-on-surface mb-3">Loading summary</h2>
             <div className="flex justify-between items-end">
               <div>
-                <div className="text-sm text-gray-600">{pick('Total required', 'మొత్తం అవసరం')}</div>
-                <div className="text-xl font-semibold tabular-nums">{totalRequired} {t('pieces')}</div>
+                <div className="text-sm text-on-surface-variant">Total required</div>
+                <div className="text-xl font-semibold tabular-nums">{totalRequired} Pieces</div>
               </div>
               <div className="text-right">
-                <div className="text-sm text-gray-600">{pick('Total loaded', 'మొత్తం లోడ్ చేసినవి')}</div>
-                <div className="text-xl font-semibold tabular-nums">{totalLoaded} {t('pieces')}</div>
+                <div className="text-sm text-on-surface-variant">Total loaded</div>
+                <div className="text-xl font-semibold tabular-nums">{totalLoaded} Pieces</div>
               </div>
             </div>
             {totalPending > 0 && (
-              <div className="mt-3 pt-3 border-t border-gray-200 text-sm text-gray-600 flex justify-between">
-                <span>{pick('Remaining', 'మిగిలినవి')}:</span>
-                <span className="font-semibold text-gray-900 tabular-nums">{totalPending} {t('pieces')}</span>
+              <div className="mt-3 pt-3 border-t border-outline-variant text-sm text-on-surface-variant flex justify-between">
+                <span>Remaining:</span>
+                <span className="font-semibold text-on-surface tabular-nums">{totalPending} Pieces</span>
               </div>
             )}
             {totalExcess > 0 && (
-              <div className="mt-3 pt-3 border-t border-gray-200 text-sm text-gray-600 flex justify-between">
-                <span>{pick('Excess', 'అదనపు')}:</span>
-                <span className="font-semibold text-orange-700 tabular-nums">{totalExcess} {t('pieces')}</span>
+              <div className="mt-3 pt-3 border-t border-outline-variant text-sm text-on-surface-variant flex justify-between">
+                <span>Excess:</span>
+                <span className="font-semibold text-warning tabular-nums">{totalExcess} Pieces</span>
               </div>
             )}
             
           </Card>
         )}
 
-        {(embedded || requirements.length > 0) && <Card className="gap-3">
+        <Card className="gap-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="section-heading text-sm font-semibold">{pick('Document actions', 'పత్రం చర్యలు')}</h2>
-            {loadingListNumber && <span className="text-sm text-gray-600 break-all">{loadingListNumber}</span>}
+            <h2 className="section-heading">Document actions</h2>
+            {loadingListNumber && <span className="text-sm text-on-surface-variant break-all">{loadingListNumber}</span>}
           </div>
           <div className="action-row flex flex-wrap gap-2">
-            {notice && <p role="status" className="basis-full text-sm text-teal-800">{notice}</p>}
-            {embedded && <Button primary en={saving ? pick('Saving…', 'సేవ్ అవుతోంది…') : t('save')} te={saving ? pick('Saving…', 'సేవ్ అవుతోంది…') : t('save')} disabled={saving || opening} onClick={handleSaveList} />}
+            {notice && <p role="status" className="basis-full text-sm text-primary">{notice}</p>}
+            <Button primary label={saving ? 'Saving…' : 'Save'} disabled={saving || opening} onClick={handleSaveList} />
             {requirements.length > 0 && <>
-              <Button en="Download PDF" te="PDF డౌన్‌లోడ్" onClick={handleGeneratePdf} />
-              <Button en="Download Excel" te="Excel డౌన్‌లోడ్" onClick={handleGenerateExcel} />
+              <Button label="Download PDF" onClick={handleGeneratePdf} />
+              <Button label="Download Excel" onClick={handleGenerateExcel} />
             </>}
           </div>
-        </Card>}
+        </Card>
         </fieldset>
-      </Content>
+      </div>
     </div>
   );
 }

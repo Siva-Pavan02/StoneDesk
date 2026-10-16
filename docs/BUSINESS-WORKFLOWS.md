@@ -7,7 +7,7 @@ StoneDesk records granite and stone truck loads for a business (organization), t
 | Entity | Service / Bounded Context | Description | Key Relationships |
 | --- | --- | --- | --- |
 | Organization (`MasterSettings`) | Business settings | Tenant root: business profile, logo, saved trucks and destinations, stone rates, default royalty fee | Owns Users, Dispatches, LoadingLists |
-| User | Identity and access | A member of one organization with a role (Admin, Yard Manager, Dispatcher) and an active flag | Belongs to Organization; has Sessions and PasswordResetTokens |
+| User | Identity and access | A member of one organization with a role (Admin, Manager, Dispatcher; Manager is the `YardManager` enum) and an active flag | Belongs to Organization; has Sessions and PasswordResetTokens |
 | Session | Identity and access | Server-side login session behind the `stonedesk_session` cookie | Belongs to User |
 | PasswordResetToken | Identity and access | Single-use, 1 hour token for password reset by email | Belongs to User |
 | Dispatch (Load) | Loads and billing | One truck load: logistics, measured stone groups, totals and a business snapshot at finalize | Belongs to Organization; priced from Organization stone rates |
@@ -33,7 +33,7 @@ StoneDesk records granite and stone truck loads for a business (organization), t
 1. A new user signs up with name, email, password and `createOrganization=true` plus a business name.
 2. The server creates the organization and the user in one transaction. The user becomes Admin.
 3. A shareable organization code is generated from the business name (retried on collision).
-4. The app sends the Admin to business setup (`#profile`) and then products (`#products`) until a business name and at least one stone rate exist.
+4. The app sends the Admin to business setup (`#profile`) until a business name exists. If there are no products yet, saving setup opens New load (`#load`), where the first product can be added.
 
 ### 2. Join an existing business
 1. A user signs up with an organization code instead of a business name.
@@ -47,11 +47,11 @@ StoneDesk records granite and stone truck loads for a business (organization), t
 ### 4. Business setup (Admin)
 1. Save the business profile: name, address, phone, GST number, trade license.
 2. Upload a PNG or JPEG logo (up to 2 MB).
-3. Add stone rates (stone type, finish, rate) and set the default royalty / loading fee.
-4. Save frequent trucks and destinations for quick selection.
+3. Set the default royalty / loading fee. Products (stone type, finish, rate) are added in Settings > Products & rates (`#settings/products`) or from New load.
+4. Trucks and destinations need no setup: they are remembered automatically whenever a load is saved and offered as suggestions in New load.
 
 ### 5. Record a load (core workflow)
-1. Any active member starts a new load (`#load`) with truck number, destination, supervisor and party name.
+1. Any active member starts a new load (`#load`, from the New load menu item or header button) with truck number, destination, manager and party name.
 2. Measurements are entered per product group as rows of length, width, quantity, category (Regular or TOP) and row number. Fractions are supported.
 3. Each product group carries a per square foot rate that defaults from the product's rate. The draft is saved with a client-generated `clientRequestId`; the server validates rows and rates and computes totals.
 4. The draft can be edited. Each save checks the last `updatedAt`, so concurrent edits are rejected instead of overwritten.
@@ -60,7 +60,7 @@ StoneDesk records granite and stone truck loads for a business (organization), t
 7. When the truck arrives, an Admin or Dispatcher marks the load Delivered.
 
 ### 6. Loading requirements
-1. Admin, Yard Manager or Dispatcher creates a loading list with buyer destination, stone type, finish and required sizes and quantities.
+1. Admin, Manager or Dispatcher creates a loading list with buyer destination, stone type, finish and required sizes and quantities.
 2. Loaded pieces are recorded against each size; balance is required minus loaded.
 3. Admin or Dispatcher sets the status (Draft, Loading, Completed). Only Admin can delete a list.
 4. The list can be exported as PDF or Excel.
@@ -138,9 +138,11 @@ sequenceDiagram
 ### Access and roles
 - Users only see data of their own organization.
 - Paused users can still sign in but get 403 "access paused" on workspace APIs.
-- Admin only: business profile, logo, stone rates, royalty fee, trucks, destinations, team management, deleting loading lists.
+- Admin only: business profile, logo, editing and removing stone rates, royalty fee, removing truck/destination suggestions, team management, deleting loading lists.
+- Admin or Manager: add products (`POST /stone-rates`).
 - Admin or Dispatcher: finalize loads, mark loads Delivered, change loading list status.
-- Yard Manager: can record drafts and loading lists but cannot finalize.
+- Manager: can record drafts and loading lists and add products but cannot finalize.
+- Every dispatch save remembers its truck number and destination as suggestions (de-duplicated, newest first); this never fails the save.
 
 ### Signup and passwords
 - Passwords are 12 to 128 characters with a zxcvbn strength score of at least 3.

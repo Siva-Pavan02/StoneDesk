@@ -14,6 +14,14 @@ export const AREA_ROUNDING_NOTE = 'Areas are shown to 2 decimals. Subtotals and 
 // Sample-mode bank grid (3 columns x 2 rows, row-major). Placeholders only.
 export const SAMPLE_BANK_PAIRS = [['Holder', '[Account holder name]'], ['Bank', '[Bank name]'], ['A/c no.', '[Account number]'],
   ['IFSC', '[IFSC code]'], ['Branch', '[Branch — optional]'], ['UPI', '[UPI ID — optional]']];
+// Full names of the sample labels above (same order), used as the accessible name.
+export const SAMPLE_BANK_NAMES = ['Account holder', 'Bank name', 'Account number', 'IFSC code', 'Branch — optional', 'UPI ID — optional'];
+
+// The status badge text: SAMPLE in sample mode; Dispatched reads IN TRANSIT.
+export function a4StatusLabel(model) {
+  if (model.mode === 'sample') return 'SAMPLE';
+  return model.status === 'Dispatched' ? 'IN TRANSIT' : String(model.status).toUpperCase();
+}
 
 // Splits the free-text bank details on newlines, " · ", "|" or ";". A segment is
 // further split on commas only when every comma part is itself a "Label: value".
@@ -124,7 +132,7 @@ export function prepareA4Invoice(input) {
       // Optional settlement line; non-string values (null, numbers, objects) are ignored.
       bankDetails: typeof seller.bankDetails === 'string' ? seller.bankDetails.trim() : '' },
     party: required(input.party, 'Party'), lorryNumber: required(input.lorryNumber, 'Lorry number'),
-    destination: required(input.destination, 'Destination'), supervisor: required(input.supervisor, 'Supervisor'),
+    destination: required(input.destination, 'Destination'), supervisor: required(input.supervisor, 'Manager'),
     currency: input.currency,
   };
   if (input.mode === 'production' && !['Draft', 'Dispatched', 'Delivered'].includes(identity.status)) throw new Error('Unrecognized invoice status.');
@@ -193,6 +201,36 @@ export function prepareA4Invoice(input) {
     amountWords: amountInWords(netPayable), warnings };
 }
 
+// Strips every money field from a group/entry totals object, keeping pieces and area.
+const withoutAmount = ({ amount: _amount, ...rest }) => rest;
+
+// Projects a prepared A4 model onto one printed copy. The buyer copy is the model
+// itself (same reference). The driver copy is a derived view of the same instance
+// with rates, amounts, money totals, amount in words and bank details removed, so a
+// renderer that reads them by mistake finds nothing. Rows, order, group pieces/area
+// and warnings are carried over unchanged; its title is "Driver slip" in both modes.
+// The input model is never mutated.
+export function projectCopy(model, copy) {
+  if (copy === 'buyer') return model;
+  if (copy !== 'driver') throw new Error('Copy must be buyer or driver.');
+  // Underscored names are the fields deliberately dropped from the driver copy.
+  const { materialTotal: _materialTotal, regularAmount: _regularAmount, topAmount: _topAmount, netPayable: _netPayable, ...totals } = model.totals || {};
+  const { loadingRoyalty: _loadingRoyalty, amountWords: _amountWords, ...rest } = model;
+  const { bankDetails: _bankDetails, ...seller } = model.seller || {};
+  return {
+    ...rest,
+    title: 'Driver slip',
+    seller,
+    groups: (model.groups || []).map(group => ({
+      ...group,
+      entries: group.entries.map(({ ratePerSqFt: _rate, amount: _amount, unroundedAmount: _unrounded, ...entry }) => entry),
+      regular: withoutAmount(group.regular), top: withoutAmount(group.top), total: withoutAmount(group.total),
+    })),
+    totals,
+    warnings: model.warnings,
+  };
+}
+
 export function sampleA4Invoice() {
   return {
     mode: 'sample', currency: 'INR', invoiceNumber: 'SAMPLE-024', invoiceDate: '2026-10-11', status: 'SAMPLE',
@@ -209,6 +247,15 @@ export function sampleA4Invoice() {
   };
 }
 
+/**
+ * Adapts a saved Dispatch into the A4 model input.
+ *
+ * Precondition for the logo: the model reads only `businessSnapshot.logoDataUrl`.
+ * Finalized bills store a reference (`businessSnapshot.logo = { sha256, … }`), not the
+ * bytes, so pass a record hydrated by `hydrateRecordLogo` / `useLogoHydration`
+ * (utils/logoHydration.js) first. An unhydrated record renders the "LOGO" placeholder
+ * without an error, which is the intended fallback when the logo cannot be fetched.
+ */
 export function a4InvoiceFromDispatch(record) {
   const business = record?.businessSnapshot || {};
   const byNumber = new Map();

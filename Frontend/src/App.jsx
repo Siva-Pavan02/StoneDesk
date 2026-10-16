@@ -4,14 +4,12 @@ import LogoutDialog from './components/pilot/LogoutDialog';
 import ResetPassword from './components/pilot/ResetPassword';
 import { Button, Card, ErrorMessage } from './components/pilot/Controls';
 import { request } from './lib/pilotApi';
-import { useLanguage } from './i18n/LanguageContext';
 import { finishGoogleSignIn } from './lib/googleSignIn';
 import { appView, consumeResetLink, takeResetLinkFromHash } from './lib/authFlow';
 const PilotApp = lazy(() => import('./components/pilot/PilotApp'));
 const LandingPage = lazy(() => import('./components/pilot/LandingPage'));
 
 export default function App() {
-  const { pick } = useLanguage();
   // First state hook: the initializer strips the reset link from the URL during the first render.
   const [reset, setReset] = useState(() => consumeResetLink());
   const [user, setUser] = useState(null), [checking, setChecking] = useState(true);
@@ -41,7 +39,7 @@ export default function App() {
       .finally(() => setChecking(false));
   }, []);
   useEffect(() => {
-    const expired = () => { setUser(null); setAuthMode('login'); setError(pick('Your session ended. Sign in again; your unfinished load is saved on this device.', 'సెషన్ ముగిసింది. మళ్ళీ లాగిన్ అవ్వండి; మీ లోడ్ ఈ పరికరంలో సేవ్ అయింది.')); };
+    const expired = () => { setUser(null); setAuthMode('login'); setError('Your session ended. Sign in again; your unfinished loads are saved on this device.'); };
     // A reset link pasted into a loaded tab: show Reset_View and close any dialog. Never clears reset.
     const changed = () => {
       const link = takeResetLinkFromHash(window);
@@ -50,7 +48,7 @@ export default function App() {
     };
     window.addEventListener('session-expired', expired); window.addEventListener('hashchange', changed);
     return () => { window.removeEventListener('session-expired', expired); window.removeEventListener('hashchange', changed); };
-  }, [pick]);
+  }, []);
   async function logout() {
     try { await request('/auth/logout', { method: 'POST' }); setUser(null); window.location.hash = 'welcome'; setWelcome(true); }
     catch (err) { setError(err.message); }
@@ -61,11 +59,11 @@ export default function App() {
   const view = appView({ reset, checking, user, welcome });
   return <>
     {error && !authMode && <div className="pilot mx-auto max-w-lg p-4"><ErrorMessage error={error} /></div>}
-    <Suspense fallback={<div className="pilot p-6" role="status">{pick('Opening StoneDesk…', 'StoneDesk తెరుస్తోంది…')}</div>}>
+    <Suspense fallback={<div className="pilot p-6" role="status">Opening StoneDesk…</div>}>
     {view === 'reset' ? <ResetPassword link={reset} onDone={resetDone} onLogin={() => setAuthMode('login')} onHome={() => setReset(null)} /> :
-      view === 'loading' ? <div className="pilot min-h-dvh bg-gray-50 p-6 text-gray-900" role="status">{pick('Opening StoneDesk…', 'StoneDesk తెరుస్తోంది…')}</div> :
+      view === 'loading' ? <div className="pilot min-h-dvh bg-surface p-6 text-on-surface" role="status">Opening StoneDesk…</div> :
       view === 'landing' ? <LandingPage user={user} onWorkspace={workspace} onStart={() => setAuthMode('signup')} onLogin={() => setAuthMode('login')} /> :
-      view === 'pending' ? <div className="pilot min-h-dvh bg-gray-50 px-4 py-12"><Card className="mx-auto max-w-lg gap-5"><h1 className="text-2xl font-bold">{pick('Your account is ready for approval', 'మీ ఖాతా ఆమోదం కోసం సిద్ధంగా ఉంది')}</h1><p>{pick('Ask your business administrator to approve your account in Settings → Team & access.', 'సెట్టింగ్స్ → బృందం మరియు యాక్సెస్‌లో మీ ఖాతాను ఆమోదించమని అడ్మిన్‌ను అడగండి.')}</p><p className="break-all font-semibold" translate="no">{user.email}</p><Button primary disabled={approval === 'checking'} aria-busy={approval === 'checking' || undefined} en={approval === 'checking' ? 'Checking…' : 'Check approval'} te={approval === 'checking' ? 'తనిఖీ చేస్తోంది…' : 'ఆమోదం తనిఖీ చేయండి'} onClick={checkApproval} /><p role="status" className="text-sm text-gray-700">{approval === 'checked' ? pick('Still waiting for approval. Try again after your administrator approves you.', 'ఇంకా ఆమోదం కోసం వేచి ఉంది. అడ్మిన్ ఆమోదించిన తర్వాత మళ్ళీ ప్రయత్నించండి.') : ''}</p><Button en="Log out" te="లాగ్ అవుట్" onClick={() => setConfirmingLogout(true)} /></Card></div> :
+      view === 'pending' ? <div className="pilot min-h-dvh bg-surface px-4 py-12"><Card className="mx-auto max-w-lg gap-5"><h1 className="text-2xl font-bold">Your account is ready for approval</h1><p>{'Ask your business administrator to approve your account in Settings → Team & access.'}</p><p className="break-all font-semibold" translate="no">{user.email}</p><Button primary disabled={approval === 'checking'} aria-busy={approval === 'checking' || undefined} label={approval === 'checking' ? 'Checking…' : 'Check approval'} onClick={checkApproval} /><p role="status" className="text-sm text-on-surface">{approval === 'checked' ? 'Still waiting for approval. Try again after your administrator approves you.' : ''}</p><Button label="Log out" onClick={() => setConfirmingLogout(true)} /></Card></div> :
       <PilotApp user={user} onLogout={logout} onUserChange={setUser} />}
     </Suspense>
     {view === 'pending' && <LogoutDialog open={confirmingLogout} onCancel={() => setConfirmingLogout(false)} onConfirm={async () => { await logout(); setConfirmingLogout(false); }} />}

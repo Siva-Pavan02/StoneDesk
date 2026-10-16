@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useLanguage } from "../../i18n/LanguageContext";
 import { money } from "../../utils/pilotDraft.js";
 import { Button, Card } from "./Controls.jsx";
 import Icon from "./Icon.jsx";
@@ -41,8 +40,7 @@ export default function LoadHub({
   admin = false,
   onDelete,
 }) {
-  const { pick, language } = useLanguage();
-  const locale = language === "te" ? "te-IN" : "en-IN";
+  const locale = "en-IN";
   const dateFormat = new Intl.DateTimeFormat(locale, {
     timeZone: "Asia/Kolkata",
     day: "2-digit",
@@ -54,6 +52,20 @@ export default function LoadHub({
     maximumFractionDigits: 2,
   });
   const loadDate = (value) => dateFormat.format(new Date(value));
+  // Several loads are often started the same day, so today's show the time.
+  const timeFormat = new Intl.DateTimeFormat(locale, {
+    timeZone: "Asia/Kolkata",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const savedLabel = (value) => {
+    const at = new Date(value);
+    const sameDay = (a, b) =>
+      dateFormat.format(a) === dateFormat.format(b);
+    return sameDay(at, new Date(now))
+      ? `${"today"} ${timeFormat.format(at)}`
+      : `${loadDate(value)} ${timeFormat.format(at)}`;
+  };
   const loadArea = (value) => areaFormat.format(Number(value) || 0);
   const [filter, setFilterState] = useState(status);
   const [linkedStatus, setLinkedStatus] = useState(status);
@@ -85,13 +97,14 @@ export default function LoadHub({
     setRefreshPhase("done");
     doneTimer.current = setTimeout(() => setRefreshPhase("idle"), 1800);
   }
-  // Admin-only delete of finalized rows: per-row confirm toggle, one in flight.
+  // Per-row confirm toggle, one delete in flight. Anyone may delete a draft;
+  // only admins may delete finalized invoices (the API enforces both).
   const [confirmId, setConfirmId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [deleteError, setDeleteError] = useState(null);
   const canDelete = (item) =>
-    admin && typeof onDelete === "function" && item.status !== "Draft";
-  async function confirmDelete(id) {
+    typeof onDelete === "function" && (item.status === "Draft" || admin);
+  async function confirmDelete(id, isDraft) {
     setDeletingId(id);
     setDeleteError(null);
     try {
@@ -99,22 +112,19 @@ export default function LoadHub({
       setConfirmId(null);
       focusShown("#workspace-main");
     } catch (err) {
-      const message =
-        err?.status === 409
-          ? pick(
-              "This invoice has recorded payments. Remove the payments before deleting.",
-              "ఈ బిల్లుకు చెల్లింపులు నమోదయ్యాయి. తొలగించే ముందు చెల్లింపులను తీసివేయండి.",
-            )
+      const message = isDraft
+        ? err?.status === 409
+          ? "This draft was finalized or changed. Refresh and try again."
           : err?.status === 403
-            ? pick(
-                "You are not permitted to delete invoices.",
-                "బిల్లులను తొలగించడానికి మీకు అనుమతి లేదు.",
-              )
+            ? "You are not permitted to delete this draft."
             : err?.message ||
-              pick(
-                "Could not delete the invoice. Check your connection and try again.",
-                "బిల్లును తొలగించలేకపోయాము. కనెక్షన్ తనిఖీ చేసి మళ్ళీ ప్రయత్నించండి.",
-              );
+              "Could not delete the draft."
+        : err?.status === 409
+          ? "This load changed. Refresh and try again."
+          : err?.status === 403
+            ? "Only an Admin can delete this load."
+            : err?.message ||
+              "Could not delete the invoice. Check your connection and try again.";
       setDeleteError({ id, message });
     } finally {
       setDeletingId(null);
@@ -160,32 +170,36 @@ export default function LoadHub({
     if (!canDelete(item)) return null;
     const busy = deletingId === item.id;
     const lorry = item.logistics?.truckNumber || "";
+    const isDraft = item.status === "Draft";
+    const label = [lorry, item.partyName].filter(Boolean).join(" ");
     const error = deleteError?.id === item.id ? deleteError.message : "";
     return (
       <div className="load-delete" data-state={confirmId === item.id ? "confirming" : "idle"}>
         {confirmId === item.id ? (
           <>
             <span className="load-delete-question" role="status">
-              {pick("Delete this invoice?", "ఈ బిల్లును తొలగించాలా?")}
+              {isDraft
+                ? "Delete this draft?"
+                : "Delete this invoice and its payments?"}
             </span>
             <button
               type="button"
-              className="load-delete-confirm"
+              className="btn control-button control-button-danger load-delete-confirm"
               disabled={busy}
               aria-busy={busy}
               onClick={(event) => {
                 event.stopPropagation();
-                confirmDelete(item.id);
+                confirmDelete(item.id, isDraft);
               }}
             >
               {busy
-                ? pick("Deleting…", "తొలగిస్తోంది…")
-                : pick("Yes, delete", "అవును, తొలగించండి")}
+                ? "Deleting…"
+                : "Yes, delete"}
               <span className="sr-only">{` ${lorry}`}</span>
             </button>
             <button
               type="button"
-              className="load-delete-cancel"
+              className="btn control-button control-button-secondary load-delete-cancel"
               data-delete-cancel={item.id}
               disabled={busy}
               onClick={(event) => {
@@ -193,7 +207,7 @@ export default function LoadHub({
                 cancelConfirm(item.id);
               }}
             >
-              {pick("Cancel", "రద్దు")}
+              {"Cancel"}
             </button>
           </>
         ) : (
@@ -202,11 +216,12 @@ export default function LoadHub({
             className="icon-delete-button"
             data-delete-trigger={item.id}
             disabled={deletingId !== null}
-            aria-label={pick(
-              `Delete invoice ${lorry}`,
-              `${lorry} బిల్లును తొలగించండి`,
-            )}
-            title={pick("Delete", "తొలగించు")}
+            aria-label={
+              isDraft
+                ? `Delete draft ${label}`
+                : `Delete invoice ${lorry}`
+            }
+            title="Delete"
             onClick={(event) => {
               event.stopPropagation();
               openConfirm(item.id);
@@ -243,9 +258,9 @@ export default function LoadHub({
       : 0;
   const age = (value) => {
     const days = daysSince(value);
-    if (days === 0) return pick("Today", "ఈరోజు");
-    if (days === 1) return pick("Yesterday", "నిన్న");
-    return pick(`${days} days ago`, `${days} రోజుల క్రితం`);
+    if (days === 0) return "Today";
+    if (days === 1) return "Yesterday";
+    return `${days} days ago`;
   };
   const monthKey = dayKey(now).slice(0, 7);
   const monthBills = invoices.filter(
@@ -266,36 +281,26 @@ export default function LoadHub({
       ].some((s) => s?.toLowerCase().includes(search)),
   );
   const titles = {
-    home: ["Your yard, at a glance", "మీ యార్డ్ వివరాలు"],
-    entries: ["Loading entries", "లోడ్ వివరాలు"],
+    home: "Your yard, at a glance",
+    entries: "Loading entries",
   };
   const heading = titles[view] || titles.home;
   const visible = view === "home" ? filtered.slice(0, 5) : filtered;
   const stateLabel = (item) =>
-    pick(
-      item.status === "Draft"
+    item.status === "Draft"
         ? "Draft"
         : item.status === "Delivered"
           ? "Delivered"
-          : "In transit",
-      item.status === "Draft"
-        ? "డ్రాఫ్ట్"
-        : item.status === "Delivered"
-          ? "డెలివరీ అయింది"
-          : "ప్రయాణంలో",
-    );
+          : "In transit";
   return (
     <div className={view === "home" ? "dashboard-home" : "space-y-5"}>
       <header className={view === "home" ? "dashboard-heading" : ""}>
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
-            {pick(...heading)}
+            {heading}
           </h1>
-          <p className="mt-2 text-sm text-gray-700">
-            {pick(
-              "From the first measurement to the final bill.",
-              "మొదటి కొలత నుండి చివరి బిల్లు వరకు.",
-            )}
+          <p className="mt-2 text-sm text-on-surface">
+            {"From the first measurement to the final bill."}
           </p>
         </div>
       </header>
@@ -308,13 +313,10 @@ export default function LoadHub({
             >
               <div className="dashboard-resume-top">
                 <h2 id="resume-heading" className="surface-kicker" tabIndex={-1}>
-                  {pick("Pick up where you left off", "మీ లోడ్ కొనసాగించండి")}
+                  {"Pick up where you left off"}
                 </h2>
                 <span className="priority-status is-pending">
-                  {pick(
-                    `${recoveries.length} of ${maxDrafts} unsaved`,
-                    `${maxDrafts} లో ${recoveries.length} సేవ్ కాలేదు`,
-                  )}
+                  {`${recoveries.length} of ${maxDrafts} unsaved`}
                 </span>
               </div>
               <ul className="dashboard-resume-items">
@@ -322,15 +324,16 @@ export default function LoadHub({
                   const name =
                     item.partyName ||
                     item.truckNumber ||
-                    pick("Unfinished load", "పూర్తి కాని లోడ్");
+                    "Unfinished load";
                   return (
                     <li key={item.clientRequestId} className="dashboard-resume" style={{ "--index": index }}>
                       <div className="dashboard-resume-text">
                         <p className="dashboard-resume-name">{name}</p>
                         <p className="queue-sub">
-                          {item.rows.length} {pick("rows", "వరుసలు")}
+                          {item.rows.length} {"rows"}
+                          {item.truckNumber && item.partyName ? ` · ${item.truckNumber}` : ""}
                           {item.savedAt
-                            ? ` · ${pick("saved", "సేవ్")} ${dateFormat.format(new Date(item.savedAt))}`
+                            ? ` · ${"saved"} ${savedLabel(item.savedAt)}`
                             : ""}
                         </p>
                       </div>
@@ -338,26 +341,28 @@ export default function LoadHub({
                         {confirmRecovery === item.clientRequestId ? (
                           <div className="load-delete" data-state="confirming">
                             <span className="load-delete-question" role="status">
-                              {pick("Delete this unsaved load?", "ఈ సేవ్ కాని లోడ్ తొలగించాలా?")}
+                              {item.serverId
+                                ? "Discard the unsaved changes on this phone? The saved draft stays in your loads."
+                                : "Delete this unsaved load?"}
                             </span>
                             <button
                               type="button"
-                              className="load-delete-confirm"
+                              className="btn control-button control-button-danger load-delete-confirm"
                               onClick={() => deleteRecovery(item)}
                             >
-                              {pick("Yes, delete", "అవును, తొలగించండి")}
+                              {"Yes, delete"}
                               <span className="sr-only">{` ${name}`}</span>
                             </button>
                             <button
                               type="button"
-                              className="load-delete-cancel"
+                              className="btn control-button control-button-secondary load-delete-cancel"
                               data-recovery-cancel={item.clientRequestId}
                               onClick={() => {
                                 setConfirmRecovery(null);
                                 focusShown(`[data-recovery-trigger="${item.clientRequestId}"]`);
                               }}
                             >
-                              {pick("Cancel", "రద్దు")}
+                              {"Cancel"}
                             </button>
                           </div>
                         ) : (
@@ -365,8 +370,8 @@ export default function LoadHub({
                             type="button"
                             className="icon-delete-button dashboard-resume-delete"
                             data-recovery-trigger={item.clientRequestId}
-                            aria-label={pick(`Delete unsaved load ${name}`, `సేవ్ కాని లోడ్ ${name} తొలగించండి`)}
-                            title={pick("Delete", "తొలగించండి")}
+                            aria-label={`Delete unsaved load ${name}`}
+                            title="Delete"
                             onClick={() => {
                               setConfirmRecovery(item.clientRequestId);
                               focusShown(`[data-recovery-cancel="${item.clientRequestId}"]`);
@@ -377,9 +382,8 @@ export default function LoadHub({
                         )}
                         {confirmRecovery !== item.clientRequestId && <Button
                           className="dashboard-resume-action"
-                          en="Continue"
-                          te="కొనసాగించండి"
-                          aria-label={pick(`Continue ${name}`, `${name} కొనసాగించండి`)}
+                          label="Continue"
+                          aria-label={`Continue ${name}`}
                           onClick={() => onContinue(item)}
                         >
                           <Icon name="arrow" className="h-4 w-4" />
@@ -398,14 +402,14 @@ export default function LoadHub({
             >
               <div className="dashboard-priority-top">
                 <span className="surface-kicker">
-                  {pick("Needs your attention", "మీ తనిఖీ అవసరం")}
+                  {"Needs your attention"}
                 </span>
                 <span
                   className={`priority-status ${drafts.length ? "is-pending" : "is-clear"}`}
                 >
                   {drafts.length
-                    ? pick("Pending", "పెండింగ్")
-                    : pick("Up to date", "తాజాగా ఉంది")}
+                    ? "Pending"
+                    : "Up to date"}
                 </span>
               </div>
               {onNew && (
@@ -415,13 +419,13 @@ export default function LoadHub({
                   onClick={onNew}
                 >
                   <Icon name="plus" />
-                  <span>{pick("Create load", "లోడ్ సృష్టించండి")}</span>
+                  <span>{"Create load"}</span>
                 </button>
               )}
               <h2 id="priority-heading">
                 <strong>{drafts.length}</strong>
                 <span>
-                  {pick("drafts to review", "తనిఖీ చేయవలసిన డ్రాఫ్ట్‌లు")}
+                  {"drafts to review"}
                 </span>
               </h2>
               {oldestDrafts.length ? (
@@ -437,10 +441,10 @@ export default function LoadHub({
                             {item.logistics?.truckNumber || "—"}
                           </span>
                           <span className="queue-sub">
-                            {item.partyName || pick("No party", "పార్టీ లేదు")}
+                            {item.partyName || "No party"}
                             {" · "}
                             {loadArea(item.summary?.totalDispatchVolumeSqFt)}{" "}
-                            {pick("sq ft", "చ.అ.")}
+                            {"sq ft"}
                           </span>
                         </span>
                         <span className="queue-side">
@@ -455,10 +459,7 @@ export default function LoadHub({
                 </ul>
               ) : (
                 <p className="dashboard-queue-empty">
-                  {pick(
-                    "Nothing waiting for review.",
-                    "తనిఖీ కోసం ఏమీ లేదు.",
-                  )}
+                  {"Nothing waiting for review."}
                 </p>
               )}
               {(drafts.length > 0 || priorityOnly) && (
@@ -469,11 +470,8 @@ export default function LoadHub({
                   onClick={() => setPriorityOnly((value) => !value)}
                 >
                   {priorityOnly
-                    ? pick("Show recent loads", "ఇటీవలి లోడ్లు చూడండి")
-                    : pick(
-                        `Show all ${drafts.length} drafts below`,
-                        `క్రింద మొత్తం ${drafts.length} డ్రాఫ్ట్‌లు చూడండి`,
-                      )}
+                    ? "Show recent loads"
+                    : `Show all ${drafts.length} drafts below`}
                   <span className="action-icon-disc">
                     <Icon name="arrow" />
                   </span>
@@ -484,7 +482,7 @@ export default function LoadHub({
               <section className="dashboard-support-metric" aria-labelledby="road-metric-label">
                 <div className="dashboard-metric-label">
                   <span id="road-metric-label">
-                    {pick("On the road", "ప్రయాణంలో")} · {transit.length}
+                    {"On the road"} · {transit.length}
                   </span>
                   <Icon name="truck" />
                 </div>
@@ -520,36 +518,33 @@ export default function LoadHub({
                   </ul>
                 ) : (
                   <p className="dashboard-queue-empty">
-                    {pick("No lorries on the road.", "ప్రయాణంలో లారీలు లేవు.")}
+                    {"No lorries on the road."}
                   </p>
                 )}
                 <a
                   className="dashboard-metric-link"
                   {...pageLink("entries?status=Dispatched")}
                 >
-                  {pick("Loads in transit", "ప్రయాణంలో లోడ్లు")}
+                  {"Loads in transit"}
                   <Icon name="arrow" />
                 </a>
               </section>
               <section className="dashboard-support-metric" aria-labelledby="billed-metric-label">
                 <div className="dashboard-metric-label">
-                  <span id="billed-metric-label">{pick("Billed this month", "ఈ నెల బిల్లులు")}</span>
+                  <span id="billed-metric-label">{"Billed this month"}</span>
                   <Icon name="bill" />
                 </div>
                 <strong className="dashboard-metric-value">
                   {money(sumBilled(monthBills))}
                 </strong>
                 <p className="queue-sub">
-                  {pick(
-                    `${monthBills.length} bills · ${money(sumBilled(invoices))} all time`,
-                    `${monthBills.length} బిల్లులు · మొత్తం ${money(sumBilled(invoices))}`,
-                  )}
+                  {`${monthBills.length} bills · ${money(sumBilled(invoices))} all time`}
                 </p>
                 <a
                   className="dashboard-metric-link"
                   {...pageLink("entries")}
                 >
-                  {pick("All loads", "అన్ని లోడ్లు")}
+                  {"All loads"}
                   <Icon name="arrow" />
                 </a>
               </section>
@@ -567,19 +562,18 @@ export default function LoadHub({
         <div
           className="load-filters"
           role="group"
-          aria-label={pick("Filter loads", "లోడ్ ఫిల్టర్")}
+          aria-label="Filter loads"
         >
           {[
-            ["all", "All", "అన్నీ", loads.length],
-            ["Draft", "Draft", "డ్రాఫ్ట్", drafts.length],
-            ["Dispatched", "In transit", "ప్రయాణంలో", transit.length],
+            ["all", "All", loads.length],
+            ["Draft", "Draft", drafts.length],
+            ["Dispatched", "In transit", transit.length],
             [
               "Delivered",
               "Delivered",
-              "డెలివరీ అయింది",
               loads.filter((l) => l.status === "Delivered").length,
             ],
-          ].map(([value, en, te, count]) => (
+          ].map(([value, label, count]) => (
             <button
               type="button"
               key={value}
@@ -588,7 +582,7 @@ export default function LoadHub({
               onClick={() => setFilter(value)}
               className="load-filter"
             >
-              {pick(en, te)}
+              {label}
               <span className="load-filter-count">{count}</span>
             </button>
           ))}
@@ -602,9 +596,9 @@ export default function LoadHub({
           <h2 id="load-hub-records-heading" className="font-bold">
             {view === "home"
               ? priorityOnly
-                ? pick("Drafts to review", "తనిఖీ చేయవలసినవి")
-                : pick("Recent loads", "ఇటీవలి లోడ్లు")
-              : `${filtered.length} ${pick("records", "రికార్డులు")}`}
+                ? "Drafts to review"
+                : "Recent loads"
+              : `${filtered.length} ${"records"}`}
           </h2>
           <button
             type="button"
@@ -618,10 +612,10 @@ export default function LoadHub({
             </span>
             <span aria-live="polite">
               {refreshBusy
-                ? pick("Refreshing…", "లోడ్ అవుతోంది…")
+                ? "Refreshing…"
                 : refreshPhase === "done"
-                  ? pick("Updated", "నవీకరించబడింది")
-                  : pick("Refresh", "రిఫ్రెష్")}
+                  ? "Updated"
+                  : "Refresh"}
             </span>
           </button>
         </div>
@@ -629,7 +623,7 @@ export default function LoadHub({
           <div
             className="records-skeleton"
             role="status"
-            aria-label={pick("Loading records", "రికార్డులు లోడ్ అవుతున్నాయి")}
+            aria-label="Loading records"
           >
             <div />
             <div />
@@ -641,38 +635,26 @@ export default function LoadHub({
             <span className="dashboard-empty-icon">
               <Icon
                 name="truck"
-                className="h-8 w-8 text-teal-800"
+                className="h-8 w-8 text-primary"
               />
             </span>
             <h3 className="text-lg font-bold">
               {search || priorityOnly
-                ? pick("No matching loads", "లోడ్లు కనబడలేదు")
+                ? "No matching loads"
                 : view === "entries" && filter === "Dispatched"
-                  ? pick("No lorries on the road", "ప్రయాణంలో లారీలు లేవు")
+                  ? "No lorries on the road"
                   : view === "entries" && filter === "Draft"
-                    ? pick("No drafts", "డ్రాఫ్ట్‌లు లేవు")
+                    ? "No drafts"
                     : view === "entries" && filter === "Delivered"
-                      ? pick("No deliveries yet", "ఇంకా డెలివరీలు లేవు")
-                      : pick(
-                          "A fresh page for your yard",
-                          "మీ యార్డ్ కోసం కొత్త పేజీ",
-                        )}
+                      ? "No deliveries yet"
+                      : "A fresh page for your yard"}
             </h3>
-            <p className="text-gray-700">
+            <p className="text-on-surface">
               {search || priorityOnly
-                ? pick(
-                    "Try another search or choose a different filter.",
-                    "వేరొక పదంతో వెతకండి లేదా మరో ఫిల్టర్ ఎంచుకోండి.",
-                  )
+                ? "Try another search or choose a different filter."
                 : view === "entries" && filter === "Dispatched"
-                  ? pick(
-                      "Finalize a bill to dispatch a load. It will appear here until it is delivered.",
-                      "లోడ్ డిస్పాచ్ చేయడానికి బిల్లును ఖరారు చేయండి. డెలివరీ అయ్యే వరకు ఇది ఇక్కడ కనిపిస్తుంది.",
-                    )
-                  : pick(
-                    "Use New load in the header to add measurements and prepare a bill.",
-                    "కొలతలు జోడించి బిల్లు సిద్ధం చేయడానికి హెడర్‌లో కొత్త లోడ్ ఎంచుకోండి.",
-                  )}
+                  ? "Finalize a bill to dispatch a load. It will appear here until it is delivered."
+                  : "Use New load in the header to add measurements and prepare a bill."}
             </p>
           </Card>
         )}
@@ -681,25 +663,23 @@ export default function LoadHub({
             <table className="business-table">
               <caption className="sr-only">
                 {view === "home"
-                  ? pick("Recent saved loads", "ఇటీవల సేవ్ చేసిన లోడ్లు")
-                  : pick("Loading entries", "లోడ్ వివరాలు")}
+                  ? "Recent saved loads"
+                  : "Loading entries"}
               </caption>
               <thead>
                 <tr>
-                  <th scope="col">{pick("Lorry / party", "లారీ / పార్టీ")}</th>
-                  <th scope="col">{pick("Status", "స్థితి")}</th>
-                  <th scope="col">{pick("Date", "తేదీ")}</th>
+                  <th scope="col">{"Lorry / party"}</th>
+                  <th scope="col">{"Status"}</th>
+                  <th scope="col">{"Date"}</th>
                   <th scope="col" className="numeric">
-                    {pick("Area (sq ft)", "విస్తీర్ణం (చ.అ.)")}
+                    {"Area (sq ft)"}
                   </th>
                   <th scope="col" className="numeric">
-                    {pick("Amount", "మొత్తం")}
+                    {"Amount"}
                   </th>
                   <th scope="col">
                     <span className="sr-only">
-                      {admin
-                        ? pick("Actions", "చర్యలు")
-                        : pick("Open load", "లోడ్ తెరవండి")}
+                      {"Actions"}
                     </span>
                   </th>
                 </tr>
@@ -732,10 +712,7 @@ export default function LoadHub({
                       {deleteControl(item)}
                       <a
                         className="table-open-button"
-                        aria-label={pick(
-                          `Open load ${item.logistics.truckNumber}`,
-                          `${item.logistics.truckNumber} లోడ్ తెరవండి`,
-                        )}
+                        aria-label={`Open load ${item.logistics.truckNumber}`}
                         {...billLink(item.id)}
                       >
                         <Icon name="arrow" />
@@ -760,7 +737,7 @@ export default function LoadHub({
                   <h3 className="break-words text-lg font-bold" translate="no">
                     {item.logistics.truckNumber}
                   </h3>
-                  <p className="mt-1 break-words text-sm text-gray-700">
+                  <p className="mt-1 break-words text-sm text-on-surface">
                     {item.partyName || item.logistics.buyerDestination}
                   </p>
                 </div>
@@ -770,11 +747,11 @@ export default function LoadHub({
                   {stateLabel(item)}
                 </span>
               </div>
-              <div className="flex flex-wrap justify-between gap-2 border-t border-gray-200 pt-3 text-sm">
+              <div className="flex flex-wrap justify-between gap-2 border-t border-outline-variant pt-3 text-sm">
                 <span>
                   {loadDate(item.date)} ·{" "}
                   {loadArea(item.summary.totalDispatchVolumeSqFt)}{" "}
-                  {pick("sq ft", "చ.అ.")}
+                  {"sq ft"}
                 </span>
                 <strong className="tabular-nums">
                   {money(item.summary.netBillableAmount)}
@@ -787,8 +764,8 @@ export default function LoadHub({
                 >
                   <span className="control-label">
                     {item.status === "Draft"
-                      ? pick("Review draft", "డ్రాఫ్ట్ చూడండి")
-                      : pick("View invoice", "బిల్లు చూడండి")}
+                      ? "Review draft"
+                      : "View invoice"}
                   </span>
                   <Icon name="arrow" />
                 </a>
@@ -803,7 +780,7 @@ export default function LoadHub({
             {...pageLink("entries")}
           >
             <span className="control-label">
-              {pick("View all loads", "అన్ని లోడ్లు చూడండి")}
+              {"View all loads"}
             </span>
           </a>
         )}
@@ -811,8 +788,7 @@ export default function LoadHub({
       {view !== "home" && hasMore && (
         <Button
           className="w-full"
-          en={loading ? "Loading…" : "Load more"}
-          te={loading ? "లోడ్ అవుతోంది…" : "మరిన్ని చూడండి"}
+          label={loading ? "Loading…" : "Load more"}
           onClick={onLoadMore}
           disabled={loading}
           aria-busy={loading}
@@ -820,18 +796,15 @@ export default function LoadHub({
       )}
       {updatedAt && (
         <p
-          className={`text-xs text-gray-600 ${view === "home" ? "dashboard-updated" : ""}`}
+          className={`text-xs text-on-surface-variant ${view === "home" ? "dashboard-updated" : ""}`}
         >
-          {pick("Updated", "నవీకరించబడింది")}{" "}
+          {"Updated"}{" "}
           {new Intl.DateTimeFormat(locale, {
             hour: "2-digit",
             minute: "2-digit",
           }).format(new Date(updatedAt))}
           {view === "entries"
-            ? pick(
-                " · refreshes every 30 seconds",
-                " · ప్రతి 30 సెకన్లకు నవీకరణ",
-              )
+            ? " · refreshes every 30 seconds"
             : ""}
         </p>
       )}

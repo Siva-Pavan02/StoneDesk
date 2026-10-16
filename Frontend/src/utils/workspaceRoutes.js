@@ -1,42 +1,39 @@
 // Pure workspace routing and navigation helpers (no React), so node --test can import them.
 
-// Legacy hashes kept working; navigate() and route() both resolve through this map.
+export const NEW_LOAD_ROUTE = 'load';
+
+// Legacy hashes kept working; navigate() and route() both resolve through resolveRoute().
+// Products, trucks and destinations used to have their own pages; products are now managed from
+// the New load product list, and trucks/destinations are remembered as New load suggestions.
 export const legacyRoutes = {
   monitor: 'entries?status=Dispatched',
   invoices: 'entries',
-  references: 'products/trucks',
+  references: NEW_LOAD_ROUTE,
+  products: NEW_LOAD_ROUTE,
+  'products/trucks': NEW_LOAD_ROUTE,
+  'products/destinations': NEW_LOAD_ROUTE,
 };
 
 // Resolve a raw hash body (without '#') to the route to render.
 export function resolveRoute(hash) {
   const raw = hash || 'home';
   const next = Object.hasOwn(legacyRoutes, raw) ? legacyRoutes[raw] : undefined;
-  return next ? { route: next, replaced: true } : { route: raw, replaced: false };
+  if (next) return { route: next, replaced: true };
+  // Any other old products/... or products?... hash also lands on New load.
+  if (raw.split(/[/?]/)[0] === 'products') return { route: NEW_LOAD_ROUTE, replaced: true };
+  return { route: raw, replaced: false };
 }
 
-export const PRODUCTS_TABS = ['products', 'trucks', 'destinations'];
-
-export const productsTabRoute = tab => (tab === 'products' ? 'products' : `products/${tab}`);
-
-// Total: any view maps to a tab; unknown or non-products views fall back to the Products tab.
-export function productsTab(view) {
-  const path = String(view || '').split('?')[0];
-  if (!path.startsWith('products/')) return 'products';
-  const rest = path.slice('products/'.length);
-  return PRODUCTS_TABS.includes(rest) && rest !== 'products' ? rest : 'products';
-}
-
-// [key, icon, en, te, adminOnly]
+// [key, icon, label, adminOnly]
 export const NAVIGATION = [
-  ['profile', 'user', 'Profile', 'ప్రొఫైల్', true],
-  ['home', 'home', 'Dashboard', 'డ్యాష్‌బోర్డ్'],
-  ['entries', 'loads', 'Loading entries', 'లోడ్ వివరాలు'],
-  ['products', 'products', 'Products & places', 'రకాలు మరియు ప్రదేశాలు', true],
-  ['settings', 'settings', 'Settings', 'సెట్టింగ్స్'],
+  ['profile', 'user', 'Profile', true],
+  ['home', 'home', 'Dashboard'],
+  ['entries', 'loads', 'Loading entries'],
+  ['settings', 'settings', 'Settings'],
 ];
 
 export const visibleNavigation = role =>
-  NAVIGATION.filter(([, , , , adminOnly]) => !adminOnly || role === 'Admin');
+  NAVIGATION.filter(([, , , adminOnly]) => !adminOnly || role === 'Admin');
 
 // Which sidebar key is highlighted for a view/current value.
 export function navigationKey(view) {
@@ -45,4 +42,5 @@ export function navigationKey(view) {
 }
 
 // After a successful profile save: route to go to, or null to stay on #profile.
-export const profileSaveTarget = data => (data?.stoneRates?.length ? null : 'products');
+// Without products the admin goes straight to New load, which offers to add the first product.
+export const profileSaveTarget = data => (data?.stoneRates?.length ? null : NEW_LOAD_ROUTE);

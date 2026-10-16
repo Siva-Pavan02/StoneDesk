@@ -1,5 +1,4 @@
 import { memo, useEffect, useRef, useState } from 'react';
-import { useLanguage } from '../../i18n/LanguageContext';
 import Icon from './Icon.jsx';
 
 function isReducedMotion() {
@@ -53,7 +52,7 @@ export function MagneticCTA({ children, onClick, compact = false, compactLabel, 
       onPointerLeave={reset}
       onPointerCancel={reset}
       onBlur={reset}
-      className={`mk-primary inline-flex min-h-12 shrink-0 items-center justify-center gap-4 rounded-full pl-6 pr-2 text-sm font-semibold transition-transform duration-150 ease-out ${compact ? 'mk-primary-compact' : ''} ${className}`}
+      className={`mk-primary inline-flex min-h-12 shrink-0 items-center justify-center gap-4 rounded-full pl-6 pr-2 text-sm font-semibold ${compact ? 'mk-primary-compact' : ''} ${className}`}
       style={{ willChange: 'transform' }}
     >
       {compactLabel ? (
@@ -67,7 +66,7 @@ export function MagneticCTA({ children, onClick, compact = false, compactLabel, 
       {compact ? (
         <Icon name="arrow" className="mk-cta-arrow h-4 w-4 shrink-0" />
       ) : (
-        <span className="mk-cta-disc flex h-9 w-9 shrink-0 items-center justify-center rounded-full" aria-hidden="true">
+        <span className="mk-cta-disc flex shrink-0 items-center justify-center rounded-full" aria-hidden="true">
           <Icon name="arrow" className="h-4 w-4" />
         </span>
       )}
@@ -90,7 +89,7 @@ export function Reveal({ children, className = '', delay = 0 }) {
         setVisible(true);
         observer.disconnect();
       }
-    }, { threshold: 0.12 });
+    }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
     if (ref.current) observer.observe(ref.current);
     return () => observer.disconnect();
   }, []);
@@ -101,9 +100,11 @@ export function Reveal({ children, className = '', delay = 0 }) {
       className={className}
       style={{
         opacity: visible ? 1 : 0,
-        transform: visible ? 'translate3d(0, 0, 0)' : 'translate3d(0, 14px, 0)',
+        // 'none' once shown: a lingering transform would become the containing block for
+        // absolutely positioned children (e.g. the workflow step dots) and misplace them.
+        transform: visible ? 'none' : 'translate3d(0, 16px, 0)',
         transition: visible
-          ? `opacity 500ms cubic-bezier(0.16, 1, 0.3, 1) ${delay}s, transform 500ms cubic-bezier(0.16, 1, 0.3, 1) ${delay}s`
+          ? `opacity 800ms cubic-bezier(.32,.72,0,1) ${delay}s, transform 800ms cubic-bezier(.32,.72,0,1) ${delay}s`
           : 'none',
         willChange: visible ? 'auto' : 'transform, opacity'
       }}
@@ -115,12 +116,11 @@ export function Reveal({ children, className = '', delay = 0 }) {
 
 // 60fps Compositor-Only Sample Motion Badge
 export const SampleMotionBadge = memo(function SampleMotionBadge() {
-  const { pick } = useLanguage();
   return (
     <div className="flex min-h-[61px] items-center border-t border-[#e0eae7] px-4 py-3 text-xs sm:px-5">
       <span className="sample-badge-float inline-flex items-center gap-2 text-[#17645d]">
         <Icon name="check" className="h-4 w-4" />
-        {pick('Sample bill · saved totals', 'నమూనా బిల్లు · సేవ్ చేసిన మొత్తాలు')}
+        Sample bill · saved totals
       </span>
     </div>
   );

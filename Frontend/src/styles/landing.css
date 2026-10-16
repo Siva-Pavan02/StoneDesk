@@ -3,10 +3,13 @@
    full-pill interactive controls. Layers: header 20, native dialogs top layer. */
 .marketing {
   color-scheme: light;
-  font-family: 'Geist', 'Noto Telugu', ui-sans-serif, system-ui, sans-serif;
+  font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
+  --mk-ease: cubic-bezier(.32, .72, 0, 1);
+  --mk-shadow-soft: 0 1px 2px rgb(27 75 51 / .04), 0 24px 64px -28px rgb(27 75 51 / .16);
+  --mk-shadow-float: 0 1px 2px rgb(27 75 51 / .04), 0 40px 90px -40px rgb(27 75 51 / .22);
 }
 /* The sticky public header must not cover focused content or in-page anchors. */
 html:has(.marketing) { scroll-padding-top: 96px; }
@@ -17,10 +20,11 @@ html:has(.marketing) { scroll-padding-top: 96px; }
 .marketing .mk-cta-band :focus-visible { outline-color: #fff; }
 .marketing button { cursor: pointer; }
 .marketing button:disabled { cursor: default; opacity: .65; }
-.marketing .mk-section { padding-block: 64px; }
+.marketing .mk-section { padding-block: 88px; }
 .marketing .mk-scrub { color: #203d36; font-size: clamp(22px, 2.6vw, 32px); line-height: 1.35; }
-.marketing[lang='te'] .mk-scrub { line-height: 1.6; letter-spacing: 0; }
-.marketing .mk-scrub-word { will-change: opacity; }
+/* Eyebrow tag above each section heading (not itself a heading). */
+.marketing .mk-eyebrow { display: inline-flex; align-items: center; gap: 8px; min-height: 28px; margin-bottom: 20px; padding: 4px 12px 4px 10px; border: 1px solid #d5e6de; border-radius: 999px; background: #eef6f2; color: #17645d; font-size: 11px; font-weight: 600; line-height: 1.2; letter-spacing: .14em; text-transform: uppercase; }
+.marketing .mk-eyebrow::before { content: ''; flex-shrink: 0; width: 6px; height: 6px; border-radius: 999px; background: #17645d; }
 @keyframes badge-float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-3px); }
@@ -31,8 +35,8 @@ html:has(.marketing) { scroll-padding-top: 96px; }
   animation: badge-float 4s ease-in-out 2;
   will-change: transform;
 }
-.marketing .mk-bento-card { position: relative; display: flex; flex-direction: column; min-width: 0; padding: 28px; border: 1px solid #dce6e1; border-radius: 22px; background: #fff; overflow: hidden; transition: border-color 300ms var(--ui-ease), transform 500ms var(--ui-ease); }
-.marketing .mk-bento-card:hover { border-color: #b9d3c7; transform: translateY(-2px); }
+.marketing .mk-bento-card { position: relative; display: flex; flex-direction: column; min-width: 0; padding: 28px; border: 1px solid #dce6e1; border-radius: 22px; background: #fff; overflow: hidden; transition: border-color 600ms var(--mk-ease), transform 600ms var(--mk-ease), box-shadow 600ms var(--mk-ease); }
+.marketing .mk-bento-card:hover { border-color: #b9d3c7; transform: translateY(-2px); box-shadow: var(--mk-shadow-soft); }
 .marketing .mk-bento-lead { background: radial-gradient(120% 80% at 100% 0%, #e2f0e9 0%, #fff 60%); }
 .marketing .mk-bento-icon { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 12px; background: #e5f1eb; color: #17645d; }
 .marketing .mk-bento-sheet { margin-top: auto; padding-top: 32px; font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -43,30 +47,32 @@ html:has(.marketing) { scroll-padding-top: 96px; }
 .marketing .mk-workflow-step { position: relative; padding: 0 0 32px 28px; border-left: 1px solid #cfe0d8; }
 .marketing .mk-workflow-step:last-child { padding-bottom: 0; }
 .marketing .mk-step-dot { position: absolute; left: -6px; top: 6px; width: 11px; height: 11px; border: 2px solid #17645d; border-radius: 999px; background: #f7fbfa; }
-.marketing .mk-cta-band { margin-block: 32px 64px; padding: 48px 28px; border-radius: 28px; background: radial-gradient(90% 120% at 0% 0%, #22786f 0%, #17645d 45%, #0f4741 100%); color: #fff; }
+.marketing .mk-cta-band { margin-block: 48px 88px; padding: 48px 28px; border-radius: 28px; background: radial-gradient(90% 120% at 0% 0%, #22786f 0%, #17645d 45%, #0f4741 100%); color: #fff; }
 .marketing .mk-cta-title { font-size: clamp(30px, 4.4vw, 56px); line-height: 1.1; }
-.marketing[lang='te'] .mk-cta-title { line-height: 1.45; letter-spacing: -.02em; }
 .marketing .mk-cta-band .mk-primary { color: #17645d; background: #fff; border-color: #fff; }
 .marketing .mk-cta-band .mk-primary:hover { background: #e9f3ee; }
 .marketing .mk-cta-band .mk-cta-disc { color: #fff; background: #17645d; }
 .marketing .mk-hero-title { font-size: clamp(42px, 5.05vw, 72px); line-height: 1.1; }
 .marketing .mk-section-title { font-size: clamp(28px, 3.25vw, 42px); line-height: 1.2; }
-.marketing[lang='te'] .mk-hero-title { font-size: clamp(34px, 4.5vw, 60px); line-height: 1.45; letter-spacing: -.025em; }
-.marketing[lang='te'] .mk-section-title { line-height: 1.5; letter-spacing: -.02em; }
-.marketing .mk-nav { background: rgb(255 255 255 / .95); box-shadow: 0 3px 6px rgb(36 79 61 / .035), 0 10px 35px rgb(36 79 61 / .065), inset 0 0 0 1px #e3ebe5; }
+.marketing .mk-nav { background: rgb(255 255 255 / .95); box-shadow: 0 1px 2px rgb(36 79 61 / .04), 0 12px 40px -12px rgb(36 79 61 / .10), inset 0 0 0 1px #e3ebe5; }
 @supports (backdrop-filter: blur(12px)) {
   .marketing .mk-nav { background: rgb(255 255 255 / .88); backdrop-filter: blur(12px); }
 }
 .marketing .mk-nav-links { margin-left: auto; }
-.marketing .mk-nav-link, .marketing .mk-login, .marketing .mk-secondary, .marketing .mk-preview-row { transition: background-color 220ms var(--ui-ease), color 220ms var(--ui-ease), border-color 220ms var(--ui-ease), transform 220ms var(--ui-ease); }
+.marketing .mk-nav-link, .marketing .mk-login, .marketing .mk-secondary, .marketing .mk-preview-row { transition: background-color 220ms var(--mk-ease), color 220ms var(--mk-ease), border-color 220ms var(--mk-ease), transform 220ms var(--mk-ease); }
 .marketing .mk-nav-link:hover, .marketing .mk-login:hover { background: #eaf3ef; color: #17645d; }
-.marketing .mk-primary { min-height: 54px; color: white; background: #17645d; border: 1px solid #17645d; box-shadow: 0 3px 4px rgb(18 83 66 / .08); white-space: nowrap; transition: background-color 220ms var(--ui-ease); }
+.marketing .mk-primary { min-height: 54px; color: white; background: #17645d; border: 1px solid #17645d; box-shadow: 0 3px 4px rgb(18 83 66 / .08); white-space: nowrap; transition: background-color 300ms var(--mk-ease), transform 200ms var(--mk-ease); }
 .marketing .mk-primary:hover { background: #104f49; }
 .marketing .mk-primary:active { background: #0d4540; }
-.marketing .mk-cta-disc { color: #17645d; background: #f1f8f4; transition: transform 300ms var(--ui-ease); }
-.marketing .mk-primary:hover .mk-cta-disc { transform: translateX(2px) translateY(-1px); }
+/* Button-in-button: the arrow disc. The button itself carries the inline magnetic transform,
+   so press feedback scales the disc instead of fighting that transform. */
+.marketing .mk-cta-disc { width: 36px; height: 36px; color: #17645d; background: #f1f8f4; transition: transform 500ms var(--mk-ease); }
+.marketing .mk-primary:hover .mk-cta-disc { transform: translateX(3px) scale(1.04); }
+.marketing .mk-primary:active .mk-cta-disc { transform: translateX(1px) scale(.94); }
+.marketing .mk-link-disc { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 999px; background: #e6f1ec; color: #17645d; transition: transform 500ms var(--mk-ease), background-color 300ms var(--mk-ease); }
+.marketing .mk-text-link:hover .mk-link-disc { transform: translateX(3px); background: #d8ebe2; }
 .marketing .mk-primary-compact { min-height: 44px; gap: 10px; padding: 0 6px 0 20px; border-radius: 999px; box-shadow: 0 1px 2px rgb(18 83 66 / .18), inset 0 1px 0 rgb(255 255 255 / .14); font-size: 13px; letter-spacing: .005em; }
-.marketing .mk-primary-compact .mk-cta-arrow { box-sizing: content-box; padding: 6px; border-radius: 999px; background: rgb(255 255 255 / .16); transition: transform 220ms var(--ui-ease), background-color 220ms var(--ui-ease); }
+.marketing .mk-primary-compact .mk-cta-arrow { box-sizing: content-box; padding: 6px; border-radius: 999px; background: rgb(255 255 255 / .16); transition: transform 220ms var(--mk-ease), background-color 220ms var(--mk-ease); }
 .marketing .mk-primary-compact:hover .mk-cta-arrow { transform: translateX(2px); background: rgb(255 255 255 / .26); }
 .marketing .mk-nav-actions { padding-left: 4px; }
 .marketing .mk-login { padding-inline: 18px; border: 1px solid #d5e3dc; background: #fff; color: #31504a; letter-spacing: .005em; }
@@ -74,13 +80,28 @@ html:has(.marketing) { scroll-padding-top: 96px; }
 .marketing .mk-secondary:hover:not(:disabled) { background: #edf6f1; border-color: #9cbfb0; }
 .marketing .mk-secondary:active:not(:disabled) { transform: translateY(1px); }
 .marketing .mk-text-link:hover { text-decoration: underline; text-underline-offset: 5px; }
-.marketing .mk-double-bezel { background: #e8f1eb; box-shadow: 0 18px 45px -20px rgb(27 75 51 / .22), inset 0 1px 0 rgb(255 255 255 / .9); }
+/* Double bezel: soft outer shell + inner core with concentric radii (outer = core + padding). */
+.marketing .mk-double-bezel { --mk-core-radius: 20px; --mk-bezel-pad: 8px; padding: var(--mk-bezel-pad); border: 1px solid rgb(207 223 216 / .8); border-radius: calc(var(--mk-core-radius) + var(--mk-bezel-pad)); background: linear-gradient(180deg, #f0f6f3, #e7f0eb); box-shadow: inset 0 1px 0 rgb(255 255 255 / .9), var(--mk-shadow-float); }
 .marketing .mk-hero-product { isolation: isolate; }
-.marketing .mk-hero-product::before { content: ''; position: absolute; inset: -22px -12px; z-index: -1; border: 1px solid #e5eee9; border-radius: 40px; background: #eff6f2; transform: rotate(-2deg); pointer-events: none; }
-.marketing .mk-product-window { box-shadow: 0 2px 6px rgb(29 72 50 / .035); }
+.marketing .mk-hero-product::before { content: ''; position: absolute; inset: -22px -12px; z-index: -1; border: 1px solid #e8f0ec; border-radius: 40px; background: #f1f7f4; transform: rotate(-1.5deg); pointer-events: none; }
+.marketing .mk-product-window { border-radius: var(--mk-core-radius); box-shadow: 0 0 0 1px #dfe8e3, 0 2px 6px rgb(29 72 50 / .04); }
+/* Landing invoice preview: the real A4 renderer output, scaled from a fixed 210mm sheet
+   with the invoice's own 12mm print margin, so the hero frame shows the printed sheet.
+   The scaled stage is not .sample-pages, so a4Invoice.css's narrow-screen stacking
+   (a container query on the preview) never applies to it; these rules keep the three
+   measurement columns side by side whatever the hero width. */
+.marketing .mk-a4-preview { min-width: 0; }
+.marketing .mk-a4-frame { margin: 0; min-width: 0; }
+.marketing .mk-a4-viewport { position: relative; overflow: hidden; border: 1px solid #e0eae7; border-radius: 12px; background: #fff; }
+.marketing .mk-a4-stage { position: absolute; left: 0; top: 0; width: 210mm; transform-origin: 0 0; pointer-events: none; user-select: none; }
+.marketing .mk-a4-stage .a4-invoice { display: block; width: 210mm; }
+.marketing .mk-a4-stage .paper.sample-sheet { width: 210mm; max-width: none; min-height: 0; padding: 12mm; box-shadow: none; }
+.marketing .mk-a4-stage .detail-columns { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4mm; }
+.marketing .mk-a4-full { min-width: 0; }
+.marketing .mk-a4-full .paper.sample-sheet { box-shadow: 0 0 0 1px #e2e8e5; }
 .marketing .mk-showcase-panel { min-height: 384px; }
 .marketing .mk-showcase-tabs { gap: 3px; padding: 4px; border-radius: 10px; background: #f0f4f1; }
-.marketing .mk-showcase-tabs button { min-height: 40px; border-radius: 8px; color: #526661; font-size: 12px; font-weight: 500; transition: background-color 220ms var(--ui-ease), color 220ms var(--ui-ease), transform 220ms var(--ui-ease); }
+.marketing .mk-showcase-tabs button { min-height: 40px; border-radius: 8px; color: #526661; font-size: 12px; font-weight: 500; transition: background-color 220ms var(--mk-ease), color 220ms var(--mk-ease), transform 220ms var(--mk-ease); }
 .marketing .mk-showcase-tabs button:hover { color: #17645d; }
 .marketing .mk-showcase-tabs button:active { transform: scale(.98); }
 .marketing .mk-showcase-tabs button[aria-selected='true'] { background: white; color: #17645d; box-shadow: 0 1px 3px rgb(32 61 54 / .07); }
@@ -89,14 +110,16 @@ html:has(.marketing) { scroll-padding-top: 96px; }
 .marketing .mk-status-neutral { background: #fdf1d6; color: #7a4a00; }
 .marketing .mk-dispatch-path li:not(:last-child)::after { content: ''; position: absolute; left: 13px; top: 28px; width: 1px; height: calc(100% - 8px); background: #d5e3dc; }
 .marketing .mk-sample-table { min-width: 320px; }
-.marketing .mk-invoice-table { min-width: 380px; font-size: 12px; }
 .marketing .mk-sample-table :where(th, td) { padding: 12px 10px; text-align: left; border-bottom: 1px solid #e4ece7; }
 .marketing .mk-sample-table thead th { font-size: 11px; font-weight: 500; white-space: nowrap; }
 .marketing .mk-sample-table tfoot :where(th, td) { border-bottom: 0; font-weight: 600; }
 .marketing .mk-sample-table .mk-numeric { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .marketing .mk-sample-table .mk-type { color: #17645d; font-size: 11px; font-weight: 600; letter-spacing: .04em; }
-.marketing .mk-bill-bezel { background: #eaf3ed; box-shadow: 0 18px 48px -25px rgb(27 75 51 / .18); }
-.marketing .mk-invoice { box-shadow: 0 2px 8px rgb(26 69 46 / .04); }
+.marketing .mk-bill-bezel { --mk-core-radius: 20px; --mk-bezel-pad: 10px; padding: var(--mk-bezel-pad); border: 1px solid rgb(207 223 216 / .8); border-radius: calc(var(--mk-core-radius) + var(--mk-bezel-pad)); background: linear-gradient(180deg, #f0f6f3, #e9f2ed); box-shadow: inset 0 1px 0 rgb(255 255 255 / .9), var(--mk-shadow-soft); }
+@media (min-width: 640px) {
+  .marketing .mk-double-bezel { --mk-bezel-pad: 10px; }
+  .marketing .mk-bill-bezel { --mk-bezel-pad: 14px; }
+}
 .marketing .mk-essentials { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 20px 0; list-style: none; border-block: 1px solid #dce6e1; color: #526661; font-size: 14px; }
 .marketing .mk-essentials li { display: flex; align-items: center; justify-content: center; gap: 10px; min-width: 0; text-align: left; }
 .marketing .mk-essentials li:first-child { justify-content: flex-start; }
@@ -106,9 +129,10 @@ html:has(.marketing) { scroll-padding-top: 96px; }
   .marketing .mk-essentials { gap: 8px; padding: 16px 0; font-size: 12px; line-height: 1.35; }
   .marketing .mk-essentials li, .marketing .mk-essentials li:first-child, .marketing .mk-essentials li:last-child { flex-direction: column; justify-content: flex-start; gap: 8px; text-align: center; }
 }
-.marketing .mk-bill-card { display: grid; gap: 20px; padding: 24px; border-radius: 20px; background: #fff; box-shadow: 0 2px 8px rgb(26 69 46 / .04); }
+.marketing .mk-bill-card { display: grid; gap: 20px; padding: 24px; border-radius: var(--mk-core-radius, 20px); background: #fff; box-shadow: 0 0 0 1px #dfe8e3, 0 2px 8px rgb(26 69 46 / .04); }
 .marketing .mk-bill-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .marketing .mk-bill-card-kind { color: #526661; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.marketing .mk-bill-card-tag { display: inline-flex; flex-shrink: 0; padding: 4px 9px; border-radius: 999px; background: #edf5f0; color: #17645d; font-size: 10px; font-weight: 600; letter-spacing: .04em; }
 .marketing .mk-bill-card-no { margin-top: 4px; font-size: 20px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .marketing .mk-bill-card-lines { margin: 0; }
 .marketing .mk-bill-card-lines > div { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid #edf2ef; font-size: 14px; }
@@ -119,11 +143,12 @@ html:has(.marketing) { scroll-padding-top: 96px; }
 .marketing .mk-bill-card-total strong { color: #17645d; font-size: clamp(22px, 5vw, 28px); font-weight: 600; letter-spacing: -.03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .marketing .mk-bill-card-files { display: flex; flex-wrap: wrap; gap: 8px; }
 .marketing .mk-bill-card-files span { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid #dce6e1; border-radius: 999px; color: #2b4f46; font-size: 12px; font-weight: 500; }
-@media (max-width: 639px) { .marketing .mk-bill-card { gap: 16px; padding: 18px; border-radius: 18px; } .marketing .mk-bill-card-lines > div { font-size: 13px; } .marketing .mk-bill-card-total { padding: 14px; } .marketing .mk-bill-card-total span { font-size: 11px; letter-spacing: .05em; white-space: nowrap; } .marketing .mk-bill-card-total strong { font-size: 20px; } }
-.marketing .mk-dialog { width: min(560px, calc(100% - 24px)); max-height: calc(100dvh - 32px); margin: auto; padding: 0; border: 1px solid #d7e4dd; border-radius: 24px; color: #203d36; background: #fff; overflow-y: auto; overscroll-behavior: contain; box-shadow: 0 24px 70px rgb(24 60 47 / .18); }
-.marketing .mk-dialog[open] { animation: mk-dialog-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both; }
-.marketing .mk-bill-dialog { width: min(700px, calc(100% - 24px)); }
-.marketing .mk-dialog::backdrop { background: rgb(20 43 35 / .42); animation: mk-fade-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+@media (max-width: 639px) { .marketing .mk-bill-card { gap: 16px; padding: 18px; } .marketing .mk-bill-card-lines > div { font-size: 13px; } .marketing .mk-bill-card-total { padding: 14px; } .marketing .mk-bill-card-total span { font-size: 11px; letter-spacing: .05em; white-space: nowrap; } .marketing .mk-bill-card-total strong { font-size: 20px; } }
+.marketing .mk-dialog { width: min(560px, calc(100% - 24px)); max-height: calc(100dvh - 32px); margin: auto; padding: 0; border: 1px solid #d7e4dd; border-radius: 24px; color: #203d36; background: #fff; overflow-y: auto; overscroll-behavior: contain; box-shadow: 0 32px 90px -24px rgb(24 60 47 / .28); }
+.marketing .mk-dialog[open] { animation: mk-dialog-in 220ms var(--mk-ease) both; }
+/* Wide enough for the fixed 210mm sheet (about 794px) plus padding on desktop. */
+.marketing .mk-bill-dialog { width: min(860px, calc(100% - 24px)); overflow-x: hidden; }
+.marketing .mk-dialog::backdrop { background: rgb(20 43 35 / .42); animation: mk-fade-in 220ms var(--mk-ease) both; }
 @keyframes mk-dialog-in {
   from { opacity: 0; transform: scale(0.96) translateY(8px); }
   to { opacity: 1; transform: scale(1) translateY(0); }
@@ -135,15 +160,17 @@ html:has(.marketing) { scroll-padding-top: 96px; }
 .marketing .mk-skip-link { position: fixed; left: 16px; top: -100px; z-index: 30; border-radius: 12px; border: 2px solid #17645d; padding: 12px 18px; color: #17645d; background: white; }
 .marketing .mk-skip-link:focus { top: 16px; }
 @media (min-width: 768px) {
-  .marketing .mk-section { padding-block: 128px; }
+  .marketing .mk-section { padding-block: 136px; }
   .marketing .mk-workflow-step { padding: 32px 0 0; border-left: 0; border-top: 1px solid #cfe0d8; }
   .marketing .mk-step-dot { left: 0; top: -6px; }
   .marketing .mk-bento-card { padding: 36px; }
-  .marketing .mk-cta-band { margin-block: 48px 96px; padding: 72px 64px; }
+  .marketing .mk-cta-band { margin-block: 64px 120px; padding: 72px 64px; }
+}
+@media (min-width: 1280px) {
+  .marketing .mk-section { padding-block: 160px; }
 }
 @media (min-width: 1024px) {
   .marketing .mk-hero-title { font-size: clamp(56px, 5.05vw, 72px); }
-  .marketing[lang='te'] .mk-hero-title { font-size: clamp(46px, 4.5vw, 60px); }
 }
 @media (min-width: 1024px) and (max-width: 1199px) {
   .marketing .mk-nav { column-gap: 12px; }
@@ -167,11 +194,6 @@ html:has(.marketing) { scroll-padding-top: 96px; }
   .marketing .mk-primary-compact .mk-cta-arrow { padding: 4px; }
   .marketing .mk-hero { padding-top: 40px; }
   .marketing .mk-hero-product::before { inset: -10px -5px; border-radius: 34px; transform: rotate(-1deg); }
-  .marketing .mk-invoice-table :where(th, td) { padding-inline: 6px; }
-  .marketing .mk-invoice-table { min-width: 0; font-size: 11.5px; }
-  .marketing .mk-invoice-table thead th { font-size: 10px; }
-  .marketing .mk-invoice .invoice-summary-table :where(th, td) { padding-inline: 4px; }
-  .marketing .mk-invoice .invoice-summary-table thead th { font-size: 9.5px; line-height: 1.3; }
   .marketing .mk-showcase-panel { min-height: 420px; }
   .marketing .mk-sample-table { min-width: 0; font-size: 13px; }
   .marketing .mk-sample-table :where(th, td) { padding: 10px 6px; }

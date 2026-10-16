@@ -1,4 +1,13 @@
-import { AREA_ROUNDING_NOTE, SAMPLE_BANK_PAIRS, bankDetailPairs, bankDetailSegments, formatA4Dimension, formatA4Money, formatA4Number } from './a4InvoiceModel.js';
+import { SAMPLE_BANK_NAMES, SAMPLE_BANK_PAIRS, a4StatusLabel, bankDetailPairs, bankDetailSegments, formatA4Dimension, formatA4Money, formatA4Number } from './a4InvoiceModel.js';
+import { fragmentRows } from './a4InvoicePagination.js';
+
+// Markup of the user's reference invoice (sample_invoice_space_optimized.html):
+// the header on every page, three measurement columns with Reg total / Top total
+// rows, a continuation note on every page but the last, and the order/payment
+// summary on the final page only. Pages come from the measured plan
+// (a4InvoicePagination.js). Decorative pseudo-elements of the reference are real
+// aria-hidden elements here (.group-rule, .column-rule) so the PDF exporter can
+// measure them, and the bank label colon is literal text.
 
 export function escapeA4Text(value) {
   return String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
@@ -8,105 +17,170 @@ function idPrefix(value) {
   return `invoice-${String(value || 'document').replace(/[^a-zA-Z0-9_-]/g, '') || 'document'}`;
 }
 
+function assertCopy(copy) {
+  if (copy !== 'buyer' && copy !== 'driver') throw new Error('Copy must be buyer or driver.');
+}
+
 const number = value => escapeA4Text(formatA4Number(value));
 const money = value => escapeA4Text(formatA4Money(value));
-const entryRow = entry => `<tr data-kind="${entry.type}" data-entry-id="${escapeA4Text(entry.id)}"><th class="type${entry.type === 'top' ? ' top' : ''}" scope="row"${entry.type === 'regular' ? ' aria-label="Regular material"' : ''}>${entry.type === 'top' ? 'Top' : ''}</th><td class="dim">${escapeA4Text(formatA4Dimension(entry.lengthFt))}</td><td class="dim">${escapeA4Text(formatA4Dimension(entry.widthFt))}</td><td class="qty">${entry.quantity}</td><td class="num">${number(entry.area)}</td></tr>`;
-// Subtotal row: pieces and area only; Type, L and W are covered by the label.
-const subtotalRow = (kind, label, values) => `<tr class="subtotal" data-subtotal="${kind}"><th colspan="3" scope="row">${label}</th><td class="qty">${values.pieces}</td><td class="num">${number(values.area)}</td></tr>`;
+const TIMES = '<td aria-hidden="true" class="operator-cell times-cell">×</td>';
+const EQUALS = '<td aria-hidden="true" class="operator-cell equals-cell">=</td>';
+const COLGROUP = '<colgroup><col class="col-type"><col class="col-l"><col class="col-times"><col class="col-w"><col class="col-equals"><col class="col-qty"><col class="col-area"></colgroup>';
+const THEAD = '<thead><tr><th scope="col">Type</th><th class="dim" scope="col">L (ft)</th><th aria-hidden="true" class="operator-cell times-cell">×</th><th class="dim" scope="col">W (ft)</th><th aria-hidden="true" class="operator-cell equals-cell">=</th><th class="qty" scope="col">Qty</th><th class="num" scope="col">Sq ft</th></tr></thead>';
 
-// A fragment is a half-open range of actual entries (Regular first, then Top).
-// The Regular subtotal follows the group's last Regular entry and the Top
-// subtotal its last Top entry, so each appears once, on the fragment holding
-// that entry. A group with no entries of a kind has no subtotal for it.
-export function renderA4Group(group, from = 0, to = group.entries.length, prefix = 'document') {
-  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to > group.entries.length || to <= from) throw new Error(`Invalid fragment of group ${group.id}.`);
-  const id = `${idPrefix(prefix)}-row-${group.id}-${from}`;
-  const lastRegular = group.entries.findLastIndex(entry => entry.type === 'regular');
-  const lastTop = group.entries.findLastIndex(entry => entry.type === 'top');
-  const rows = [];
-  for (let index = from; index < to; index++) {
-    rows.push(entryRow(group.entries[index]));
-    if (index === lastRegular) rows.push(subtotalRow('regular', 'Regular subtotal', group.regular));
-    if (index === lastTop) rows.push(subtotalRow('top', 'Top subtotal', group.top));
-  }
-  return `<section class="row-block" id="${id}" aria-labelledby="${id}-heading"><h3 id="${id}-heading">${group.id}${from ? '<span class="continuation-marker">(continued)</span>' : ''}</h3><div class="row-table-wrap"><table class="row-table"><caption class="sr-only">Measurements for group ${group.id}${from ? ', continued' : ''}; dimensions in feet</caption><colgroup><col class="col-type"><col class="col-l"><col class="col-w"><col class="col-qty"><col class="col-area"></colgroup><thead><tr><th scope="col">Type</th><th class="dim" scope="col">L (ft)</th><th class="dim" scope="col">W (ft)</th><th class="qty" scope="col">Qty</th><th class="num" scope="col">Sq ft</th></tr></thead><tbody>${rows.join('')}</tbody></table></div></section>`;
+export function continuationText(copy) {
+  assertCopy(copy);
+  return copy === 'buyer'
+    ? 'Continued on the next page. Order totals and payment summary appear on the final page.'
+    : 'Continued on the next page. Order totals appear on the final page.';
 }
 
-function renderHeader(model) {
+function entryRow(entry) {
+  const type = entry.type === 'top' ? '<th class="type top" scope="row">Top</th>' : '<th aria-label="Regular material" class="type" scope="row"></th>';
+  return `<tr data-kind="${entry.type === 'top' ? 'top' : 'regular'}" data-entry-id="${escapeA4Text(entry.id)}">${type}<td class="dim">${escapeA4Text(formatA4Dimension(entry.lengthFt))}</td>${TIMES}<td class="dim">${escapeA4Text(formatA4Dimension(entry.widthFt))}</td>${EQUALS}<td class="qty">${entry.quantity}</td><td class="num">${number(entry.area)}</td></tr>`;
+}
+
+function subtotalRow(group, of) {
+  const totals = group[of];
+  return `<tr class="sub" data-subtotal="${of}"><th colspan="5" scope="row">${of === 'regular' ? 'Reg total' : 'Top total'}</th><td class="qty">${totals.pieces}</td><td class="num">${number(totals.area)}</td></tr>`;
+}
+
+// A fragment is the half-open entry range [from, to) of one group (Regular first,
+// then Top). Tables carry no rate or amount on either copy.
+export function renderA4Group(group, from = 0, to = group.entries.length, copy = 'buyer', prefix = 'document') {
+  assertCopy(copy);
+  const rows = fragmentRows(group, from, to)
+    .map(row => row.kind === 'entry' ? entryRow(row.entry) : subtotalRow(group, row.of)).join('');
+  const id = `${idPrefix(prefix)}-row-${group.id}-${from}`;
+  const continued = from > 0;
+  return `<section aria-labelledby="${id}-heading" class="row-block" id="${id}" data-group="${group.id}" data-from="${from}" data-to="${to}">`
+    + `<h3 id="${id}-heading">${group.id}${continued ? '<span class="continuation-marker">(continued)</span>' : ''}<span class="group-rule" aria-hidden="true"></span></h3>`
+    + `<table class="row-table"><caption class="sr-only">Measurements for group ${group.id}${continued ? ', continued' : ''}; dimensions in feet and areas in square feet</caption>`
+    + `${COLGROUP}${THEAD}<tbody>${rows}</tbody></table></section>`;
+}
+
+// Identical on every page of a copy.
+export function renderA4Header(model) {
   const seller = model.seller;
   const logo = seller.logo
-    ? `<div role="img" aria-label="Business logo" class="logo-placeholder"><img src="${escapeA4Text(seller.logo)}" alt=""></div>`
-    : '<div role="img" aria-label="Business logo placeholder" class="logo-placeholder">LOGO</div>';
-  const contact = [seller.location, seller.contactLine, seller.phone ? `<span class="phone">${escapeA4Text(seller.phone)}</span>` : '']
-    .filter(Boolean).map(value => value === seller.location || value === seller.contactLine ? escapeA4Text(value) : value).join('<br>');
-  const facts = [['Party', model.party], ['Lorry no.', model.lorryNumber], ['Destination', model.destination], ['Supervisor', model.supervisor]];
-  const state = model.mode === 'sample' ? 'SAMPLE' : model.status === 'Dispatched' ? 'IN TRANSIT' : model.status.toUpperCase();
-  return `<header class="invoice-header"><div class="business-panel">${logo}<div class="business-copy"><h1 class="business-name">${escapeA4Text(seller.name)}</h1>${contact ? `<p class="business-contact">${contact}</p>` : ''}</div></div><div class="invoice-panel"><div class="invoice-topline"><h2 class="invoice-kind">${escapeA4Text(model.title)}</h2><div class="invoice-state"><time datetime="${escapeA4Text(model.invoiceDate.datetime)}">${escapeA4Text(model.invoiceDate.label)}</time><span class="status">${escapeA4Text(state)}</span></div></div><p class="invoice-reference">No. ${escapeA4Text(model.invoiceNumber)}${model.mode === 'sample' ? ' · Fictional data — not for payment' : ''}</p><dl class="invoice-facts">${facts.map(([label, value], i) => `<div><dt>${label}</dt><dd${i === 1 ? ' class="mono"' : ''}>${escapeA4Text(value)}</dd></div>`).join('')}</dl></div></header>`;
+    ? `<div aria-label="Business logo" class="logo-placeholder has-logo" role="img"><img src="${escapeA4Text(seller.logo)}" alt=""></div>`
+    : '<div aria-label="Business logo placeholder" class="logo-placeholder" role="img">LOGO</div>';
+  const contact = [seller.location && escapeA4Text(seller.location), seller.contactLine && escapeA4Text(seller.contactLine),
+    seller.phone && `<span class="phone">${escapeA4Text(seller.phone)}</span>`].filter(Boolean).join('<br>');
+  const facts = [['Party', model.party, ''], ['Lorry no.', model.lorryNumber, ' class="mono"'], ['Destination', model.destination, ''], ['Manager', model.supervisor, '']];
+  return '<header class="invoice-header">'
+    + `<div class="business-panel">${logo}<div class="business-copy"><h1 class="business-name">${escapeA4Text(seller.name)}</h1>${contact ? `<p class="business-contact">${contact}</p>` : ''}</div></div>`
+    + '<div class="invoice-panel">'
+    + `<div class="invoice-topline"><h2 class="invoice-kind">${escapeA4Text(model.title)}</h2><div class="invoice-state"><time datetime="${escapeA4Text(model.invoiceDate.datetime)}">${escapeA4Text(model.invoiceDate.label)}</time><span class="status">${escapeA4Text(a4StatusLabel(model))}</span></div></div>`
+    + `<p class="invoice-reference">No. ${escapeA4Text(model.invoiceNumber)}${model.mode === 'sample' ? ' · Fictional data — not for payment' : ''}</p>`
+    + `<dl class="invoice-facts">${facts.map(([label, value, cls]) => `<div><dt>${label}</dt><dd${cls}>${escapeA4Text(value)}</dd></div>`).join('')}</dl>`
+    + '</div></header>';
 }
 
-function renderSummary(model, prefix) {
-  const totals = model.totals, id = idPrefix(prefix);
-  // Material amount (Regular) + Top material amount = Material total, both from the round-once model split.
-  return `<section class="invoice-summary" aria-label="Order and payment summary"><div class="order-overview"><h2 class="summary-title" id="${id}-order-heading">Order summary</h2><dl class="headline-totals" aria-labelledby="${id}-order-heading"><div class="headline-stat"><dt>Total pieces</dt><dd data-total="pieces">${totals.pieces}</dd></div><div class="headline-stat area-stat"><dt>Total area · sq ft</dt><dd data-total="area">${number(totals.area)}</dd></div></dl><dl class="material-total"><div><dt>Material total</dt><dd data-total="material">${money(totals.materialTotal)}</dd></div></dl></div><div class="settlement-overview"><h2 class="summary-title" id="${id}-payment-heading">Payment summary</h2><dl class="settlement" aria-labelledby="${id}-payment-heading"><div class="settlement-row"><dt>Material amount</dt><dd data-amount="material">${money(totals.regularAmount)}</dd></div><div class="settlement-row"><dt>Top material amount</dt><dd data-amount="top">${money(totals.topAmount)}</dd></div><div class="settlement-row"><dt>Loading / royalty</dt><dd data-amount="loading">${money(model.loadingRoyalty)}</dd></div><div class="settlement-net"><dt>Net payable</dt><dd data-total="net">${money(totals.netPayable)}</dd></div></dl></div></section>`;
+// Pieces and area only: shared by both copies.
+function orderOverview(model, id, withMaterial) {
+  const totals = model.totals;
+  return `<div class="order-overview"><h2 class="summary-title" id="${id}-order-heading">Order summary</h2>`
+    + `<dl aria-labelledby="${id}-order-heading" class="headline-totals"><div class="headline-stat"><dt>Total pieces</dt><dd data-total="pieces">${totals.pieces}</dd></div><div class="headline-stat area-stat"><dt>Total area · sq ft</dt><dd data-total="area">${number(totals.area)}</dd></div></dl>`
+    + (withMaterial ? `<dl class="material-total"><div><dt>Material total</dt><dd data-total="material">${money(totals.materialTotal)}</dd></div></dl>` : '')
+    + '</div>';
 }
 
+function renderSign(model) {
+  const sign = model.mode === 'sample'
+    ? '<strong>Sample only</strong><span>Not valid for payment</span>'
+    : `${model.seller.signatoryName ? `<strong>${escapeA4Text(model.seller.signatoryName)}</strong>` : ''}<span>Authorized signatory</span>`;
+  return `<div class="sign">${sign}</div>`;
+}
+
+// Buyer copy only. Sample: the reference placeholders; production: label/value
+// pairs when every segment has one, otherwise one plain line; omitted when empty.
 function renderBank(model, id) {
   const sample = model.mode === 'sample';
   const text = typeof model.seller.bankDetails === 'string' ? model.seller.bankDetails.trim() : '';
-  // Production shows the area only when the snapshot carries a non-empty value.
   if (!sample && !text) return '';
   const pairs = sample ? SAMPLE_BANK_PAIRS : bankDetailPairs(text);
   const body = pairs
-    ? `<dl class="bank-grid" aria-labelledby="${id}-bank-heading">${pairs.map(([label, value]) => `<div><dt>${escapeA4Text(label)}:</dt><dd>${escapeA4Text(value)}</dd></div>`).join('')}</dl>`
+    ? `<dl class="bank-fields">${pairs.map(([label, value], index) => {
+      const name = sample ? ` aria-label="${escapeA4Text(SAMPLE_BANK_NAMES[index])}" title="${escapeA4Text(SAMPLE_BANK_NAMES[index])}"` : '';
+      return `<div><dt${name}>${escapeA4Text(label)}:</dt><dd>${escapeA4Text(value)}</dd></div>`;
+    }).join('')}</dl>`
     : `<p class="bank-text">${escapeA4Text(bankDetailSegments(text).join(' · '))}</p>`;
-  return `<div class="bank-block"><p class="label bank-label" id="${id}-bank-heading">Bank details${sample ? ' <span class="bank-note">Preview placeholders only</span>' : ''}</p>${body}</div>`;
+  return `<section aria-labelledby="${id}-bank-heading" class="bank-details"><div class="bank-head"><h2 class="bank-heading" id="${id}-bank-heading">Bank details</h2>${sample ? '<p class="bank-note">Preview placeholders only</p>' : ''}</div>${body}</section>`;
 }
 
-function renderClosing(model, prefix) {
+// Buyer: order and payment summary, amount in words, bank details and signature.
+// Driver: pieces and area, then the signature; it reads no money, words or bank field.
+function renderFinal(model, copy, prefix) {
   const id = idPrefix(prefix);
-  const sign = model.mode === 'sample' ? '<strong>Sample only</strong><span>Not valid for payment</span>' : `${model.seller.signatoryName ? `<strong>${escapeA4Text(model.seller.signatoryName)}</strong>` : ''}<span>Authorized signatory</span>`;
-  return `<section class="closing" aria-label="Amount in words and authorization"><div class="closing-words"><p class="amount-line"><span class="label">Amount in words</span> <span class="amount-in-words">${escapeA4Text(model.amountWords)}</span></p><p class="rounding-note">${escapeA4Text(AREA_ROUNDING_NOTE)}</p></div><div class="closing-foot">${renderBank(model, id)}<div class="sign">${sign}</div></div></section>`;
+  if (copy === 'driver') {
+    return '<div class="final-section">'
+      + `<section aria-label="Order summary" class="invoice-summary driver-summary">${orderOverview(model, id, false)}</section>`
+      + `<section aria-label="Authorization" class="closing"><div class="footer-details">${renderSign(model)}</div></section>`
+      + '</div>';
+  }
+  const totals = model.totals;
+  return '<div class="final-section">'
+    + `<section aria-label="Order and payment summary" class="invoice-summary">${orderOverview(model, id, true)}`
+    + `<div class="settlement-overview"><h2 class="summary-title" id="${id}-payment-heading">Payment summary</h2>`
+    + `<dl aria-labelledby="${id}-payment-heading" class="settlement"><div class="settlement-row"><dt>Material total</dt><dd data-amount="material">${money(totals.materialTotal)}</dd></div><div class="settlement-row"><dt>Loading / royalty</dt><dd data-amount="loading">${money(model.loadingRoyalty)}</dd></div><div class="settlement-net"><dt>Net payable</dt><dd data-total="net">${money(totals.netPayable)}</dd></div></dl></div>`
+    + '</section>'
+    + `<section aria-label="Amount in words, optional bank details and authorization" class="closing"><div class="closing-notes"><div class="words-line"><p class="label">Amount in words</p><p class="amount-in-words">${escapeA4Text(model.amountWords)}</p></div></div>`
+    + `<div class="footer-details">${renderBank(model, id)}${renderSign(model)}</div></section>`
+    + '</div>';
 }
 
-function pageGroups(page) { return page.columns.flatMap(column => column.map(fragment => fragment.group.id)); }
+const RULE = '<span class="column-rule" aria-hidden="true"></span>';
 
-function renderNote(model, page) {
-  if (model.mode !== 'sample') return '';
-  const ids = pageGroups(page);
-  const rates = new Set(model.groups.flatMap(group => group.entries.map(entry => entry.ratePerSqFt)));
-  const rate = rates.size === 1 && !rates.has(null) ? ` · Sample rate ${money([...rates][0])} / sq ft` : '';
-  return `<p class="sample-note">Illustrative measurements${rate}${ids.length ? ` · Groups ${ids[0]}–${ids.at(-1)}` : ''}</p>`;
+function renderColumns(columns, copy, prefix) {
+  return `<section aria-label="Invoice measurement columns" class="detail-columns">${columns.map((column, index) => `<div class="detail-column">${index ? RULE : ''}${column.map(({ group, from, to }) => renderA4Group(group, from, to, copy, prefix)).join('')}</div>`).join('')}</section>`;
 }
 
-function renderFooter(model, pageNumber, pageCount) {
-  const left = model.mode === 'sample' ? 'SAMPLE · FICTIONAL DATA · NOT FOR PAYMENT' : 'BUYER INVOICE';
-  return `<footer class="page-foot"><strong>${left}</strong><span class="foot-center">All amounts in INR · Dimensions in feet</span><span class="page-number">Page ${pageNumber} of ${pageCount}</span></footer>`;
+export function renderA4Page(model, page, pageNumber, pageCount, copy = 'buyer', prefix = 'document') {
+  assertCopy(copy);
+  const hasRows = page.columns.some(column => column.length);
+  return `<article aria-label="${escapeA4Text(model.title)} page ${pageNumber} of ${pageCount}" class="paper sample-sheet" data-page="${pageNumber}"><div class="page-body">`
+    + renderA4Header(model)
+    + (hasRows ? renderColumns(page.columns, copy, prefix) : '')
+    + (page.final ? renderFinal(model, copy, prefix) : `<p class="continuation">${continuationText(copy)}</p>`)
+    + '</div></article>';
 }
 
-// `_pick` (translation picker) is kept for API compatibility; the invoice labels stay English.
-export function renderA4Page(model, page, pageNumber, pageCount, prefix = 'document', _pick = en => en) {
-  const ids = pageGroups(page);
-  return `<article class="paper sample-sheet" aria-label="${escapeA4Text(model.title)} page ${pageNumber} of ${pageCount}">${renderHeader(model)}${renderNote(model, page)}<section class="detail-columns" aria-label="${ids.length ? `Measurement groups ${ids[0]} to ${ids.at(-1)}` : 'No measurement groups on this summary page'}">${page.columns.map(column => `<div class="detail-column">${column.map(({ group, from, to }) => renderA4Group(group, from, to, prefix)).join('')}</div>`).join('')}</section>${page.summary ? `${renderSummary(model, prefix)}${renderClosing(model, prefix)}` : '<p class="continuation">Continued on the next page. Order totals and payment summary appear on the final page.</p>'}${renderFooter(model, pageNumber, pageCount)}</article>`;
+function assertPages(pages) {
+  if (!pages?.length || pages.some(page => !Array.isArray(page?.columns) || page.columns.length !== 3)) throw new Error('The invoice needs complete, paginated columns.');
+  if (pages.filter(page => page.final).length !== 1 || !pages.at(-1).final) throw new Error('The invoice summary must appear once on the final page.');
 }
 
-export function renderA4Invoice(model, pages, prefix = 'document', pick = en => en) {
-  if (!pages?.length || pages.some(page => !Array.isArray(page.columns) || page.columns.length !== 3)) throw new Error('The invoice needs complete, paginated columns.');
-  if (pages.filter(page => page.summary).length !== 1 || !pages.at(-1).summary) throw new Error('The invoice summary must appear once on the final page.');
-  return `<main class="a4-invoice" aria-label="${escapeA4Text(model.title)}">${pages.map((page, i) => renderA4Page(model, page, i + 1, pages.length, prefix, pick)).join('')}</main>`;
+/** The page articles only (used by the PDF export host). */
+export function renderA4Pages(model, pages, copy = 'buyer', prefix = 'document') {
+  assertCopy(copy);
+  assertPages(pages);
+  return pages.map((page, i) => renderA4Page(model, page, i + 1, pages.length, copy, prefix)).join('');
 }
 
-export function renderStandaloneA4Invoice(model, pages, css, pick = en => en) {
+export function renderA4Invoice(model, pages, copy = 'buyer', prefix = 'document') {
+  const articles = renderA4Pages(model, pages, copy, prefix);
+  return `<main aria-label="${escapeA4Text(model.title)}" class="a4-invoice sample-pages" data-page-count="${pages.length}" data-group-count="${model.groups.length}">${articles}</main>`;
+}
+
+export function renderStandaloneA4Invoice(model, pages, css, copy = 'buyer') {
   if (!css || /<\/style/i.test(css)) throw new Error('A safe inline invoice stylesheet is required.');
-  const html = renderA4Invoice(model, pages, 'document', pick);
+  const html = renderA4Invoice(model, pages, copy, 'document');
   return `<!doctype html><html lang="en-IN" dir="ltr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light"><title>${escapeA4Text(model.title)} — ${escapeA4Text(model.invoiceNumber)}</title><style>${css}</style></head><body class="a4-body">${html}</body></html>`;
 }
 
-export function fixedSampleA4Pages(model) {
-  if (model.mode !== 'sample' || model.groups.length !== 24 || model.groups.some((group, index) => group.id !== index + 1 || group.entries.length !== 7)) throw new Error('The approved sample requires its exact 24 numbered groups of seven entries.');
-  const arrange = layout => ({ columns: layout.map(column => column.map(id => ({ group: model.groups[id - 1], from: 0, to: 7 }))), summary: false });
-  const pages = [arrange([[1, 2, 3], [4, 5, 6], [7, 8, 9]]),
-    arrange([[10, 11, 12], [13, 14, 15], [16, 17, 18]]),
-    arrange([[19, 20], [21, 22], [23, 24]])];
-  pages.at(-1).summary = true;
-  return pages;
+/**
+ * One A4 sheet for the measure host: the header, every unit in the first column
+ * (columns 2 and 3 empty, with their rules), the final section and the
+ * continuation note, followed by the 272.5 mm page-height ruler.
+ */
+export function renderA4MeasureSheet(model, copy, units, prefix = 'measure') {
+  assertCopy(copy);
+  const blocks = units.map(({ group, from, to }) => renderA4Group(group, from, to, copy, prefix)).join('');
+  return `<article class="paper sample-sheet" data-measure="${copy}"><div class="page-body">`
+    + renderA4Header(model)
+    + `<section aria-label="Invoice measurement columns" class="detail-columns"><div class="detail-column">${blocks}</div><div class="detail-column">${RULE}</div><div class="detail-column">${RULE}</div></section>`
+    + renderFinal(model, copy, prefix)
+    + `<p class="continuation">${continuationText(copy)}</p>`
+    + '</div></article><div class="page-height-ruler"></div>';
 }

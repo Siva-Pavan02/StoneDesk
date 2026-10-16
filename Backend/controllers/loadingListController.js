@@ -5,7 +5,7 @@ const { round2 } = require('../utils/dispatchCalculations');
 const { loadingListQuery, summaryFields } = require('../utils/loadingListQuery');
 function fields(body) {
   const data = {};
-  for (const key of ['supervisor', 'buyerDestination', 'stoneType', 'finish']) data[key] = text(body[key], key);
+  for (const key of ['supervisor', 'buyerDestination', 'stoneType', 'finish']) data[key] = text(body[key], key === 'supervisor' ? 'manager' : key);
   data.date = body.date === undefined ? new Date() : new Date(body.date);
   if (!Number.isFinite(data.date.getTime())) bad('Invalid date');
   data.status = body.status || 'Draft';

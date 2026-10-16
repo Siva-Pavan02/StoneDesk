@@ -1,11 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useLanguage } from '../../i18n/LanguageContext';
 import { Button, ErrorMessage, FieldError } from './Controls.jsx';
 import { money } from '../../utils/pilotDraft.js';
 import { createInvoicePayment } from '../../lib/pilotApi.js';
 
 export default function AddPaymentDialog({ open, dispatchId, invoiceTotal, received, balance, onCancel, onSaved }) {
-  const { pick } = useLanguage();
   const dialog = useRef(null);
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
@@ -41,9 +39,9 @@ export default function AddPaymentDialog({ open, dispatchId, invoiceTotal, recei
     if (busy) return;
     const num = Number(amount);
     const invalid = !Number.isFinite(num) || num <= 0
-      ? pick('Enter a valid amount greater than zero', 'సున్నా కంటే ఎక్కువ చెల్లుబాటు అయ్యే మొత్తాన్ని నమోదు చేయండి')
+      ? 'Enter a valid amount greater than zero'
       : num > balance
-        ? pick(`Amount cannot exceed balance due (${money(balance)})`, `మొత్తం మిగిలిన మొత్తం కంటే ఎక్కువ ఉండకూడదు (${money(balance)})`)
+        ? `Amount cannot exceed balance due (${money(balance)})`
         : '';
     setAmountError(invalid);
     if (invalid) {
@@ -61,7 +59,7 @@ export default function AddPaymentDialog({ open, dispatchId, invoiceTotal, recei
       onSaved(updated);
     } catch (err) {
       const detail = err?.message ? ` (${err.message})` : '';
-      setError(pick(`The payment wasn’t saved. Check your connection and try again.${detail}`, `చెల్లింపు సేవ్ కాలేదు. కనెక్షన్ తనిఖీ చేసి మళ్ళీ ప్రయత్నించండి.${detail}`));
+      setError(`The payment wasn’t saved. Check your connection and try again.${detail}`);
     } finally {
       setBusy(false);
     }
@@ -79,23 +77,23 @@ export default function AddPaymentDialog({ open, dispatchId, invoiceTotal, recei
     >
       <form onSubmit={submit} noValidate className="add-payment-form space-y-4 p-3">
         <header className="dialog-header">
-          <h2 id="add-payment-title" className="text-lg font-semibold text-teal-950">
-            {pick('Add Payment', 'చెల్లింపును జోడించండి')}
+          <h2 id="add-payment-title" className="text-lg font-semibold text-primary">
+            Add Payment
           </h2>
         </header>
 
-        <div className="payment-dialog-metrics grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 bg-stone-50 rounded-lg border border-stone-200 text-xs text-center sm:text-left">
-          <div className="p-2 bg-white rounded border border-stone-200">
-            <span className="text-stone-500 font-medium block mb-0.5">{pick('Invoice Total', 'ఇన్వాయిస్ మొత్తం')}</span>
-            <strong className="text-stone-900 text-sm font-semibold block tabular-nums">{money(invoiceTotal)}</strong>
+        <div className="payment-dialog-metrics grid grid-cols-1 sm:grid-cols-3 gap-2 p-3 bg-surface rounded-lg border border-outline-variant text-xs text-center sm:text-left">
+          <div className="p-2 bg-white rounded border border-outline-variant">
+            <span className="text-on-surface-variant font-medium block mb-0.5">Invoice Total</span>
+            <strong className="text-on-surface text-sm font-semibold block tabular-nums">{money(invoiceTotal)}</strong>
           </div>
-          <div className="p-2 bg-emerald-50/50 rounded border border-emerald-200">
-            <span className="text-emerald-800 font-medium block mb-0.5">{pick('Received', 'స్వీకరించినది')}</span>
-            <strong className="text-emerald-800 text-sm font-semibold block tabular-nums">{money(received)}</strong>
+          <div className="p-2 bg-success-container/50 rounded border border-outline-variant">
+            <span className="text-success font-medium block mb-0.5">Received</span>
+            <strong className="text-success text-sm font-semibold block tabular-nums">{money(received)}</strong>
           </div>
-          <div className="p-2 bg-amber-50/60 rounded border border-amber-300">
-            <span className="text-amber-900 font-medium block mb-0.5">{pick('Balance Due', 'మిగిలినది')}</span>
-            <strong className="text-amber-950 text-sm font-bold block tabular-nums">{money(balance)}</strong>
+          <div className="p-2 bg-warning-container/60 rounded border border-warning-container">
+            <span className="text-warning font-medium block mb-0.5">Balance Due</span>
+            <strong className="text-warning text-sm font-bold block tabular-nums">{money(balance)}</strong>
           </div>
         </div>
 
@@ -103,7 +101,7 @@ export default function AddPaymentDialog({ open, dispatchId, invoiceTotal, recei
 
         <div className="control-field">
           <label className="control-label" htmlFor="payment-amount">
-            {pick('Amount Received (₹)', 'స్వీకరించిన మొత్తం (₹)')}
+            Amount Received (₹)
           </label>
           <input
             ref={amountInput}
@@ -129,7 +127,7 @@ export default function AddPaymentDialog({ open, dispatchId, invoiceTotal, recei
 
         <div className="control-field">
           <label className="control-label" htmlFor="payment-note">
-            {pick('Note (optional)', 'గమనిక (ఐచ్ఛికం)')}
+            Note (optional)
           </label>
           <input
             id="payment-note"
@@ -138,7 +136,7 @@ export default function AddPaymentDialog({ open, dispatchId, invoiceTotal, recei
             className="input"
             type="text"
             maxLength={255}
-            placeholder={pick('e.g. Advance, Cheque #1234…', 'ఉదా. అడ్వాన్స్, చెక్ #1234…')}
+            placeholder="e.g. Advance, Cheque #1234…"
             disabled={busy}
             value={note}
             onChange={(e) => setNote(e.target.value)}
@@ -147,18 +145,11 @@ export default function AddPaymentDialog({ open, dispatchId, invoiceTotal, recei
 
         <div className="dialog-actions flex justify-end gap-2 pt-2">
           <Button
-            en="Cancel"
-            te="రద్దు"
+            label="Cancel"
             disabled={busy}
             onClick={onCancel}
           />
-          <button
-            type="submit"
-            disabled={busy}
-            className="btn control-button control-button-primary"
-          >
-            {busy ? pick('Saving…', 'సేవ్ అవుతోంది…') : pick('Save Payment', 'చెల్లింపును సేవ్ చేయండి')}
-          </button>
+          <Button primary type="submit" disabled={busy} label={busy ? 'Saving…' : 'Save Payment'} />
         </div>
       </form>
     </dialog>

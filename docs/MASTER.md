@@ -19,8 +19,8 @@ Fixed values in shared controls: primary hover `#134E4A`; input hover border `#C
 
 ## Typography
 
-- **Font:** Geist (400, 500, 600, 700) and Geist Mono (400, 500) from Google Fonts; Noto Telugu (local `/fonts/NotoSansTelugu-Regular.ttf`) for Telugu.
-- **Stack:** `'Geist', 'Noto Telugu', sans-serif`.
+- **Font:** Geist (400, 500, 600, 700) and Geist Mono (400, 500) from Google Fonts.
+- **Stack:** `'Geist', sans-serif`.
 - **Base:** 14px / 1.5 in the workspace; inputs 16px to avoid mobile zoom.
 - **h1:** `clamp(22px, 2.5vw, 28px)`, weight 600, letter-spacing `-.035em`.
 - **h2, h3:** weight 600, letter-spacing `-.015em`; card titles 15px.

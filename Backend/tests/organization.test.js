@@ -7,7 +7,7 @@ const API_PREFIX = '/api';
 
 test('generated codes are readable, short and safe for non-Latin business names', () => {
   assert.match(organizationCode('Sri Granite'), /^SRI-GRANITE-[A-Z2-9]{6}$/);
-  assert.match(organizationCode('రాయి'), /^STONE-YARD-[A-Z2-9]{6}$/);
+  assert.match(organizationCode('पत्थर'), /^STONE-YARD-[A-Z2-9]{6}$/);
   assert.ok(organizationCode('Very long '.repeat(20)).length <= 29);
 });
 test('organization creation, joining and membership remain isolated', async t => {

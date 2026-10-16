@@ -4,11 +4,13 @@ const calc = require('../utils/pilotCalculations');
 const { snapshot } = require('../utils/businessBranding');
 const { buildAnalytics, windows } = require('../utils/dispatchAnalytics');
 const { auditLog } = require('../utils/auditLog');
+const { STATUS_TARGETS, statusTransitionError } = require('../utils/dispatchStatus');
+const { rememberDispatchReferences } = require('../utils/savedReferences');
 
 const ANALYTICS_RECORD_CAP = 20000;
 
 function details(body) {
-  const supervisor = calc.text(body.supervisor, 'supervisor');
+  const supervisor = calc.text(body.supervisor, 'manager');
   const logistics = {
     truckNumber: calc.text(body.logistics?.truckNumber, 'truck number', 40).toUpperCase(),
     buyerDestination: calc.text(body.logistics?.buyerDestination, 'destination', 200)
@@ -46,6 +48,8 @@ exports.createDraft = async (req, res, next) => {
         status: 'Draft'
       }
     });
+    // Remembers truck/destination as suggestions; never fails the save.
+    await rememberDispatchReferences(prisma, req.user.organizationId, dispatch.logistics);
     res.json(dispatch);
   } catch (err) {
     if (err.code === 'P2002' && req.body.clientRequestId) {
@@ -74,6 +78,7 @@ exports.updateDraft = async (req, res, next) => {
       data: { ...metadata, inventory, summary: calc.totals(inventory, fee) }
     });
     if (updateResult.count === 0) return res.status(409).json({ error: 'Load changed. Refresh and try again.' });
+    await rememberDispatchReferences(prisma, req.user.organizationId, metadata.logistics);
 
     res.json(await prisma.dispatch.findUnique({ where: { id: dispatch.id } }));
   } catch (err) { next(err); }
@@ -90,7 +95,7 @@ exports.finalizeDispatch = async (req, res, next) => {
     if (dispatch.status !== 'Draft') return res.json(dispatch);
     const inventory = calc.processInventory(dispatch.inventory);
     const summary = calc.totals(inventory, dispatch.summary.loadingAndRoyaltyFees);
-    const businessSnapshot = await snapshot(settings);
+    const businessSnapshot = await snapshot(settings, req.user.organizationId);
 
     const updateResult = await prisma.dispatch.updateMany({
       where: { id: dispatch.id, status: 'Draft', updatedAt: dispatch.updatedAt },
@@ -98,6 +103,7 @@ exports.finalizeDispatch = async (req, res, next) => {
     });
 
     if (!updateResult.count) return res.status(409).json({ error: 'Load changed. Refresh and try again.' });
+    await rememberDispatchReferences(prisma, req.user.organizationId, dispatch.logistics);
     res.json(await prisma.dispatch.findUnique({ where: { id: dispatch.id } }));
   } catch (err) { next(err); }
 };
@@ -134,7 +140,8 @@ exports.reviseDispatch = async (req, res, next) => {
       supervisor: dispatch.supervisor,
       partyName: dispatch.partyName,
       date: dispatch.date,
-      businessSnapshot: dispatch.businessSnapshot,
+      // businessSnapshot is not copied: branding never changes on revise, and the
+      // history view falls back to the record's own businessSnapshot.
       revisedAt: new Date().toISOString(),
       revisedByUserId: req.user.id
     };
@@ -146,6 +153,7 @@ exports.reviseDispatch = async (req, res, next) => {
       data: { ...metadata, inventory, summary, revisions }
     });
     if (updateResult.count === 0) return res.status(409).json({ error: 'Load changed. Refresh and try again.' });
+    await rememberDispatchReferences(prisma, organizationId, metadata.logistics);
 
     await auditLog('dispatch.update', req, { dispatchId: id });
     res.json(await prisma.dispatch.findUnique({ where: { id: dispatch.id } }));
@@ -154,13 +162,31 @@ exports.reviseDispatch = async (req, res, next) => {
 
 exports.updateStatus = async (req, res, next) => {
   try {
-    if (req.body.status !== 'Delivered') return res.status(400).json({ error: 'Invalid status transition' });
+    const to = req.body.status;
+    if (typeof to !== 'string' || !STATUS_TARGETS.includes(to)) return res.status(400).json({ error: 'Invalid status transition' });
+    const id = req.params.id;
+    const organizationId = req.user.organizationId;
+    const dispatch = await prisma.dispatch.findFirst({ where: { id, organizationId }, select: { id: true, status: true, updatedAt: true } });
+    if (!dispatch) return res.status(404).json({ error: 'Not found' });
+
+    // Same stale-read check as reviseDispatch.
+    if (req.body.updatedAt !== undefined) {
+      const clientTime = new Date(req.body.updatedAt).getTime();
+      if (clientTime !== new Date(dispatch.updatedAt).getTime()) return res.status(409).json({ error: 'Load changed. Refresh and try again.' });
+    }
+
+    // Delivered -> Dispatched is Admin only; rules live in utils/dispatchStatus.js.
+    const rejected = statusTransitionError(dispatch.status, to, req.user.role);
+    if (rejected) return res.status(rejected.status).json({ error: rejected.error });
+
     const updateResult = await prisma.dispatch.updateMany({
-      where: { id: req.params.id, status: 'Dispatched', organizationId: req.user.organizationId },
-      data: { status: 'Delivered' }
+      where: { id, organizationId, status: dispatch.status, updatedAt: dispatch.updatedAt },
+      data: { status: to }
     });
-    if (updateResult.count === 0) return res.status(400).json({ error: 'Invalid status transition' });
-    res.json(await prisma.dispatch.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } }));
+    if (updateResult.count === 0) return res.status(409).json({ error: 'Load changed. Refresh and try again.' });
+
+    await auditLog('dispatch.deliver', req, { dispatchId: id, from: dispatch.status, to });
+    res.json(await prisma.dispatch.findFirst({ where: { id, organizationId } }));
   } catch (err) { next(err); }
 };
 
@@ -170,17 +196,32 @@ exports.deleteDispatch = async (req, res, next) => {
     const organizationId = req.user.organizationId;
     const dispatch = await prisma.dispatch.findFirst({
       where: { id, organizationId },
-      select: { id: true, _count: { select: { payments: true } } }
+      select: { id: true, status: true, _count: { select: { payments: true } } }
     });
     if (!dispatch) return res.status(404).json({ error: 'Not found' });
-    // Explicit check keeps the block deterministic instead of relying on the onDelete: Restrict FK error.
-    if (dispatch._count.payments > 0) return res.status(409).json({ error: 'Remove the recorded payments before deleting this invoice.' });
+    // Anyone who can edit drafts may delete one; finalized invoices stay Admin-only.
+    const isAdmin = req.user.role === 'Admin';
+    if (dispatch.status !== 'Draft' && !isAdmin) return res.status(403).json({ error: 'Your role does not allow this action' });
+    // Only an Admin may remove a load that has payments; its payments are removed with it.
+    // Payment -> Dispatch is onDelete: Restrict, so payments are deleted first in the same transaction.
+    // Payments are only recorded on finalized bills, which non-admins already cannot delete, so the
+    // check below is not normally reachable. It stays as defense in depth.
+    if (dispatch._count.payments > 0 && !isAdmin) return res.status(403).json({ error: 'Only an Admin can delete a load with recorded payments.' });
 
-    const deleteResult = await prisma.dispatch.deleteMany({ where: { id, organizationId } });
-    if (deleteResult.count === 0) return res.status(404).json({ error: 'Not found' });
+    // Non-admins re-check status so a draft finalized meanwhile is not deleted.
+    const { deleteResult, paymentsRemoved } = await prisma.$transaction(async tx => {
+      const payments = isAdmin ? await tx.invoicePayment.deleteMany({ where: { dispatchId: id, organizationId } }) : { count: 0 };
+      const result = await tx.dispatch.deleteMany({ where: { id, organizationId, ...(isAdmin ? {} : { status: 'Draft' }) } });
+      // Roll back the payment removal if the load itself was not deleted.
+      if (result.count === 0) throw Object.assign(new Error('dispatch-not-deleted'), { notDeleted: true });
+      return { deleteResult: result, paymentsRemoved: payments.count };
+    }).catch(err => { if (err.notDeleted) return { deleteResult: { count: 0 }, paymentsRemoved: 0 }; throw err; });
+    if (deleteResult.count === 0) return isAdmin
+      ? res.status(404).json({ error: 'Not found' })
+      : res.status(409).json({ error: 'Load changed. Refresh and try again.' });
 
-    await auditLog('dispatch.delete', req, { dispatchId: id });
-    res.json({ ok: true, id });
+    await auditLog('dispatch.delete', req, { dispatchId: id, status: dispatch.status, paymentsRemoved });
+    res.json({ ok: true, id, paymentsRemoved });
   } catch (err) { next(err); }
 };
 

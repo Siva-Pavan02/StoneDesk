@@ -1,24 +1,44 @@
 // Pure decision + window-driving logic for the A4 Print/PDF action.
 // Kept free of React and module-level DOM access so it can be unit tested with fakes.
+import { projectCopy } from './a4InvoiceModel.js';
+import { renderStandaloneA4Invoice } from './a4InvoiceRender.js';
+
+const COPIES = ['buyer', 'driver'];
 
 /**
- * Synchronous first step of Print/PDF. Must run inside the user's click handler
- * before any `await`, so the popup blocker sees the window.open as user-initiated.
- * Warnings are checked BEFORE opening, so no window is ever opened and then closed
- * just because the invoice needs review.
+ * Synchronous first step of Print/PDF for the selected copy. Must run inside the
+ * user's click handler before any `await`, so the popup blocker sees the
+ * window.open as user-initiated. Warnings are checked BEFORE opening, so no window
+ * is ever opened and then closed just because the invoice needs review. An unknown
+ * copy throws before any window is opened.
  *
- * @returns {{status:'warnings', warnings:string[], model:object}
- *   | {status:'blocked', model:object}
- *   | {status:'opened', model:object, printWindow:Window}}
+ * `model` is the unprojected (buyer) model; `copy` says which copy will be printed.
+ *
+ * @returns {{status:'warnings', copy:string, warnings:string[], model:object}
+ *   | {status:'blocked', copy:string, model:object}
+ *   | {status:'opened', copy:string, model:object, printWindow:Window}}
  */
-export function startPrint({ record, buildModel, openWindow }) {
+export function startPrint({ record, buildModel, openWindow, copy = 'buyer' }) {
+  if (!COPIES.includes(copy)) throw new Error(`Unknown bill copy "${copy}". Expected "buyer" or "driver".`);
   const model = buildModel(record);
   const warnings = Array.isArray(model?.warnings) ? model.warnings.filter(Boolean).map(String) : [];
-  if (warnings.length) return { status: 'warnings', warnings, model };
+  if (warnings.length) return { status: 'warnings', copy, warnings, model };
   let printWindow = null;
   try { printWindow = openWindow(); } catch { printWindow = null; }
-  if (!printWindow) return { status: 'blocked', model };
-  return { status: 'opened', model, printWindow };
+  if (!printWindow) return { status: 'blocked', copy, model };
+  return { status: 'opened', copy, model, printWindow };
+}
+
+/**
+ * Standalone print HTML of one copy. The model is projected with `projectCopy`
+ * and rendered with `pages`, the measured plan the preview and the PDF use for
+ * that copy. The plan is required: pagination is measured in the browser
+ * (a4InvoiceMeasure.js), so this module never computes one of its own.
+ */
+export function printCopyHtml(model, copy, css, pages) {
+  if (!COPIES.includes(copy)) throw new Error(`Unknown bill copy "${copy}". Expected "buyer" or "driver".`);
+  if (!Array.isArray(pages) || !pages.length) throw new Error('The measured page plan of this copy is required for printing.');
+  return renderStandaloneA4Invoice(projectCopy(model, copy), pages, css, copy);
 }
 
 // Resolves when `promise` settles or the shared deadline passes, whichever is first.

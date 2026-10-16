@@ -15,11 +15,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { stripVTControlCharacters } from 'node:util';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { testLogo } from './invoiceFixtures.js';
+const testLogoBytes = Buffer.from(testLogo.slice(testLogo.indexOf(',') + 1), 'base64');
+const testLogoSha = createHash('sha256').update(testLogoBytes).digest('hex');
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const base = process.env.INTERFACE_BASE_URL || 'http://localhost:5174';
 const widths = (process.env.INTERFACE_WIDTHS || '320,390,768,1024,1440').split(',').map(Number);
-const languages = (process.env.INTERFACE_LANGUAGES || 'en,te').split(',');
+const languages = ['en'];
 const phases = (process.env.INTERFACE_PHASES || 'landing,workspace,motion,empty').split(',');
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
 const out = process.env.INTERFACE_REPORT_DIR || path.join(os.tmpdir(), `StoneDesk-interface-${stamp}`);
@@ -50,7 +52,7 @@ async function productionSnapshot() {
   for (const name of new Set(names.split('\0').filter(Boolean))) {
     if (name === 'Frontend/tests/interfaceDesign.test.mjs') continue;
     try { snapshot[name] = createHash('sha256').update(await fs.readFile(path.join(root, name))).digest('hex'); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; }
+    catch (error) { if (error.code !== 'ENOENT' && error.code !== 'EISDIR') throw error; }
   }
   return snapshot;
 }
@@ -87,7 +89,7 @@ const analyticsMock = empty => {
     previous: empty ? totals : { finalizedLoads: 4, billed: 73536, areaSqFt: 1074, pieces: 172, averageBilled: 18384 }, daily,
     topDestinations: empty ? [] : [{ name: 'Sample North Yard', billed: 55152, loads: 3 }, { name: 'Sample South Yard', billed: 36768, loads: 2 }], unreadable: 0 };
 };
-const navigation = [['profile', 'Profile', 'ప్రొఫైల్'], ['home', 'Dashboard', 'డ్యాష్‌బోర్డ్'], ['entries', 'Loading entries', 'లోడ్ వివరాలు'], ['products', 'Products & places', 'రకాలు మరియు ప్రదేశాలు'], ['settings', 'Settings', 'సెట్టింగ్స్']];
+const navigation = [['profile', 'Profile'], ['home', 'Dashboard'], ['load', 'New load'], ['entries', 'Loading entries'], ['settings', 'Settings']];
 const results = { base, browser: executable, startedAt: new Date().toISOString(), cases: [], productionFilesUnchanged: null };
 let browser;
 let shotNumber = 0;
@@ -97,14 +99,13 @@ const slug = value => value.replace(/[^a-z0-9-]+/gi, '-').toLowerCase().slice(0,
 async function makeCase(kind, language, width, options = {}) {
   const result = { id: `${kind}-${language}-${width}`, kind, language, width, checks: [], screenshots: [], downloads: [], geometry: [], actions: [], api: [], unexpectedRequests: [], mutations: [], runtimeErrors: [], consoleErrors: [], assetFailures: [] };
   results.cases.push(result);
-  const context = await browser.newContext({ viewport: { width, height: width === 320 ? 800 : width === 390 ? 844 : width === 768 ? 1024 : width === 1024 ? 768 : 900 }, deviceScaleFactor: 1, isMobile: width <= 768, hasTouch: width <= 768, locale: language === 'te' ? 'te-IN' : 'en-IN', colorScheme: 'light', reducedMotion: options.motion ? 'no-preference' : 'reduce', acceptDownloads: true, serviceWorkers: 'block' });
+  const context = await browser.newContext({ viewport: { width, height: width === 320 ? 800 : width === 390 ? 844 : width === 768 ? 1024 : width === 1024 ? 768 : 900 }, deviceScaleFactor: 1, isMobile: width <= 768, hasTouch: width <= 768, locale: 'en-IN', colorScheme: 'light', reducedMotion: options.motion ? 'no-preference' : 'reduce', acceptDownloads: true, serviceWorkers: 'block' });
   context.setDefaultTimeout(7000);
   context.setDefaultNavigationTimeout(25000);
-  await context.addInitScript(({ language }) => {
-    localStorage.setItem('stonedesk-language', language);
+  await context.addInitScript(() => {
     window.__interfaceClipboard = [];
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async value => { window.__interfaceClipboard.push(value); } } });
-  }, { language });
+  });
   await context.route('**/*', async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -120,6 +121,7 @@ async function makeCase(kind, language, width, options = {}) {
         result.unexpectedRequests.push({ method: request.method(), path: apiPath, reason: 'Mutation blocked' });
         return route.fulfill({ status: 403, headers, json: { error: 'Read-only interface validation blocks changes' } });
       }
+      if (apiPath === `/uploads/logos/${testLogoSha}.png`) return route.fulfill({ status: 200, headers: { ...headers, 'content-type': 'image/png', 'cache-control': 'private, max-age=31536000, immutable' }, body: testLogoBytes });
       let body;
       if (apiPath === '/auth/me') body = { user: kind === 'landing' || kind === 'motion' ? null : user };
       else if (apiPath === `/master-settings/${settings.organizationId}`) body = settings;
@@ -128,12 +130,17 @@ async function makeCase(kind, language, width, options = {}) {
       else if (apiPath.startsWith('/dispatches/')) {
         body = records.find(record => record.id === apiPath.split('/')[2]);
         if (body && result.invoiceLogo) body = { ...body, businessSnapshot: { ...body.businessSnapshot, logoDataUrl: testLogo } };
+        if (body && result.invoiceLogoRef) {
+          const { logoDataUrl: _embedded, ...snapshot } = body.businessSnapshot || {};
+          body = { ...body, businessSnapshot: { ...snapshot, logo: { sha256: testLogoSha, width: 120, height: 48, bytes: testLogoBytes.length } } };
+        }
         if (body && result.invoiceLarge) {
           const inventory = Array.from({ length: 20 }, (_, index) => ({ ...body.inventory[0], stoneType: `Sample stone row ${index + 1}`, measurementRows: body.inventory[0].measurementRows.map(row => ({ ...row, rowNo: index + 1 })) }));
           body = { ...body, inventory, summary: { totalPieces: 860, totalDispatchVolumeSqFt: 5370, baseMaterialTotal: 343680, loadingAndRoyaltyFees: 1200, netBillableAmount: 344880 } };
         }
       }
       else if (apiPath === '/auth/users') body = members;
+      else if (apiPath === '/auth/invitations') body = [];
       else if (apiPath === '/loading-lists') body = [];
       if (body !== undefined) return route.fulfill({ status: 200, headers, json: body });
       result.unexpectedRequests.push({ method: request.method(), path: apiPath, reason: 'Unknown API blocked' });
@@ -150,7 +157,6 @@ async function makeCase(kind, language, width, options = {}) {
   page.on('console', message => { if (message.type() === 'error') result.consoleErrors.push({ stage: result.stage, message: message.text() }); });
   page.on('requestfailed', request => result.assetFailures.push({ path: new URL(request.url()).pathname, error: request.failure()?.errorText }));
   page.on('dialog', dialog => dialog.type() === 'confirm' && result.acceptConfirm ? dialog.accept() : dialog.dismiss());
-  const t = (en, te) => language === 'te' ? te : en;
   async function capture(name, locator) {
     const filename = `${result.id}-${slug(name)}-${++shotNumber}.png`;
     await (locator || page).screenshot({ path: path.join(out, filename), ...(locator ? {} : { fullPage: true }), animations: 'disabled' });
@@ -168,7 +174,7 @@ async function makeCase(kind, language, width, options = {}) {
     }
   }
   async function fonts() {
-    await page.evaluate(async () => { await document.fonts.load('16px "Noto Telugu"', 'తెలుగు'); await document.fonts.ready; });
+    await page.evaluate(async () => { await document.fonts.ready; });
   }
   async function overflow(name, screenshot = false) {
     await check(`${name}: document overflow and named controls`, async () => {
@@ -192,11 +198,11 @@ async function makeCase(kind, language, width, options = {}) {
   async function view(name) { await expect(page.locator('#workspace-main')).toHaveAttribute('data-view', name); }
   async function nav(name) {
     const item = navigation.find(([key]) => key === name);
-    if (width >= 1024) await page.locator('.workspace-sidebar nav').getByRole('link', { name: t(item[1], item[2]), exact: true }).click();
+    if (width >= 1024) await page.locator('.workspace-sidebar nav').getByRole('link', { name: item[1], exact: true }).click();
     else {
       await page.locator('.mobile-menu').click();
       await expect(page.locator('#workspace-navigation-dialog')).toBeVisible();
-      await page.locator('#workspace-navigation-dialog nav').getByRole('link', { name: t(item[1], item[2]), exact: true }).click();
+      await page.locator('#workspace-navigation-dialog nav').getByRole('link', { name: item[1], exact: true }).click();
       await expect(page.locator('#workspace-navigation-dialog')).not.toBeVisible();
       await expect(page.locator('.mobile-menu')).toHaveAttribute('aria-expanded', 'false');
     }
@@ -204,7 +210,7 @@ async function makeCase(kind, language, width, options = {}) {
   }
   const main = () => page.locator('#workspace-main');
   const visibleRecords = () => width >= 1024 ? page.locator('.desktop-load-table tbody tr') : page.locator('.load-record:visible');
-  async function oneCreate() { await expect(page.getByRole('button', { name: t('Create a new load', 'కొత్త లోడ్ సృష్టించండి'), exact: true })).toHaveCount(1); }
+  async function oneCreate() { await expect(page.getByRole('button', { name: 'Create a new load', exact: true })).toHaveCount(1); }
   async function finish() {
     await check('No runtime errors or unmocked API traffic', async () => {
       assert.deepEqual(result.runtimeErrors, []);
@@ -214,13 +220,13 @@ async function makeCase(kind, language, width, options = {}) {
     console.log(`CASE ${result.id}: ${result.checks.filter(item => item.passed).length}/${result.checks.length} checks; ${result.screenshots.length} screenshots; ${result.downloads.length} PDFs`);
     await context.close();
   }
-  return { page, result, t, check, capture, overflow, view, nav, main, visibleRecords, oneCreate, finish, fonts };
+  return { page, result, check, capture, overflow, view, nav, main, visibleRecords, oneCreate, finish, fonts };
 }
 
 async function landing(language, width) {
   const c = await makeCase('landing', language, width);
-  const { page, result, t, check, capture, overflow } = c;
-  await check('Guest landing opens', async () => { await page.goto(`${base}/#welcome`, { waitUntil: 'domcontentloaded' }); await expect(page.locator('.marketing')).toBeVisible(); await expect(page.locator('html')).toHaveAttribute('lang', language); });
+  const { page, result, check, capture, overflow } = c;
+  await check('Guest landing opens', async () => { await page.goto(`${base}/#welcome`, { waitUntil: 'domcontentloaded' }); await expect(page.locator('.marketing')).toBeVisible(); await expect(page.locator('html')).toHaveAttribute('lang', 'en'); });
   await overflow('landing-full', true);
   await check('CSS imports exist in correct integration order', async () => {
     const styles = await page.locator('style[data-vite-dev-id]').evaluateAll(elements => elements.map(element => element.getAttribute('data-vite-dev-id').replace(/\\/g, '/')));
@@ -231,10 +237,10 @@ async function landing(language, width) {
   });
   await check('Public header has no language control', async () => {
     await expect(page.locator('.mk-public-header .mk-language')).toHaveCount(0);
-    await expect(page.locator('html')).toHaveAttribute('lang', language);
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   });
   await check('Public anchors preserve the app hash and move focus', async () => {
-    for (const [name, id] of [[t('Product', 'ఉత్పత్తి'), 'product'], [t('How it works', 'ఎలా పనిచేస్తుంది'), 'how-it-works'], [t('StoneDesk home', 'StoneDesk హోమ్'), 'marketing-main']]) {
+    for (const [name, id] of [['Product', 'product'], ['How it works', 'how-it-works'], ['StoneDesk home', 'marketing-main']]) {
       await page.locator('.mk-public-header').getByRole('link', { name, exact: true }).click();
       await expect(page.locator(`#${id}`)).toBeFocused();
       assert.equal(new URL(page.url()).hash, '#welcome');
@@ -245,9 +251,9 @@ async function landing(language, width) {
   for (let index = 0; index < 1; index++) {
     await check(`Sample ${index + 1}: every tab, keyboard and row action`, async () => {
       const sample = page.locator('.mk-product-window').nth(index);
-      const tabNames = [['Overview', 'సారాంశం'], ['Measure', 'కొలతలు'], ['Dispatch', 'డిస్పాచ్'], ['Bill', 'బిల్లు']];
-      for (const [en, te] of tabNames) {
-        const tab = sample.getByRole('tab', { name: t(en, te), exact: true }); await tab.click();
+      const tabNames = ['Overview', 'Measure', 'Dispatch', 'Bill'];
+      for (const name of tabNames) {
+        const tab = sample.getByRole('tab', { name, exact: true }); await tab.click();
         await expect(tab).toHaveAttribute('aria-selected', 'true');
         await expect(sample.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', await tab.getAttribute('id'));
         await expect(sample.locator('[role="tab"][tabindex="0"]')).toHaveCount(1);
@@ -260,6 +266,13 @@ async function landing(language, width) {
       await tabs.first().press('ArrowLeft'); await expect(tabs.last()).toBeFocused();
       await tabs.first().click(); await sample.locator('.mk-preview-row').first().click(); await expect(tabs.nth(2)).toHaveAttribute('aria-selected', 'true');
       await tabs.first().click(); await sample.locator('.mk-preview-row').last().click(); await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'true');
+      await tabs.last().click();
+      await expect(sample.locator('.mk-a4-stage .sample-sheet')).toHaveCount(1);
+      await expect(sample.locator('.mk-a4-stage')).toHaveAttribute('aria-hidden', 'true');
+      await expect(sample.locator('.mk-a4-stage [data-total="net"]')).toHaveText('₹18,384.00');
+      const [frame, windowBox] = [await sample.locator('.mk-a4-viewport').boundingBox(), await sample.boundingBox()];
+      assert.ok(frame.x + frame.width <= windowBox.x + windowBox.width + 1);
+      assert.equal((await sample.locator('.mk-a4-stage .detail-columns').evaluate(element => getComputedStyle(element).gridTemplateColumns)).split(' ').length, 3);
       await tabs.nth(index === 0 ? 0 : 1).click();
     });
   }
@@ -269,47 +282,61 @@ async function landing(language, width) {
       await buttons.nth(i).click(); const dialog = page.locator('.auth-screen'); await expect(dialog).toBeVisible();
       assert.equal(await dialog.evaluate(element => element.matches(':modal')), true);
       await expect(dialog.locator('input[name="email"]')).toHaveValue('');
-      await dialog.getByRole('button', { name: t('Close', 'మూసివేయండి'), exact: true }).click(); await expect(dialog).not.toBeVisible();
+      await dialog.getByRole('button', { name: 'Close', exact: true }).click(); await expect(dialog).not.toBeVisible();
     }
   });
   await check('Login, auth mode switch and Escape are local only', async () => {
     await page.locator('.mk-login').click(); const dialog = page.locator('.auth-screen'); await expect(dialog).toBeVisible();
     await dialog.locator('input[type="checkbox"]').check(); await expect(dialog.locator('input[name="password"]')).toHaveAttribute('type', 'text');
     await dialog.locator('input[type="checkbox"]').uncheck(); await expect(dialog.locator('input[name="password"]')).toHaveValue('');
-    await dialog.getByRole('button', { name: t('New here? Create an account', 'కొత్తవారా? ఖాతా సృష్టించండి'), exact: true }).click();
+    await dialog.getByRole('button', { name: 'New here? Create an account', exact: true }).click();
     await expect(dialog.locator('input[name="name"]')).toBeVisible();
     await page.keyboard.press('Escape'); await expect(dialog).not.toBeVisible();
     assert.equal(result.mutations.length, 0);
   });
   await check('Privacy, Terms and Support native dialogs close and escape', async () => {
     const dialog = page.locator('.mk-dialog:not(.mk-bill-dialog)');
-    for (const [en, te] of [['Privacy', 'గోప్యత'], ['Terms', 'నిబంధనలు'], ['Support', 'సహాయం']]) {
-      const trigger = page.locator('footer').getByRole('button', { name: t(en, te), exact: true });
+    for (const name of ['Privacy', 'Terms', 'Support']) {
+      const trigger = page.locator('footer').getByRole('button', { name, exact: true });
       await trigger.click(); await expect(dialog).toBeVisible(); assert.ok(await dialog.evaluate(element => element.matches(':modal')));
-      await dialog.getByRole('button', { name: t('Close', 'మూసివేయండి'), exact: true }).click(); await expect(dialog).not.toBeVisible();
+      await dialog.getByRole('button', { name: 'Close', exact: true }).click(); await expect(dialog).not.toBeVisible();
       await trigger.click(); await page.keyboard.press('Escape'); await expect(dialog).not.toBeVisible(); await expect(trigger).toBeFocused();
     }
   });
   await check('Sample PDF download is not offered publicly', async () => {
-    await expect(page.getByRole('button', { name: t('Download sample PDF', 'నమూనా PDF డౌన్‌లోడ్'), exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Download sample PDF', exact: true })).toHaveCount(0);
   });
   await check('Sample bill native dialog fits, closes and escapes', async () => {
-    const trigger = page.getByRole('button', { name: t('Open sample bill', 'నమూనా బిల్లు తెరవండి'), exact: true }); const dialog = page.locator('.mk-bill-dialog');
+    const trigger = page.getByRole('button', { name: 'Open sample bill', exact: true }); const dialog = page.locator('.mk-bill-dialog');
     await trigger.click(); await expect(dialog).toBeVisible();
     assert.ok(await dialog.evaluate(element => element.matches(':modal') && element.getBoundingClientRect().width <= innerWidth));
-    await expect(dialog.getByRole('img', { name: t('Business logo placeholder', 'వ్యాపార లోగో కోసం స్థలం'), exact: true })).toBeVisible();
-    await expect(dialog.locator('.invoice-net-payable dd')).toHaveText('₹18,384.00');
+    await expect(dialog.getByRole('img', { name: 'Business logo placeholder', exact: true })).toBeVisible();
+    await expect(dialog.locator('[data-total="net"]')).toHaveText('₹18,384.00');
+    // No per-page footer: the fictional-data marking sits in the identity block and the signature.
+    await expect(dialog.locator('.page-foot')).toHaveCount(0);
+    await expect(dialog.locator('.invoice-header')).toHaveCount(1);
+    await expect(dialog.locator('.invoice-reference')).toContainText('Fictional data — not for payment');
+    await expect(dialog.locator('.sign')).toContainText('Not valid for payment');
+    // Reference measurement tables: Reg total / Top total rows and no per-group amount row.
+    await expect(dialog.locator('.row-table tr[data-subtotal="regular"]').first()).toBeVisible();
+    await expect(dialog.locator('.row-table tr[data-subtotal="top"]').first()).toBeVisible();
+    await expect(dialog.locator('tr[data-total-row]')).toHaveCount(0);
+    assert.ok(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth + 1));
     await capture('sample-bill-dialog');
-    await dialog.getByRole('button', { name: t('Close sample preview', 'నమూనా ప్రివ్యూ మూసివేయండి'), exact: true }).click(); await expect(dialog).not.toBeVisible();
+    await dialog.getByRole('button', { name: 'Close sample preview', exact: true }).click(); await expect(dialog).not.toBeVisible();
     await trigger.click(); await page.keyboard.press('Escape'); await expect(dialog).not.toBeVisible(); await expect(trigger).toBeFocused();
   });
   await check('No motion toggle is shown', async () => { await expect(page.locator('.mk-motion-toggle')).toHaveCount(0); });
+  await check('Landing copy matches the product', async () => {
+    const text = await page.evaluate(() => [document.querySelector('.marketing').innerText, ...[...document.querySelectorAll('dialog')].map(dialog => dialog.textContent)].join('\n'));
+    assert.doesNotMatch(text, /telugu|excel|bilingual|web copy|html copy|track payments|payment tracking/i);
+  });
   await c.finish();
 }
 
 async function workspace(language, width) {
   const c = await makeCase('workspace', language, width);
-  const { page, result, t, check, capture, overflow, nav, view, main, visibleRecords, oneCreate } = c;
+  const { page, result, check, capture, overflow, nav, view, main, visibleRecords, oneCreate } = c;
   await check('Mocked workspace opens with one global New load', async () => { await page.goto(`${base}/#home`, { waitUntil: 'domcontentloaded' }); await expect(page.locator('.dashboard-priority')).toBeVisible(); await oneCreate(); await expect(visibleRecords()).toHaveCount(5); });
   await overflow('dashboard', true);
   await check('Workspace stylesheet overrides are really applied', async () => {
@@ -331,7 +358,7 @@ async function workspace(language, width) {
     await capture('dashboard-priority'); await trigger.click(); await expect(trigger).toHaveAttribute('aria-pressed', 'false'); await expect(visibleRecords()).toHaveCount(5);
   });
   await check('Refresh and both supporting metric navigation actions', async () => {
-    await Promise.all([page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/dispatches')), main().getByRole('button', { name: t('Refresh', 'రిఫ్రెష్'), exact: true }).click()]);
+    await Promise.all([page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/dispatches')), main().getByRole('button', { name: 'Refresh', exact: true }).click()]);
     await expect(visibleRecords()).toHaveCount(5);
     await page.locator('.dashboard-metric-link').first().click(); await view('entries'); await expect(main().locator('.load-filter').nth(2)).toHaveAttribute('aria-pressed', 'true'); await expect(main().locator('.load-record')).toHaveCount(2); assert.equal(new URL(page.url()).hash, '#entries?status=Dispatched'); await oneCreate(); await nav('home');
     await page.locator('.dashboard-metric-link').last().click(); await view('entries'); await nav('home');
@@ -341,7 +368,7 @@ async function workspace(language, width) {
       const trigger = page.locator('.mobile-menu'), drawer = page.locator('#workspace-navigation-dialog');
       await expect(trigger).toHaveAttribute('aria-expanded', 'false'); await trigger.click(); await expect(drawer).toBeVisible(); await expect(trigger).toHaveAttribute('aria-expanded', 'true');
       assert.ok(await drawer.evaluate(element => element.matches(':modal') && element.contains(document.activeElement)));
-      await expect(drawer.locator('nav button')).toHaveCount(5); await expect(drawer.getByRole('button', { name: t('Log out', 'లాగ్ అవుట్'), exact: true })).toBeVisible(); await capture('mobile-navigation');
+      await expect(drawer.locator('nav a')).toHaveCount(5); await expect(drawer.getByRole('button', { name: 'Log out', exact: true })).toBeVisible(); await capture('mobile-navigation');
       for (let i = 0; i < 8; i++) {
         await page.keyboard.press('Tab');
         // Chrome may focus its own browser UI at the end of a native dialog's
@@ -349,8 +376,8 @@ async function workspace(language, width) {
         // remain inert, but browser chrome is not an application focus leak.
         assert.ok(await drawer.evaluate(element => element.contains(document.activeElement) || document.activeElement === document.body));
       }
-      await drawer.getByRole('button', { name: t('Close navigation', 'మెనూ మూసివేయండి'), exact: true }).focus();
-      await drawer.getByRole('button', { name: t('Close navigation', 'మెనూ మూసివేయండి'), exact: true }).click(); await expect(drawer).not.toBeVisible(); await expect(trigger).toHaveAttribute('aria-expanded', 'false'); await expect(trigger).toBeFocused();
+      await drawer.getByRole('button', { name: 'Close navigation', exact: true }).focus();
+      await drawer.getByRole('button', { name: 'Close navigation', exact: true }).click(); await expect(drawer).not.toBeVisible(); await expect(trigger).toHaveAttribute('aria-expanded', 'false'); await expect(trigger).toBeFocused();
       await trigger.click(); await page.keyboard.press('Escape'); await expect(drawer).not.toBeVisible(); await expect(trigger).toHaveAttribute('aria-expanded', 'false'); await expect(trigger).toBeFocused();
       await trigger.click(); await drawer.evaluate(element => element.close()); await expect(trigger).toHaveAttribute('aria-expanded', 'false');
       await trigger.click(); const box = await drawer.boundingBox(); const viewport = page.viewportSize();
@@ -359,26 +386,26 @@ async function workspace(language, width) {
     });
     await check('Mobile navigation links retain full-width flex styling', async () => {
       await page.locator('.mobile-menu').click(); const drawer = page.locator('#workspace-navigation-dialog');
-      const links = await drawer.locator('nav button').evaluateAll(elements => elements.map(element => ({ display: getComputedStyle(element).display, width: element.getBoundingClientRect().width, available: element.parentElement.clientWidth, minHeight: getComputedStyle(element).minHeight })));
+      const links = await drawer.locator('nav a').evaluateAll(elements => elements.map(element => ({ display: getComputedStyle(element).display, width: element.getBoundingClientRect().width, available: element.parentElement.clientWidth, minHeight: getComputedStyle(element).minHeight })));
       result.drawerLinks = links;
       assert.ok(links.every(link => link.display === 'flex' && link.width >= link.available - 2 && parseFloat(link.minHeight) >= 44), JSON.stringify(links));
     });
     if (await page.locator('#workspace-navigation-dialog').isVisible()) await page.keyboard.press('Escape');
-  } else await check('Desktop has only the five sidebar navigation actions', async () => { await expect(page.locator('.workspace-sidebar nav button:visible')).toHaveCount(5); await expect(page.locator('.mobile-menu')).not.toBeVisible(); await expect(page.locator('.bottom-nav')).toHaveCount(0); });
+  } else await check('Desktop has only the five sidebar navigation actions', async () => { await expect(page.locator('.workspace-sidebar nav a:visible')).toHaveCount(5); await expect(page.locator('.mobile-menu')).not.toBeVisible(); await expect(page.locator('.bottom-nav')).toHaveCount(0); });
   await check('Notifications native dialog close, Escape and task navigation', async () => {
     const trigger = page.locator('.workspace-notifications'), dialog = page.locator('dialog[aria-labelledby="attention-title"]');
-    await trigger.click(); await expect(dialog).toBeVisible(); await dialog.getByRole('button', { name: t('Close', 'మూసివేయండి'), exact: true }).click(); await expect(dialog).not.toBeVisible();
+    await trigger.click(); await expect(dialog).toBeVisible(); await dialog.getByRole('button', { name: 'Close', exact: true }).click(); await expect(dialog).not.toBeVisible();
     await trigger.click(); await page.keyboard.press('Escape'); await expect(dialog).not.toBeVisible();
-    await trigger.click(); await dialog.getByRole('link', { name: t('View loading entries', 'లోడ్ వివరాలు చూడండి'), exact: true }).click(); await view('entries'); await expect(dialog).not.toBeVisible(); await nav('home');
+    await trigger.click(); await dialog.getByRole('link', { name: 'View loading entries', exact: true }).click(); await view('entries'); await expect(dialog).not.toBeVisible(); await nav('home');
   });
   await check('View all loads, all status filters and pagination', async () => {
-    await main().getByRole('link', { name: t('View all loads', 'అన్ని లోడ్లు చూడండి'), exact: true }).click(); await view('entries'); await expect(main().locator('.load-record')).toHaveCount(6);
+    await main().getByRole('link', { name: 'View all loads', exact: true }).click(); await view('entries'); await expect(main().locator('.load-record')).toHaveCount(6);
     const filters = main().locator('.load-filters button');
     for (let index = 1; index < 4; index++) { await filters.nth(index).click(); await expect(filters.nth(index)).toHaveAttribute('aria-pressed', 'true'); await expect(main().locator('.load-record')).toHaveCount(2); }
     await filters.first().click(); await expect(main().locator('.load-record')).toHaveCount(6);
-    await main().getByRole('button', { name: t('Load more', 'మరిన్ని చూడండి'), exact: true }).click(); await expect(main().locator('.load-record')).toHaveCount(8);
-    await expect(main().getByRole('button', { name: t('Load more', 'మరిన్ని చూడండి'), exact: true })).toHaveCount(0);
-    await main().getByRole('button', { name: t('Refresh', 'రిఫ్రెష్'), exact: true }).click(); await expect(main().locator('.load-record')).toHaveCount(6);
+    await main().getByRole('button', { name: 'Load more', exact: true }).click(); await expect(main().locator('.load-record')).toHaveCount(8);
+    await expect(main().getByRole('button', { name: 'Load more', exact: true })).toHaveCount(0);
+    await main().getByRole('button', { name: 'Refresh', exact: true }).click(); await expect(main().locator('.load-record')).toHaveCount(6);
   });
   await overflow('loading-entries', true);
   await check('Global search icon can be clicked without input interception', async () => {
@@ -393,14 +420,14 @@ async function workspace(language, width) {
   await check('Global search submit, no-results state and clearing', async () => {
     const input = page.locator('#global-search'); if (width < 768 && !(await input.isVisible())) await page.locator('.workspace-search-toggle').click();
     await input.fill('MOCK-LORRY-02'); await input.press('Enter'); await view('entries'); await expect(main().locator('.load-record')).toHaveCount(1);
-    await input.fill('no-such-sample'); await expect(main().locator('.load-record')).toHaveCount(0); await expect(main().getByRole('heading', { name: t('No matching loads', 'లోడ్లు కనబడలేదు'), exact: true })).toBeVisible();
+    await input.fill('no-such-sample'); await expect(main().locator('.load-record')).toHaveCount(0); await expect(main().getByRole('heading', { name: 'No matching loads', exact: true })).toBeVisible();
     await input.fill(''); await expect(main().locator('.load-record')).toHaveCount(6);
   });
   if (await page.locator('#global-search').isVisible()) await page.locator('#global-search').fill('');
   if (width < 768 && await page.locator('.workspace-search-close').isVisible()) await page.locator('.workspace-search-close').click();
   for (const name of ['entries', 'settings', 'home']) await check(`Visible ${name} navigation action and active state`, async () => {
     await nav(name); await oneCreate();
-    if (width >= 1024) await expect(page.locator('.workspace-sidebar nav button[aria-current="page"]')).toHaveText(t(...navigation.find(([key]) => key === name).slice(1)));
+    if (width >= 1024) await expect(page.locator('.workspace-sidebar nav a[aria-current="page"]')).toHaveText(navigation.find(([key]) => key === name)[1]);
     if (name !== 'home') await overflow(`nav-${name}`);
   });
   await check('Old monitor and invoices links open the combined page', async () => {
@@ -415,42 +442,40 @@ async function workspace(language, width) {
   await nav('home');
   await check('Saved draft never fabricates a final A4 invoice; continuation remains local', async () => {
     await (width >= 1024 ? page.locator('.table-open-button').first() : page.locator('.mobile-load-record').first().getByRole('link')).click(); await view('bill');
-    await expect(main().getByRole('heading', { name: t('Saved draft', 'సేవ్ చేసిన డ్రాఫ్ట్'), exact: true })).toBeVisible();
-    await expect(main().locator('.a4-preview-feedback')).toContainText(t('Complete this draft to see the final A4 invoice.', 'చివరి A4 బిల్లు చూడటానికి డ్రాఫ్ట్‌ను పూర్తి చేయండి.'));
+    await expect(main().getByRole('heading', { name: 'Saved draft', exact: true })).toBeVisible();
+    await expect(main().locator('.a4-preview-feedback')).toContainText('Complete this draft to see the final A4 invoice.');
     await expect(main().locator('.a4-invoice, .invoice-export-panel')).toHaveCount(0);
-    await main().getByRole('button', { name: t('Continue this draft', 'డ్రాఫ్ట్ కొనసాగించండి'), exact: true }).click(); await view('load'); await expect(page.locator('.workspace-create-load')).toHaveCount(0);
-    await main().getByRole('button', { name: t('Back to dashboard', 'డ్యాష్‌బోర్డ్‌కు వెళ్ళండి'), exact: true }).click(); await view('home');
+    await main().getByRole('button', { name: 'Continue this draft', exact: true }).click(); await view('load'); await expect(page.locator('.workspace-create-load')).toHaveCount(0);
+    await main().getByRole('button', { name: 'Back to dashboard', exact: true }).click(); await view('home');
   });
   await nav('settings');
   await overflow('settings', true);
-  await check('Language switch lives in the menu; organization-copy action is mocked locally', async () => {
+  await check('No language control in main, sidebar or menu; organization-copy action is mocked locally', async () => {
     await expect(main().locator('.language-switch, .settings-language-options')).toHaveCount(0);
+    await expect(page.locator('.workspace-sidebar .language-switch')).toHaveCount(0);
     if (width < 1024) await page.locator('.mobile-menu').click();
-    const languageSwitch = page.locator(width >= 1024 ? '.workspace-sidebar .language-switch' : '#workspace-navigation-dialog .language-switch');
-    await languageSwitch.getByRole('button', { name: language === 'en' ? 'తెలుగు' : 'English', exact: true }).click(); await expect(page.locator('html')).toHaveAttribute('lang', language === 'en' ? 'te' : 'en');
-    await languageSwitch.getByRole('button', { name: language === 'en' ? 'English' : 'తెలుగు', exact: true }).click(); await expect(page.locator('html')).toHaveAttribute('lang', language);
-    await expect(languageSwitch.locator('button[aria-pressed="true"]')).toHaveAttribute('lang', language);
+    await expect(page.locator('#workspace-navigation-dialog .language-switch')).toHaveCount(0);
     if (width < 1024) { await page.keyboard.press('Escape'); await expect(page.locator('#workspace-navigation-dialog')).not.toBeVisible(); }
-    await main().getByRole('button', { name: t('Copy organization ID', 'సంస్థ ఐడీ కాపీ చేయండి'), exact: true }).click(); assert.deepEqual(await page.evaluate(() => window.__interfaceClipboard), [settings.organizationId]);
-    await expect(main().locator('.settings-copy-button')).toHaveText(t('Copied', 'కాపీ అయింది'));
-    await expect(main().locator('.settings-copy-button')).toHaveText(t('Copy organization ID', 'సంస్థ ఐడీ కాపీ చేయండి'), { timeout: 4000 });
+    await main().getByRole('button', { name: 'Copy organization ID', exact: true }).click(); assert.deepEqual(await page.evaluate(() => window.__interfaceClipboard), [settings.organizationId]);
+    await expect(main().locator('.settings-copy-button')).toHaveText('Copied');
+    await expect(main().locator('.settings-copy-button')).toHaveText('Copy organization ID', { timeout: 4000 });
   });
   await check('Settings is one simple page without section navigation', async () => {
     await expect(main().getByRole('tab')).toHaveCount(0);
     await expect(page.locator('.settings-jump, .sidebar-subnav')).toHaveCount(0);
     await expect(main().locator('.st-section')).toHaveCount(4);
     assert.equal(new URL(page.url()).hash, '#settings');
-    await main().getByRole('button', { name: t('Delete…', 'తొలగించు…'), exact: true }).click();
-    const deleteNow = main().getByRole('button', { name: t('Delete permanently', 'శాశ్వతంగా తొలగించు'), exact: true });
+    await main().getByRole('button', { name: 'Delete…', exact: true }).click();
+    const deleteNow = main().getByRole('button', { name: 'Delete permanently', exact: true });
     await expect(deleteNow).toBeDisabled(); await main().locator('.st-danger-confirm input').fill('wrong@example.com'); await expect(deleteNow).toBeDisabled();
-    await main().locator('.st-danger-confirm').getByRole('button', { name: t('Cancel', 'రద్దు'), exact: true }).click(); await expect(deleteNow).toHaveCount(0);
+    await main().locator('.st-danger-confirm').getByRole('button', { name: 'Cancel', exact: true }).click(); await expect(deleteNow).toHaveCount(0);
   });
   await check('Settings team and account sections show read-only actions', async () => {
     await expect(main().getByText('Sample Team Member', { exact: true })).toBeVisible();
-    await main().getByRole('button', { name: t('Refresh', 'రిఫ్రెష్'), exact: true }).click();
-    await expect(main().getByRole('status').filter({ hasText: t('Team list updated', 'బృందం జాబితా నవీకరించబడింది') })).toBeVisible();
-    await expect(main().locator('select[name="role"] option')).toHaveCount(2);
-    const saveAccess = main().getByRole('button', { name: t('Save access', 'యాక్సెస్ సేవ్ చేయండి'), exact: true }), accessBox = main().getByRole('switch', { name: t('Access', 'యాక్సెస్'), exact: true });
+    await main().getByRole('button', { name: 'Refresh', exact: true }).click();
+    await expect(main().getByRole('status').filter({ hasText: 'Team list updated' })).toBeVisible();
+    await expect(main().locator('.st-member select[name="role"] option')).toHaveCount(2);
+    const saveAccess = main().getByRole('button', { name: 'Save access', exact: true }), accessBox = main().getByRole('switch', { name: 'Access', exact: true });
     await expect(saveAccess).toHaveCount(0); await accessBox.uncheck(); await expect(saveAccess).toBeEnabled();
     const dialogs = []; const onDialog = dialog => dialogs.push(dialog.type()); page.on('dialog', onDialog);
     await saveAccess.click(); await expect.poll(() => dialogs.length).toBe(1); page.off('dialog', onDialog);
@@ -458,84 +483,99 @@ async function workspace(language, width) {
     const passwordToggle = main().locator('.password-toggle').first(), currentPassword = main().locator('input[name="currentPassword"]');
     await expect(currentPassword).toHaveAttribute('type', 'password'); await passwordToggle.click(); await expect(currentPassword).toHaveAttribute('type', 'text'); await expect(passwordToggle).toHaveAttribute('aria-pressed', 'true');
     await passwordToggle.click(); await expect(currentPassword).toHaveAttribute('type', 'password');
-    await expect(main().locator('input[name="currentPassword"]')).toHaveValue(''); await expect(main().locator('input[name="password"]')).toHaveAttribute('minlength', '12'); await expect(main().getByRole('button', { name: t('Log out', 'లాగ్ అవుట్'), exact: true })).toHaveCount(0);
+    await expect(main().locator('input[name="currentPassword"]')).toHaveValue(''); await expect(main().locator('input[name="password"]')).toHaveAttribute('minlength', '12'); await expect(main().getByRole('button', { name: 'Log out', exact: true })).toHaveCount(0);
   });
   await check('Business profile opens; wizard navigation never submits to the API', async () => {
-    await expect(main().getByRole('link', { name: t('Business profile & default charges', 'వ్యాపార వివరాలు మరియు డిఫాల్ట్ ఛార్జీలు') })).toHaveCount(0);
+    await expect(main().getByRole('link', { name: 'Business profile & default charges' })).toHaveCount(0);
     await nav('profile');
     const navLinks = page.locator(width >= 1024 ? '.workspace-sidebar nav' : '#workspace-navigation-dialog nav');
-    await expect(navLinks.getByRole('link', { name: t('Profile', 'ప్రొఫైల్'), exact: true, includeHidden: true })).toHaveAttribute('aria-current', 'page');
-    await expect(navLinks.getByRole('link', { name: t('Settings', 'సెట్టింగ్స్'), exact: true, includeHidden: true })).not.toHaveAttribute('aria-current', 'page');
-    await expect(main().getByRole('button', { name: t('Back', 'వెనక్కి'), exact: true })).toHaveCount(0);
+    await expect(navLinks.getByRole('link', { name: 'Profile', exact: true, includeHidden: true })).toHaveAttribute('aria-current', 'page');
+    await expect(navLinks.getByRole('link', { name: 'Settings', exact: true, includeHidden: true })).not.toHaveAttribute('aria-current', 'page');
+    await expect(main().getByRole('button', { name: 'Back', exact: true })).toHaveCount(0);
     await expect(page.locator('.sidebar-subnav')).toHaveCount(0);
     await expect(main().locator('.setup-progress [aria-current="step"]')).toHaveCount(1);
     const continueBox = await main().locator('.setup-continue').boundingBox(); assert.ok(continueBox.height <= 56, `Setup Continue button is ${continueBox.height}px tall`);
-    await main().getByRole('button', { name: t('Continue', 'కొనసాగించండి'), exact: true }).click(); await expect(main().locator('input[type="tel"]')).toBeVisible();
-    await main().getByRole('button', { name: t('Continue', 'కొనసాగించండి'), exact: true }).click(); await expect(main().getByRole('button', { name: t('Save and continue', 'సేవ్ చేసి కొనసాగించండి'), exact: true })).toHaveCount(0);
-    await expect(main().getByRole('button', { name: t('Save profile', 'ప్రొఫైల్ సేవ్ చేయండి'), exact: true })).toBeEnabled();
-    await overflow('business-profile-defaults'); await main().getByRole('button', { name: t('Previous step', 'మునుపటి దశ'), exact: true }).click();
+    await main().getByRole('button', { name: 'Continue', exact: true }).click(); await expect(main().locator('input[type="tel"]')).toBeVisible();
+    await main().getByRole('button', { name: 'Continue', exact: true }).click(); await expect(main().getByRole('button', { name: 'Save and continue', exact: true })).toHaveCount(0);
+    await expect(main().getByRole('button', { name: 'Save profile', exact: true })).toBeEnabled();
+    await overflow('business-profile-defaults'); await main().getByRole('button', { name: 'Previous step', exact: true }).click();
     await nav('settings');
   });
-  const productsTab = (en, te) => main().getByRole('group', { name: t('Products & places sections', 'రకాలు మరియు ప్రదేశాల విభాగాలు'), exact: true }).getByRole('button', { name: t(en, te), exact: true });
-  await check('Products edit/cancel and saved-reference tabs are local; remove is canceled', async () => {
-    await nav('products');
-    assert.equal(new URL(page.url()).hash, '#products');
-    await expect(productsTab('Products', 'రకాలు')).toHaveAttribute('aria-pressed', 'true');
-    await expect(main().getByLabel(t('Default loading / royalty charges (₹)', 'లోడింగ్ / రాయల్టీ ఛార్జీలు'))).toHaveCount(0);
-    await main().getByRole('button', { name: t('Edit', 'మార్చండి'), exact: true }).first().click(); await expect(main().getByRole('button', { name: t('Update product', 'రకాన్ని మార్చండి'), exact: true })).toBeVisible();
-    await main().getByRole('button', { name: t('Cancel edit', 'రద్దు చేయండి'), exact: true }).click();
-    await main().getByRole('button', { name: t('Remove', 'తొలగించండి'), exact: true }).first().click(); await expect(main().locator('.product-record')).toHaveCount(2);
-    await overflow('products'); await expect(main().getByRole('button', { name: t('Back', 'వెనక్కి'), exact: true })).toHaveCount(0);
-    await productsTab('Trucks', 'లారీలు').click(); await view('products');
-    await expect.poll(() => new URL(page.url()).hash).toBe('#products/trucks');
-    await expect(productsTab('Trucks', 'లారీలు')).toHaveAttribute('aria-pressed', 'true');
-    await expect(main().getByText('MOCK-LORRY-01', { exact: true })).toBeVisible();
-    const plate = main().locator('.references-add input');
-    await plate.fill('abc'); await plate.blur(); await expect(plate).toHaveValue('ABC'); await expect(plate).toHaveAttribute('aria-invalid', 'true');
-    await expect(main().locator('.references-error')).toBeVisible(); await capture('saved-references-invalid');
-    await plate.fill('tn01ab1234'); await expect(plate).not.toHaveAttribute('aria-invalid', 'true'); await expect(main().locator('.references-error')).toHaveCount(0);
-    await plate.fill('');
-    await productsTab('Destinations', 'గమ్యస్థానాలు').click(); await expect(main().getByText('Sample North Yard', { exact: true })).toBeVisible();
-    await expect.poll(() => new URL(page.url()).hash).toBe('#products/destinations');
-    await expect(productsTab('Destinations', 'గమ్యస్థానాలు')).toHaveAttribute('aria-pressed', 'true');
-    await overflow('saved-references');
-    await page.goBack();
-    await expect.poll(() => new URL(page.url()).hash).toBe('#products/trucks');
-    await expect(productsTab('Trucks', 'లారీలు')).toHaveAttribute('aria-pressed', 'true');
-    await nav('settings');
+  await check('Settings has no Products section; New load product list edits and removes', async () => {
+    await expect(main().locator('#settings-products')).toHaveCount(0);
+    await expect(main().getByRole('heading', { name: 'Products & rates', exact: true })).toHaveCount(0);
+    await page.evaluate(() => { window.location.hash = 'products'; });
+    await expect.poll(() => new URL(page.url()).hash).toBe('#load');
+    await view('load');
+    const picker = main().getByRole('combobox', { name: /Product \/ finish/ });
+    await picker.click();
+    const removeButtons = main().locator('.product-picker-list').getByRole('button', { name: /^Remove / });
+    await expect(removeButtons).toHaveCount(2);
+    await removeButtons.first().click();
+    await page.getByRole('button', { name: 'Keep product', exact: true }).click();
+    await picker.click();
+    await expect(main().locator('.product-picker-list [role="option"]:not(.is-add)')).toHaveCount(2);
+    // Edit: one button per product (never on the add row); opens a prefilled form, Cancel returns to the picker.
+    const editButtons = main().locator('.product-picker-list').getByRole('button', { name: /^Edit / });
+    await expect(editButtons).toHaveCount(2);
+    await expect(main().locator('.product-picker-option.is-add button')).toHaveCount(0);
+    await editButtons.first().click();
+    await expect(main().locator('.product-picker-list')).toHaveCount(0);
+    const editForm = main().locator('.quick-product');
+    await expect(editForm.getByRole('heading', { name: 'Edit product', exact: true })).toBeVisible();
+    for (const name of ['stoneType', 'finish', 'defaultRate']) await expect(editForm.locator(`input[name="${name}"]`)).not.toHaveValue('');
+    await expect(editForm.locator('input[name="stoneType"]')).toBeFocused();
+    await expect(editForm.getByRole('button', { name: 'Save changes', exact: true })).toBeVisible();
+    await editForm.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(main().locator('.quick-product')).toHaveCount(0);
+    await expect(picker).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('F2');
+    await expect(main().getByRole('heading', { name: 'Edit product', exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(main().locator('.quick-product')).toHaveCount(0);
+    await expect(picker).toBeFocused();
+    // Add and edit forms are never open together.
+    await picker.click();
+    await main().getByRole('option', { name: /Add new product/ }).click();
+    await expect(main().getByRole('heading', { name: 'New product', exact: true })).toBeVisible();
+    await expect(main().getByRole('heading', { name: 'Edit product', exact: true })).toHaveCount(0);
+    await main().locator('.quick-product').getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.goto(`${base}/#settings`, { waitUntil: 'domcontentloaded' });
+    await view('settings');
   });
-  await check('Legacy #references route is replaced by the Trucks tab', async () => {
-    await page.goto(`${base}/#references`, { waitUntil: 'domcontentloaded' });
-    await expect.poll(() => new URL(page.url()).hash).toBe('#products/trucks');
-    await view('products');
-    await expect(productsTab('Trucks', 'లారీలు')).toHaveAttribute('aria-pressed', 'true');
-    await nav('settings');
+  for (const legacy of ['references', 'products/trucks', 'products/destinations']) await check(`Legacy #${legacy} redirects to New load`, async () => {
+    await page.goto(`${base}/#${legacy}`, { waitUntil: 'domcontentloaded' });
+    await expect.poll(() => new URL(page.url()).hash).toBe('#load');
+    await view('load');
+    await page.goto(`${base}/#settings`, { waitUntil: 'domcontentloaded' });
+    await view('settings');
   });
   await check('New load route hides global creation; local review/back actions are usable', async () => {
     result.acceptConfirm = true; await page.locator('.workspace-create-load').click();
     await view('load'); result.acceptConfirm = false;
-    await expect(page.locator('.workspace-create-load')).toHaveCount(0); await expect(main().getByRole('heading', { name: t('New load', 'కొత్త లోడ్'), exact: true })).toBeVisible();
-    await main().getByLabel(t('Party name', 'పార్టీ పేరు'), { exact: true }).fill('Sample Preview Buyer');
-    await main().getByLabel(t('Truck number', 'లారీ నంబర్'), { exact: true }).fill('MOCK-PREVIEW-LORRY');
-    await main().getByLabel(t('Destination', 'గమ్యస్థానం'), { exact: true }).fill('Sample North Yard');
-    await main().getByLabel(t('Length (ft)', 'పొడవు'), { exact: true }).fill('3');
+    await expect(page.locator('.workspace-create-load')).toHaveCount(0); await expect(main().getByRole('heading', { name: 'New load', exact: true })).toBeVisible();
+    await main().getByLabel('Party name', { exact: true }).fill('Sample Preview Buyer');
+    await main().getByLabel('Truck number', { exact: true }).fill('MOCK-PREVIEW-LORRY');
+    await main().getByLabel('Destination', { exact: true }).fill('Sample North Yard');
+    await main().getByLabel('Length (ft)', { exact: true }).fill('3');
     const fractions = main().locator('.measurement-fractions').first(); await fractions.locator('summary').click();
-    await fractions.getByRole('button', { name: t('Add ½ foot to length', 'పొడవుకు ½ అడుగు జోడించండి'), exact: true }).click();
-    await main().getByLabel(t('Width (ft)', 'వెడల్పు'), { exact: true }).fill('2');
-    await main().getByLabel(t('Quantity', 'ముక్కల సంఖ్య'), { exact: true }).fill('30');
-    await main().getByRole('button', { name: t('Add entry', 'కొలత జోడించండి'), exact: true }).click(); await expect(main().locator('.measurement-record')).toHaveCount(1);
-    await main().getByRole('button', { name: t('Edit entry', 'కొలత మార్చండి') }).click(); await expect(main().locator('.measurement-record')).toHaveCount(0);
-    await main().getByRole('button', { name: t('Add entry', 'కొలత జోడించండి'), exact: true }).click();
-    await main().getByRole('button', { name: t('Review load', 'లోడ్ తనిఖీ చేయండి'), exact: true }).click(); await expect(main().getByRole('heading', { name: t('Review load', 'లోడ్ వివరాలు తనిఖీ చేయండి'), exact: true })).toBeVisible();
-    await expect(main().getByRole('button', { name: t('Create invoice', 'ఖరారు చేసి పంపండి'), exact: true })).toBeEnabled(); await capture('new-load-review');
-    await main().getByRole('button', { name: t('Back to edit', 'వివరాలు మార్చండి'), exact: true }).click();
-    await main().getByRole('button', { name: t('Remove entry', 'కొలత తొలగించండి') }).click(); await expect(main().locator('.measurement-record')).toHaveCount(0);
-    await overflow('new-load', true); await expect(main().getByRole('button', { name: t('Save draft', 'డ్రాఫ్ట్ సేవ్ చేయండి'), exact: true })).toBeEnabled();
-    await main().getByRole('button', { name: t('Back to dashboard', 'డ్యాష్‌బోర్డ్‌కు వెళ్ళండి'), exact: true }).click(); await view('home'); await oneCreate();
+    await fractions.getByRole('button', { name: 'Add ½ foot to length', exact: true }).click();
+    await main().getByLabel('Width (ft)', { exact: true }).fill('2');
+    await main().getByLabel('Quantity', { exact: true }).fill('30');
+    await main().getByRole('button', { name: 'Add entry', exact: true }).click(); await expect(main().locator('.measurement-record')).toHaveCount(1);
+    await main().getByRole('button', { name: 'Edit entry' }).click(); await expect(main().locator('.measurement-record')).toHaveCount(0);
+    await main().getByRole('button', { name: 'Add entry', exact: true }).click();
+    await main().getByRole('button', { name: 'Review load', exact: true }).click(); await expect(main().getByRole('heading', { name: 'Review load', exact: true })).toBeVisible();
+    await expect(main().getByRole('button', { name: 'Create invoice', exact: true })).toBeEnabled(); await capture('new-load-review');
+    await main().getByRole('button', { name: 'Back to edit', exact: true }).click();
+    await main().getByRole('button', { name: 'Remove entry' }).click(); await expect(main().locator('.measurement-record')).toHaveCount(0);
+    await overflow('new-load', true); await expect(main().getByRole('button', { name: 'Save draft', exact: true })).toBeEnabled();
+    await main().getByRole('button', { name: 'Back to dashboard', exact: true }).click(); await view('home'); await oneCreate();
   });
   await check('Saved A4 bill, portable HTML, print and legacy exports use only mocked reads', async () => {
     await nav('entries'); await main().locator('.load-filter').nth(2).click(); await (width >= 1024 ? main().locator('.table-open-button').first() : main().locator('.load-record').first().getByRole('link')).click(); await view('bill');
-    await expect(main().getByRole('heading', { name: t('Load bill', 'లోడ్ బిల్లు'), exact: true })).toBeVisible();
+    await expect(main().getByRole('heading', { name: 'Load bill', exact: true })).toBeVisible();
     await expect(main().locator('.a4-invoice .sample-sheet')).toHaveCount(1);
     if (width <= 390) {
       const { sheetWidth, tableWidth } = await main().locator('.a4-invoice .sample-sheet').evaluate(sheet => ({
@@ -548,37 +588,45 @@ async function workspace(language, width) {
     await expect(main().locator('.a4-invoice .invoice-summary')).toHaveCount(1);
     await expect(main().locator('.a4-invoice .settlement-net dd')).toHaveText('₹18,384.00');
     await expect(main().locator('.a4-invoice .settlement-rate')).toHaveCount(0);
-    await expect(main().locator('.a4-invoice [data-amount="material"]')).toHaveText('₹13,440.00');
-    await expect(main().locator('.a4-invoice [data-amount="top"]')).toHaveText('₹3,744.00');
-    // The buyer invoice PDF is the default; the HTML web copy is a separate option.
+    // One combined material charge (Regular ₹13,440.00 + Top ₹3,744.00) and no separate Top line.
+    await expect(main().locator('.a4-invoice [data-amount="material"]')).toHaveText('₹17,184.00');
+    await expect(main().locator('.a4-invoice [data-amount="top"]')).toHaveCount(0);
+    await expect(main().locator('.a4-invoice .settlement dt')).toHaveText(['Material total', 'Loading / royalty', 'Net payable']);
+    // Reg total / Top total rows instead of a combined per-group Total row, and no footer strip.
+    const rowBlocks = await main().locator('.a4-invoice .row-block').count();
+    await expect(main().locator('.a4-invoice .row-table tr[data-subtotal="regular"]')).toHaveCount(rowBlocks);
+    await expect(main().locator('.a4-invoice tr[data-total-row]')).toHaveCount(0);
+    await expect(main().locator('.a4-invoice .page-foot')).toHaveCount(0);
+    // The header repeats on every page; this bill is one page, so it has no continuation note.
+    await expect(main().locator('.a4-invoice .invoice-header')).toHaveCount(await main().locator('.a4-invoice .sample-sheet').count());
+    await expect(main().locator('.a4-invoice .continuation')).toHaveCount(0);
+    // Exactly two copies are offered; the buyer invoice PDF is selected on open.
+    const copyOptions = main().locator('input[name="invoice-export-document"]');
+    await expect(copyOptions).toHaveCount(2);
+    assert.deepEqual(await copyOptions.evaluateAll(inputs => inputs.map(input => input.value)), ['invoice', 'driver']);
+    await expect(main().locator('.invoice-export-option .export-option-title')).toHaveText([/^Buyer invoice PDF/, /^Driver slip PDF/]);
     await expect(main().locator('input[name="invoice-export-document"][value="invoice"]')).toBeChecked();
-    await expect(main().getByRole('button', { name: t('Print / PDF', 'ప్రింట్ / PDF'), exact: true })).toBeEnabled();
-    await expect(main().getByRole('button', { name: t('Share document', 'పత్రం షేర్ చేయండి'), exact: true })).toBeEnabled();
-    await main().getByRole('button', { name: t('Mark delivered', 'డెలివరీ పూర్తయింది'), exact: true }).click();
-    await expect(main().getByRole('button', { name: t('Yes, delivered', 'అవును, చేరింది'), exact: true })).toBeVisible();
-    await main().getByRole('button', { name: t('Not yet', 'ఇంకా లేదు'), exact: true }).click();
-    await expect(main().getByRole('button', { name: t('Mark delivered', 'డెలివరీ పూర్తయింది'), exact: true })).toBeVisible();
+    await expect(main().getByRole('button', { name: 'Print / PDF', exact: true })).toBeEnabled();
+    await expect(main().getByRole('button', { name: 'Share document', exact: true })).toBeEnabled();
+    await main().getByRole('button', { name: 'Mark delivered', exact: true }).click();
+    await expect(main().getByRole('button', { name: 'Yes, delivered', exact: true })).toBeVisible();
+    await main().getByRole('button', { name: 'Not yet', exact: true }).click();
+    await expect(main().getByRole('button', { name: 'Mark delivered', exact: true })).toBeVisible();
     assert.equal(result.mutations.length, 0, 'Canceled delivery confirmation must not make a request');
     if (width === 390 || width === 1440) {
-      const [invoiceDownload] = await Promise.all([page.waitForEvent('download'), main().getByRole('button', { name: t('Download', 'డౌన్‌లోడ్'), exact: true }).click()]);
+      const [invoiceDownload] = await Promise.all([page.waitForEvent('download'), main().getByRole('button', { name: 'Download', exact: true }).click()]);
       const invoiceFile = `${result.id}-invoice-${path.basename(invoiceDownload.suggestedFilename())}`, invoicePath = path.join(out, invoiceFile);
       await invoiceDownload.saveAs(invoicePath); const invoiceBytes = await fs.readFile(invoicePath);
       assert.ok(invoiceFile.endsWith('.pdf') && invoiceBytes.subarray(0, 5).toString('ascii') === '%PDF-' && invoiceBytes.toString('latin1').includes('18,384.00'));
       result.downloads.push({ filename: invoiceFile, path: invoicePath, bytes: invoiceBytes.length, kind: 'buyer-invoice-pdf', pages: (invoiceBytes.toString('latin1').match(/\/Type \/Page\b/g) || []).length });
-      await main().locator('input[name="invoice-export-document"][value="html"]').check();
-      const [htmlDownload] = await Promise.all([page.waitForEvent('download'), main().getByRole('button', { name: t('Download', 'డౌన్‌లోడ్'), exact: true }).click()]);
-      const htmlFile = `${result.id}-${path.basename(htmlDownload.suggestedFilename())}`;
-      const htmlPath = path.join(out, htmlFile);
-      await htmlDownload.saveAs(htmlPath);
-      const html = await fs.readFile(htmlPath, 'utf8');
-      assert.ok(htmlFile.endsWith('.html') && html.startsWith('<!doctype html>') && html.includes('<style>') && html.includes('@page') && html.includes('₹18,384.00') && html.includes('data-amount="top">₹3,744.00'));
-      assert.equal(await htmlDownload.failure(), null);
-      result.downloads.push({ filename: htmlFile, path: htmlPath, bytes: Buffer.byteLength(html), kind: 'approved-html', pages: 1 });
-      const [printPage] = await Promise.all([page.waitForEvent('popup'), main().getByRole('button', { name: t('Print / PDF', 'ప్రింట్ / PDF'), exact: true }).click()]);
+      // Only the buyer invoice PDF and the driver slip are offered for download.
+      for (const removed of ['html', 'excel']) await expect(main().locator(`input[name="invoice-export-document"][value="${removed}"]`)).toHaveCount(0);
+      const [printPage] = await Promise.all([page.waitForEvent('popup'), main().getByRole('button', { name: 'Print / PDF', exact: true }).click()]);
       try {
         await expect(printPage.locator('.a4-invoice .sample-sheet')).toHaveCount(1);
         await expect(printPage.locator('.settlement-net dd')).toHaveText('₹18,384.00');
-        await expect(printPage.locator('[data-amount="top"]')).toHaveText('₹3,744.00');
+        await expect(printPage.locator('[data-amount="material"]')).toHaveText('₹17,184.00');
+        await expect(printPage.locator('[data-amount="top"], .page-foot')).toHaveCount(0);
         await expect(printPage.locator('.invoice-export-panel')).toHaveCount(0);
         const bytes = await printPage.pdf({ format: 'A4', preferCSSPageSize: true, printBackground: true, displayHeaderFooter: false, margin: { top: '0', right: '0', bottom: '0', left: '0' } });
         const printFile = `${result.id}-approved-a4-print.pdf`;
@@ -593,16 +641,21 @@ async function workspace(language, width) {
       } finally { await printPage.close(); }
       // The legacy buyer PDF is no longer offered; Print / PDF covers that need.
       await expect(main().locator('input[name="invoice-export-document"][value="pdf"]')).toHaveCount(0);
-      for (const kind of ['excel', 'driver']) {
+      for (const kind of ['driver']) {
         await main().locator(`input[name="invoice-export-document"][value="${kind}"]`).check();
-        const [download] = await Promise.all([page.waitForEvent('download'), main().getByRole('button', { name: t('Download', 'డౌన్‌లోడ్'), exact: true }).click()]);
+        // Selecting the driver slip swaps the preview to the same A4 layout without money.
+        await expect(main().locator('.a4-invoice .settlement, .a4-invoice .bank-details, .a4-invoice .material-total, .a4-invoice [data-money]')).toHaveCount(0, { timeout: 2000 });
+        await expect(main().locator('.a4-invoice .driver-summary')).toHaveCount(1);
+        await expect(main().locator('.a4-invoice .row-table tr[data-subtotal="regular"]')).toHaveCount(await main().locator('.a4-invoice .row-block').count());
+        assert.doesNotMatch(await main().locator('.a4-invoice').first().innerText(), /₹|\bRs\b|\bINR\b|Rupees/);
+        const [download] = await Promise.all([page.waitForEvent('download'), main().getByRole('button', { name: 'Download', exact: true }).click()]);
         const filename = `${result.id}-${kind}-${path.basename(download.suggestedFilename())}`, destination = path.join(out, filename);
         await download.saveAs(destination); const bytes = await fs.readFile(destination); assert.ok(bytes.length > 1000); assert.equal(await download.failure(), null);
         assert.equal(bytes.subarray(0, kind === 'excel' ? 2 : 5).toString('ascii'), kind === 'excel' ? 'PK' : '%PDF-');
         result.downloads.push({ filename, path: destination, bytes: bytes.length, kind, pages: kind === 'excel' ? undefined : (bytes.toString('latin1').match(/\/Type \/Page\b/g) || []).length });
       }
     }
-    await overflow('final-bill', true); await main().getByRole('button', { name: t('Back to dashboard', 'డ్యాష్‌బోర్డ్‌కు వెళ్ళండి'), exact: true }).click(); await view('home');
+    await overflow('final-bill', true); await main().getByRole('button', { name: 'Back to dashboard', exact: true }).click(); await view('home');
   });
   await check('Saved business logo is embedded and historical identity remains stable', async () => {
     result.invoiceLogo = true;
@@ -621,13 +674,30 @@ async function workspace(language, width) {
       await overflow('branded-invoice', true);
       await expect(main().locator('.a4-invoice .settlement-net dd')).toHaveText('₹18,384.00');
       if (width === 390 || width === 1440) {
-        await main().locator('input[name="invoice-export-document"][value="html"]').check();
-        const [download] = await Promise.all([page.waitForEvent('download'), main().getByRole('button', { name: t('Download', 'డౌన్‌లోడ్'), exact: true }).click()]);
-        const html = await fs.readFile(await download.path(), 'utf8');
-        assert.ok(html.includes(testLogo), 'Portable HTML must embed the historical business logo');
-        assert.ok(html.includes(settings.businessName.replace('&', '&amp;')), 'Portable HTML must safely encode the historical business name');
+        // The print window carries the same self-contained A4 document the web copy used to.
+        const [printPage] = await Promise.all([page.waitForEvent('popup'), main().getByRole('button', { name: 'Print / PDF', exact: true }).click()]);
+        try {
+          const html = await printPage.content();
+          assert.ok(html.includes(testLogo), 'Print copy must embed the historical business logo');
+          assert.ok(html.includes(settings.businessName.replace('&', '&amp;')), 'Print copy must safely encode the historical business name');
+        } finally { await printPage.close(); }
       }
     } finally { result.invoiceLogo = false; }
+    await nav('home');
+  });
+  await check('Referenced business logo is fetched and embedded', async () => {
+    result.invoiceLogoRef = true;
+    try {
+      await page.goto(`${base}/#bill/mock-load-2`, { waitUntil: 'domcontentloaded' });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      const image = main().locator('.a4-invoice .logo-placeholder img').first();
+      await expect(image).toBeVisible();
+      await expect(image).toHaveAttribute('src', /^data:image\/png;base64,/);
+      assert.equal(await image.getAttribute('src'), testLogo);
+      await expect(main().locator('.a4-invoice .logo-placeholder[aria-label="Business logo placeholder"]')).toHaveCount(0);
+      await expect(main().getByRole('button', { name: 'Print / PDF', exact: true })).toBeEnabled();
+      assert.ok(result.api.some(entry => entry.path === `/uploads/logos/${testLogoSha}.png`), 'logo fetched through the same-origin /uploads proxy');
+    } finally { result.invoiceLogoRef = false; }
     await nav('home');
   });
   await check('Large saved invoice packs all twenty groups and keeps a single final summary', async () => {
@@ -644,6 +714,11 @@ async function workspace(language, width) {
       await expect(main().locator('.a4-invoice .invoice-summary')).toHaveCount(1);
       await expect(main().locator('.a4-invoice .sample-sheet:last-child .invoice-summary')).toHaveCount(1);
       await expect(main().locator('.a4-invoice .settlement-net dd')).toHaveText('₹344,880.00');
+      // Reference format across pages: a header on each sheet, the note on all but the last.
+      const sheets = await main().locator('.a4-invoice .sample-sheet').count();
+      await expect(main().locator('.a4-invoice .invoice-header')).toHaveCount(sheets);
+      await expect(main().locator('.a4-invoice .continuation')).toHaveCount(sheets - 1);
+      await expect(main().locator('.a4-invoice .sample-sheet:last-child .continuation')).toHaveCount(0);
       await overflow('large-invoice');
       await page.emulateMedia({ media: 'print' });
       await expect(main().locator('.a4-invoice .row-block:visible')).toHaveCount(20);
@@ -656,7 +731,7 @@ async function workspace(language, width) {
   await check('Welcome/workspace switch retains integrated styles; logout is mocked only', async () => {
     await nav('settings'); await expect(main().getByRole('tab')).toHaveCount(0); await page.evaluate(() => { window.location.hash = 'welcome'; }); await expect(page.locator('.marketing')).toBeVisible(); await expect(page.locator('.mk-login')).toHaveCount(0);
     await page.locator('.mk-primary').first().click(); await view('home'); await expect(page.locator('.dashboard-priority')).toBeVisible(); await expect(page.locator('.dashboard-priority')).toHaveCSS('border-radius', '16px');
-    const logoutName = { name: t('Log out', 'లాగ్ అవుట్'), exact: true };
+    const logoutName = { name: 'Log out', exact: true };
     if (width >= 1024) await page.locator('.workspace-sidebar').getByRole('button', logoutName).click();
     else { await page.locator('.mobile-menu').click(); await page.locator('#workspace-navigation-dialog').getByRole('button', logoutName).click(); }
     await expect(page.locator('.marketing')).toBeVisible(); await expect(page.locator('.mk-login')).toBeVisible();

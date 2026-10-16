@@ -131,6 +131,39 @@ test('MasterSettings API', async (t) => {
     assert.equal(invalid.status, 400);
     assert.equal((await request('DELETE', '/stone-rates/missing')).status, 404);
   });
+
+  await t.test('Delete truck matches by compact plate', async () => {
+    assert.equal((await request('POST', '/trucks', { truckNumber: 'TN01AA1111' })).status, 200);
+    const { status, data } = await request('DELETE', '/trucks/tn01aa1111');
+    assert.equal(status, 200);
+    assert.equal(data.savedTrucks.includes('TN01AA1111'), false);
+  });
+
+  await t.test('Manager may add products; edit/delete and Dispatcher are rejected', async () => {
+    const crypto = require('node:crypto');
+    const settings = await prisma.masterSettings.findFirst({ where: { organizationId } });
+    const memberCookie = async (role, email) => {
+      const user = await prisma.user.create({ data: { organizationId: settings.id, name: role, email, passwordHash: 'dummy', passwordSalt: 'dummy', role, active: true } });
+      const token = crypto.randomBytes(32).toString('hex');
+      await prisma.session.create({ data: { tokenHash: crypto.createHash('sha256').update(token).digest('hex'), userId: user.id, expiresAt: new Date(Date.now() + 1000000) } });
+      return `stonedesk_session=${token}`;
+    };
+    const as = async (memberCookieValue, method, path, body) => {
+      const res = await fetch(`${baseUrl}${path}`, { method, headers: { 'Content-Type': 'application/json', Cookie: memberCookieValue }, body: body ? JSON.stringify(body) : undefined });
+      return { status: res.status, data: await res.json().catch(() => null) };
+    };
+    const manager = await memberCookie('YardManager', 'manager@example.test');
+    const dispatcher = await memberCookie('Dispatcher', 'dispatcher@example.test');
+    const created = await as(manager, 'POST', '/stone-rates', { stoneType: 'Manager Granite', finish: 'Polished', defaultRate: 50 });
+    assert.equal(created.status, 200);
+    const rate = created.data.stoneRates.find(r => r.stoneType === 'Manager Granite');
+    assert.ok(rate);
+    assert.equal((await as(manager, 'PUT', `/stone-rates/${rate.id}`, { defaultRate: 60 })).status, 403);
+    assert.equal((await as(manager, 'DELETE', `/stone-rates/${rate.id}`)).status, 403);
+    const rejected = await as(dispatcher, 'POST', '/stone-rates', { stoneType: 'Dispatcher Granite', finish: 'Polished', defaultRate: 50 });
+    assert.equal(rejected.status, 403);
+    assert.deepEqual(rejected.data, { error: 'Your role does not allow this action' });
+  });
   await t.test('Cleanup', async () => {
     await new Promise(resolve => server.close(resolve));
 

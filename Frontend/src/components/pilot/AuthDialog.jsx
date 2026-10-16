@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { useLanguage } from '../../i18n/LanguageContext';
 import { request } from '../../lib/pilotApi.js';
 import { authView } from '../../lib/authFlow.js';
-import { Button, Field, ErrorMessage } from './Controls.jsx';
+import { BackButton, Button, Field, ErrorMessage } from './Controls.jsx';
 import { beginGoogleSignIn } from '../../lib/googleSignIn';
 
 // Follows Google's sign-in branding guidelines: the standard multicolour "G" mark,
@@ -10,7 +9,6 @@ import { beginGoogleSignIn } from '../../lib/googleSignIn';
 // Supabase's OAuth redirect, so this is a branded link-style button rather than
 // the Identity Services rendered button.
 function GoogleButton({ busy, onClick }) {
-  const { pick } = useLanguage();
   return <button type="button" className="google-signin-button" disabled={busy} aria-busy={busy || undefined} onClick={onClick}>
     <svg className="google-signin-mark" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
       <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
@@ -18,7 +16,7 @@ function GoogleButton({ busy, onClick }) {
       <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
       <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
     </svg>
-    <span>{busy ? pick('Please wait…', 'దయచేసి వేచి ఉండండి…') : pick('Continue with Google', 'Googleతో కొనసాగించండి')}</span>
+    <span>{busy ? 'Please wait…' : 'Continue with Google'}</span>
   </button>;
 }
 
@@ -28,7 +26,6 @@ function GoogleButton({ busy, onClick }) {
 // every mode change remounts this component, so no manual reset is needed here.
 export default function AuthDialog({ mode, initialMethod = null, onClose, onSignedIn, onMode, googleSignup, initialError = '', onClearError }) {
   const dialog = useRef(null);
-  const { pick } = useLanguage();
   const [method, setMethod] = useState(initialMethod); // null | 'google' | 'email'; initialMethod is read once per mount
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -93,82 +90,85 @@ export default function AuthDialog({ mode, initialMethod = null, onClose, onSign
     }
   }
 
-  const heading = view === 'forgot' ? pick('Reset your password', 'మీ పాస్‌వర్డ్ రీసెట్ చేయండి')
-    : linking ? pick(<>Connect <span translate="no">Google</span> to <span translate="no">StoneDesk</span></>, 'Googleను StoneDeskకు అనుసంధానించండి')
-    : signup ? pick('Set up your account', 'మీ ఖాతా సృష్టించండి')
-    : pick('Welcome back', 'తిరిగి స్వాగతం');
+  const heading = view === 'forgot' ? 'Reset your password'
+    : linking ? <>Connect <span translate="no">Google</span> to <span translate="no">StoneDesk</span></>
+    : signup ? 'Set up your account'
+    : 'Welcome back';
 
   const orgModeChoice = (
     <fieldset className="auth-mode">
-      <legend className="auth-mode-legend">{pick('How are you joining?', 'ఎలా చేరుతున్నారు?')}</legend>
+      <legend className="auth-mode-legend">How are you joining?</legend>
       {[
-        [false, 'Join organization', 'సంస్థలో చేరండి', 'Use the private invitation code from your administrator.', 'మీ అడ్మిన్ ఇచ్చిన ఆహ్వాన కోడ్‌తో చేరండి.'],
-        [true, 'Create new workspace', 'కొత్త వర్క్‌స్పేస్ సృష్టించండి', 'Set up your business. You will be the administrator.', 'మీ వ్యాపారాన్ని సెటప్ చేయండి. మీరు అడ్మిన్ అవుతారు.']
-      ].map(([value, en, te, detailEn, detailTe]) => (
-        <label key={en} className="auth-mode-option">
+        [false, 'Join organization', 'Use the private invitation code from your administrator.'],
+        [true, 'Create new workspace', 'Set up your business. You will be the administrator.']
+      ].map(([value, title, detail]) => (
+        <label key={title} className="auth-mode-option">
           <input type="radio" name="orgMode" className="auth-mode-input" checked={createOrganization === value} disabled={busy} onChange={() => setCreateOrganization(value)} />
           <span className="auth-mode-mark" aria-hidden="true" />
-          <span className="auth-mode-text"><strong>{pick(en, te)}</strong><span>{pick(detailEn, detailTe)}</span></span>
+          <span className="auth-mode-text"><strong>{title}</strong><span>{detail}</span></span>
         </label>
       ))}
     </fieldset>
   );
 
-  const backControl = <button type="button" className="text-button mt-3 min-h-11 w-full text-sm underline underline-offset-4" disabled={locked} onClick={backToChooser}>{pick('Back to sign-in options', 'లాగిన్ ఎంపికలకు తిరిగి వెళ్ళండి')}</button>;
+  // One back control, at the top of the dialog body, for every step past the sign-in chooser.
+  const backControl = view === 'forgot'
+    ? <BackButton className="mt-3" disabled={busy} onClick={() => { setForgot(false); setSent(false); }} label="Back to log in" />
+    : view !== 'chooser' && view !== 'link' ? <BackButton className="mt-3" disabled={locked} onClick={backToChooser} label="Back to sign-in options" /> : null;
 
-  const modeSwitch = <button type="button" className="text-button mt-3 min-h-11 w-full text-sm underline underline-offset-4" disabled={busy} onClick={() => onMode(signup ? 'login' : 'signup')}>{signup ? pick('Already have an account? Log in', 'ఖాతా ఉందా? లాగిన్ అవ్వండి') : pick('New here? Create an account', 'కొత్తవారా? ఖాతా సృష్టించండి')}</button>;
+  const modeSwitch = <button type="button" className="text-button mt-3 w-full" disabled={busy} onClick={() => onMode(signup ? 'login' : 'signup')}>{signup ? 'Already have an account? Log in' : 'New here? Create an account'}</button>;
 
   return <dialog ref={dialog} className="app-dialog pilot auth-screen" aria-labelledby="auth-title" onCancel={e => { if (locked) e.preventDefault(); else onClose(); }}>
-    <div className="p-6 text-sm"><div className="action-row flex items-center justify-between gap-3"><p className="eyebrow" translate="no">STONEDESK</p><button type="button" className="text-button min-h-11 px-3" disabled={locked} onClick={onClose}>{pick('Close', 'మూసివేయండి')}</button></div>
+    <div className="p-6 text-sm"><div className="action-row flex items-center justify-between gap-3"><p className="eyebrow" translate="no">STONEDESK</p><button type="button" className="text-button px-3" disabled={locked} onClick={onClose}>Close</button></div>
+      {backControl}
+      {backControl}
       <h2 id="auth-title" className="screen-heading mt-3 text-2xl font-semibold">{heading}</h2>
 
       {view === 'chooser' && <>
-        <p className="auth-intro">{signup ? pick('Choose how you want to create your account.', 'మీ ఖాతాను ఎలా సృష్టించాలో ఎంచుకోండి.') : pick('Sign in to your business workspace.', 'మీ వ్యాపార వర్క్‌స్పేస్‌లో లాగిన్ అవ్వండి.')}</p>
+        <p className="auth-intro">{signup ? 'Choose how you want to create your account.' : 'Sign in to your business workspace.'}</p>
         <ErrorMessage error={error || initialError} />
         <div className="action-row mt-4"><GoogleButton busy={busy} onClick={continueWithGoogle} /></div>
-        <div className="action-row mt-3"><Button className="w-full" disabled={busy} en="Use email & password" te="ఇమెయిల్ & పాస్‌వర్డ్ ఉపయోగించండి" onClick={() => { setMethod('email'); setError(''); }} /></div>
+        <div className="action-row mt-3"><Button className="w-full" disabled={busy} label="Use email & password" onClick={() => { setMethod('email'); setError(''); }} /></div>
         {modeSwitch}
       </>}
 
       {view === 'google' && <>
-        <p role="status" className="auth-intro mt-4">{pick('Opening Google…', 'Google తెరుస్తోంది…')}</p>
-        {backControl}
+        <p role="status" className="auth-intro mt-4">Opening Google…</p>
       </>}
 
       {view === 'forgot' && <>
-        <p className="auth-intro">{pick('Enter your account email. We will send a link that works for 1 hour.', 'మీ ఖాతా ఇమెయిల్ నమోదు చేయండి. 1 గంట పనిచేసే లింక్ పంపుతాము.')}</p>
+        <p className="auth-intro">Enter your account email. We will send a link that works for 1 hour.</p>
         <form className="space-y-4" onSubmit={sendReset}>
-          <Field name="email" en="Email address" te="ఇమెయిల్ చిరునామా" type="email" defaultValue={forgotEmail} autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={254} />
+          <Field name="email" label="Email address" type="email" defaultValue={forgotEmail} autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={254} />
           <ErrorMessage error={error} />
-          {sent && <p role="status" className="success-message">{pick('If that email exists, we sent a link', 'ఆ ఇమెయిల్ ఉంటే, మేము లింక్ పంపాము')}</p>}
-          <div className="action-row"><Button primary type="submit" className="w-full" disabled={busy} en={busy ? 'Please wait…' : 'Send reset link'} te={busy ? 'దయచేసి వేచి ఉండండి…' : 'రీసెట్ లింక్ పంపండి'} /></div>
+          {sent && <p role="status" className="success-message">If that email exists, we sent a link</p>}
+          <div className="action-row"><Button primary type="submit" className="w-full" disabled={busy} label={busy ? 'Please wait…' : 'Send reset link'} /></div>
         </form>
-        <button type="button" className="text-button mt-3 min-h-11 w-full text-sm underline underline-offset-4" disabled={busy} onClick={() => { setForgot(false); setSent(false); }}>{pick('Back to log in', 'లాగిన్‌కు తిరిగి వెళ్ళండి')}</button>
       </>}
 
       {(view === 'email' || view === 'google-signup' || view === 'link') && <>
         {view === 'link'
-          ? <p className="auth-intro">{pick('Google verified your email. A StoneDesk account already exists with this address.', 'Google మీ ఇమెయిల్‌ను ధృవీకరించింది. ఈ చిరునామాతో ఇప్పటికే StoneDesk ఖాతా ఉంది.')}</p>
+          ? <p className="auth-intro">Google verified your email. A StoneDesk account already exists with this address.</p>
           : signup
             ? ((view === 'email' || view === 'google-signup') && orgModeChoice)
-            : <p className="auth-intro">{pick('Sign in to your business workspace.', 'మీ వ్యాపార వర్క్‌స్పేస్‌లో లాగిన్ అవ్వండి.')}</p>}
+            : <p className="auth-intro">Sign in to your business workspace.</p>}
 
         <form className="space-y-4" onSubmit={submit}>
           <ErrorMessage error={error || initialError} />
-          {signup && <Field name="name" en="Your name" te="మీ పేరు" autoComplete="name" required maxLength={120} />}
-          {signup && (createOrganization ? <><Field name="businessName" en="Business name" te="వ్యాపారం పేరు" required maxLength={120} autoComplete="organization" /><p className="text-sm text-gray-600">{pick('Invite your team from Settings after creating your workspace.', 'మీ బృందం చేరడానికి చిన్న సంస్థ ఐడీని సృష్టిస్తాము.')}</p></> : <Field name="invitationToken" en="Invitation code" te="ఆహ్వాన కోడ్" required minLength={43} maxLength={43} pattern="[A-Za-z0-9_-]{43}" autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} />)}
-          {googleSignup ? <p className="break-all text-sm">{pick('Google account:', 'Google ఖాతా:')} <span translate="no">{googleSignup.email}</span></p> : <Field name="email" en="Email address" te="ఇమెయిల్ చిరునామా" type="email" autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={254} />}
-          {googleSignup?.needsLink && <p className="text-sm text-gray-700">{pick('Confirm your StoneDesk password once to connect Google. Future Google sign-ins will not need it.', 'Googleను అనుసంధానించడానికి ఒకసారి మీ StoneDesk పాస్‌వర్డ్‌ను నిర్ధారించండి.')}</p>}
+          {signup && <Field name="name" label="Your name" autoComplete="name" required maxLength={120} />}
+          {signup && (createOrganization ? <><Field name="businessName" label="Business name" required maxLength={120} autoComplete="organization" /><p className="text-sm text-on-surface-variant">Invite your team from Settings after creating your workspace.</p></> : <Field name="invitationToken" label="Invitation code" required minLength={43} maxLength={43} pattern="[A-Za-z0-9_-]{43}" autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} />)}
+          {googleSignup ? <p className="break-all text-sm">Google account: <span translate="no">{googleSignup.email}</span></p> : <Field name="email" label="Email address" type="email" autoComplete="username" autoCapitalize="none" spellCheck={false} required maxLength={254} />}
+          {googleSignup?.needsLink && <p className="text-sm text-on-surface">Confirm your StoneDesk password once to connect Google. Future Google sign-ins will not need it.</p>}
           {(!googleSignup || googleSignup.needsLink) && <>
-          <Field name="password" en={linking ? 'Existing StoneDesk password' : 'Password'} te={linking ? 'ప్రస్తుత StoneDesk పాస్‌వర్డ్' : 'పాస్‌వర్డ్'} type={showPassword ? 'text' : 'password'} autoComplete={signup ? 'new-password' : 'current-password'} autoCapitalize="none" autoCorrect="off" spellCheck={false} minLength={12} maxLength={128} required />
-          <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" className="h-5 w-5 accent-teal-800" checked={showPassword} onChange={e => setShowPassword(e.target.checked)} />{pick('Show password', 'పాస్‌వర్డ్ చూపండి')}</label>
-          {signup && <p className="text-sm text-gray-700">{pick('Use at least 12 characters.', 'కనీసం 12 అక్షరాలు ఉపయోగించండి.')}</p>}
-          {!signup && !linking && !googleSignup && <button type="button" className="text-button text-sm underline underline-offset-4" disabled={busy} onClick={e => { setForgotEmail(e.currentTarget.form?.elements.email?.value || ''); setForgot(true); setError(''); }}>{pick('Forgot password?', 'పాస్‌వర్డ్ మర్చిపోయారా?')}</button>}
+          <Field name="password" label={linking ? 'Existing StoneDesk password' : 'Password'} type={showPassword ? 'text' : 'password'} autoComplete={signup ? 'new-password' : 'current-password'} autoCapitalize="none" autoCorrect="off" spellCheck={false} minLength={12} maxLength={128} required />
+          <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" className="h-5 w-5 accent-primary" checked={showPassword} onChange={e => setShowPassword(e.target.checked)} />Show password</label>
+          {signup && <p className="text-sm text-on-surface">Use at least 12 characters.</p>}
+          {!signup && !linking && !googleSignup && <button type="button" className="text-button self-start" disabled={busy} onClick={e => { setForgotEmail(e.currentTarget.form?.elements.email?.value || ''); setForgot(true); setError(''); }}>Forgot password?</button>}
           </>}
-          <div className="action-row"><Button primary type="submit" className="w-full" disabled={busy} en={busy ? 'Please wait…' : linking ? 'Connect Google and continue' : signup ? createOrganization ? 'Create organization' : 'Join organization' : 'Log in'} te={busy ? 'దయచేసి వేచి ఉండండి…' : linking ? 'Googleను అనుసంధానించి కొనసాగించండి' : signup ? createOrganization ? 'సంస్థ సృష్టించండి' : 'సంస్థలో చేరండి' : 'లాగిన్'} /></div>
+          <div className="action-row"><Button primary type="submit" className="w-full" disabled={busy} label={busy ? 'Please wait…' : linking ? 'Connect Google and continue' : signup ? createOrganization ? 'Create organization' : 'Join organization' : 'Log in'} /></div>
         </form>
 
-        {view !== 'link' && <>{backControl}{modeSwitch}</>}
+        {view !== 'link' && modeSwitch}
       </>}
     </div>
   </dialog>;

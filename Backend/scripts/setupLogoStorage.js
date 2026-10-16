@@ -21,6 +21,23 @@ async function main() {
     if (!local.equals(Buffer.from(await downloaded.data.arrayBuffer()))) throw new Error('Logo verification failed');
     count++;
   }
+  // Content-addressed logos written in local-disk mode: org/<organizationId>/<sha256>.png.
+  const missing = error => { if (error.code === 'ENOENT') return []; throw error; };
+  const orgDir = path.join(uploadDir, 'org');
+  for (const organizationId of await fs.readdir(orgDir).catch(missing)) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(organizationId)) continue;
+    for (const filename of await fs.readdir(path.join(orgDir, organizationId)).catch(missing)) {
+      if (!/^[a-f0-9]{64}\.png$/.test(filename)) continue;
+      const key = `org/${organizationId}/${filename}`;
+      const local = await fs.readFile(path.join(orgDir, organizationId, filename));
+      const result = await storage.from(bucket).upload(key, local, { contentType: 'image/png', upsert: false, cacheControl: '31536000' });
+      if (result.error && !['409', 'Duplicate'].includes(String(result.error.statusCode || result.error.error))) throw result.error;
+      const downloaded = await storage.from(bucket).download(key);
+      if (downloaded.error) throw downloaded.error;
+      if (!local.equals(Buffer.from(await downloaded.data.arrayBuffer()))) throw new Error('Logo verification failed');
+      count++;
+    }
+  }
   console.log(`Private logo bucket ready; ${count} existing logos verified. Local originals retained.`);
 }
 main().catch(() => { console.error('Cloud logo setup failed. Check server credentials and Storage availability.'); process.exitCode = 1; });

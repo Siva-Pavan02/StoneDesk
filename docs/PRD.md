@@ -6,9 +6,10 @@ StoneDesk modernizes B2B granite supply chain logistics. It is a mobile-first, m
 ## 2. Target Audience and Environment
 * **Organization:** A stone business with its own profile, logo, rates and team. Data is isolated per organization.
 * **Roles:**
-  * **Admin:** creates the business, manages profile, products and rates, trucks and destinations, and team access.
+  * **Admin:** creates the business, manages profile, products and rates, truck and destination suggestions, and team access.
   * **Dispatcher:** records, finalizes and delivers loads.
-  * **Yard Manager:** records load drafts and loading requirements; cannot finalize.
+  * **Manager:** records load drafts and loading requirements and adds products; cannot finalize.
+* **Suggestions:** truck numbers and destinations are remembered automatically from saved loads; there are no separate Trucks or Destinations pages.
 * **Environment:** Outdoors, extreme sunlight, high screen glare, dusty hands.
 * **Tech Literacy:** Low to moderate. Requires a zero-learning-curve, "fat-finger proof" interface.
 
@@ -28,7 +29,7 @@ StoneDesk modernizes B2B granite supply chain logistics. It is a mobile-first, m
 * **Draft recovery:** Unsaved load input is kept on the device and can be resumed.
 
 ## 4. Localization Strategy
-* **Interface:** English or Telugu, chosen per device. Only the selected language is shown.
+* **Interface:** English only.
 * **Buyer Exports:** Invoices for Tamil Nadu buyers should support English/Tamil bilingual headers (planned, not implemented).
 
 ## 5. Non-Functional Requirements

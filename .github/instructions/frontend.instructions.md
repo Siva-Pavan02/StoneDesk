@@ -1,12 +1,12 @@
 ---
-description: "Use when editing StoneDesk React components, screens, dialogs, styles or frontend API calls. Covers bilingual text, shared controls, dialogs, API call rules and draft storage."
+description: "Use when editing StoneDesk React components, screens, dialogs, styles or frontend API calls. Covers English UI text, shared controls, dialogs, API call rules and draft storage."
 applyTo: "Frontend/src/**"
 ---
 # StoneDesk frontend conventions
 
 ## Text
-- Every user-facing string is bilingual: `const { pick } = useLanguage();` then `pick('English', 'తెలుగు')`.
-- Shared controls take `en` / `te` props: `<Button en="Log out" te="లాగ్ అవుట్" />`.
+- The interface is English only. Write user-facing strings as plain English literals; there is no translation layer.
+- Shared controls take a single `label` prop: `<Button label="Log out" />`, `<Field label="Truck number" />`.
 - Plain, specific wording. No emojis.
 
 ## Components
@@ -28,7 +28,7 @@ applyTo: "Frontend/src/**"
   - Bill records passed to `BillView` are complete; do not fetch them again.
 
 ## Drafts
-- Unsaved loads are AES-encrypted in localStorage. Use `writeDraft`, `readDraft`, `clearDraft`, `flushDraft` from `src/utils/pilotDraft.js`; never touch the storage key directly.
+- Unsaved loads are AES-encrypted in localStorage, up to `MAX_DRAFTS` (5) per organization. Use `writeDraft` (returns `DRAFTS_FULL` at the limit), `readDrafts`, `readDraft`, `clearDraft(org, storage, clientRequestId)` and `flushDraft` from `src/utils/pilotDraft.js`; never touch the storage key directly.
 
 ## Styles
 - Workspace screens: `src/styles/workspace.css`, scoped under `.pilot.workspace`. Global controls and dialogs: `src/index.css`.

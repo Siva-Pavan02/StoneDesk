@@ -47,9 +47,13 @@ async function inspectPdf(bytes, name, expectedPages) {
     const textItems = (await page.getTextContent()).items;
     const text = textItems.map(item => item.str).join(' ');
     assert.ok(text.length > 80, `${name}: page ${index} must have selectable text`);
-    assert.ok(text.includes(`Page ${index} of ${pdf.numPages}`), `${name}: page ${index} footer is missing`);
+    // No per-page footer line. The continuation note belongs on every page but the
+    // last, so it is counted afterwards instead of being forbidden here.
+    assert.ok(!/Page \d+ of \d+/.test(text), `${name}: page ${index} must not carry a per-page footer`);
+    assert.ok(!/All amounts in INR|Dimensions in feet ·/.test(text), `${name}: page ${index} must not carry the footer line`);
+    assert.equal(text.includes('Continued on the next page'), index < pdf.numPages, `${name}: page ${index} continuation note`);
     // Chrome positions glyphs a fraction of a point beyond the CSS margin;
-    // text must still remain in the printable area, never past the paper edge.
+    // text must still remain in the 12 mm printable area, never past the paper edge.
     const margin = 12 * 72 / 25.4;
     const outside = textItems.filter(item => item.str.trim() &&
       (item.transform[4] < margin - 1.1 || item.transform[4] + item.width > viewport.width - margin + 1.1));
@@ -94,15 +98,18 @@ function oversizedFixture(regular, top) {
 async function renderProductionCase(page, base, name, input, options = {}) {
   await page.goto(`${base}/sample_invoice_24_rows.html`, { waitUntil: 'domcontentloaded' });
   const result = await page.evaluate(async data => {
-    const [{ prepareA4Invoice }, { paginateA4Invoice }, { renderA4Invoice }] = await Promise.all([
-      import('/src/utils/a4InvoiceModel.js'), import('/src/utils/a4InvoicePagination.js'), import('/src/utils/a4InvoiceRender.js'),
+    const [{ prepareA4Invoice }, { measureA4Copy, planA4CopyMeasured }, { renderA4Invoice }] = await Promise.all([
+      import('/src/utils/a4InvoiceModel.js'), import('/src/utils/a4InvoiceMeasure.js'), import('/src/utils/a4InvoiceRender.js'),
     ]);
-    const invoice = prepareA4Invoice(data);
-    if (invoice.warnings.length) throw new Error(invoice.warnings.join(' / '));
-    const { model, pages, geometry } = await paginateA4Invoice(invoice);
+    const model = prepareA4Invoice(data);
+    if (model.warnings.length) throw new Error(model.warnings.join(' / '));
+    // The one measured plan the app preview, print and PDF share for this copy.
+    const { gap, normalCapacity, finalCapacity, pageHeight, headerHeight, noticeHeight, finalHeight } = await measureA4Copy(model, 'buyer');
+    const pages = await planA4CopyMeasured(model, 'buyer');
     document.body.innerHTML = renderA4Invoice(model, pages);
-    return { pages: pages.length, geometry, columns: pages.map(p => p.columns.map(column => column.map(fragment => ({ id: fragment.group.id, from: fragment.from, to: fragment.to })))),
-      summaryPage: pages.findIndex(page => page.summary) + 1, expectedEntries: model.groups.reduce((n, group) => n + group.entries.length, 0) };
+    return { pages: pages.length, geometry: { gap, normalCapacity, finalCapacity, pageHeight, headerHeight, noticeHeight, finalHeight },
+      columns: pages.map(p => p.columns.map(column => column.map(fragment => ({ id: fragment.group.id, from: fragment.from, to: fragment.to })))),
+      summaryPage: pages.findIndex(page => page.final) + 1, expectedEntries: model.groups.reduce((n, group) => n + group.entries.length, 0) };
   }, input);
   assert.ok(result.pages >= 1 && result.summaryPage === result.pages, `${name}: final summary must be on the last page`);
   const inspection = await page.evaluate(() => {
@@ -110,16 +117,26 @@ async function renderProductionCase(page, base, name, input, options = {}) {
     return { count: sheets.length,
       entries: document.querySelectorAll('.row-table tr[data-entry-id]').length,
       entryIds: [...document.querySelectorAll('.row-table tr[data-entry-id]')].map(row => row.dataset.entryId),
-      groupTotals: document.querySelectorAll('.row-table tr.total').length,
+      groupTotals: document.querySelectorAll('.row-table tr[data-total-row]').length,
+      groupCount: new Set([...document.querySelectorAll('.row-block h3')].map(h => h.firstChild.textContent.trim())).size,
       regularSubtotals: document.querySelectorAll('.row-table tr[data-subtotal="regular"]').length,
+      topSubtotals: document.querySelectorAll('.row-table tr[data-subtotal="top"]').length,
       summaryCount: document.querySelectorAll('.invoice-summary').length,
       signCount: document.querySelectorAll('.closing').length,
-      allRefsVisible: [...document.querySelectorAll('.invoice-reference')].every(node => node.textContent.includes(document.querySelector('.invoice-reference').textContent)),
+      // The reference header repeats on every page.
+      identityPages: sheets.map(sheet => sheet.querySelectorAll('.invoice-header').length),
+      managerFacts: sheets.map(sheet => [...sheet.querySelectorAll('.invoice-facts dt')].filter(dt => dt.textContent.trim() === 'Manager').length),
+      footers: document.querySelectorAll('.page-foot').length,
+      // The continuation note sits on every page but the last.
+      notes: sheets.map(sheet => sheet.querySelectorAll('.continuation').length),
+      finalSections: sheets.map(sheet => sheet.querySelectorAll('.final-section').length),
       sheets: sheets.map(sheet => {
         const sheetRect = sheet.getBoundingClientRect();
         const detail = sheet.querySelector('.detail-columns');
-        const below = sheet.querySelector('.invoice-summary, .continuation').getBoundingClientRect();
-        const foot = sheet.querySelector('.page-foot').getBoundingClientRect();
+        // Rows must stay above the closing block, or within the sheet when the page has none.
+        const closing = sheet.querySelector('.invoice-summary, .closing-totals, .closing');
+        const below = closing ? closing.getBoundingClientRect() : { top: sheetRect.bottom };
+        const contentBottom = Math.max(detail.getBoundingClientRect().bottom, closing ? sheet.querySelector('.closing').getBoundingClientRect().bottom : 0);
         const blocks = [...sheet.querySelectorAll('.row-block')];
         const overflowedCells = [...sheet.querySelectorAll('.row-table .num, .settlement dd, .headline-stat dd')]
           .filter(cell => cell.scrollWidth > cell.clientWidth + 1).map(cell => cell.textContent.trim()).slice(0, 4);
@@ -129,7 +146,8 @@ async function renderProductionCase(page, base, name, input, options = {}) {
             const text = range.getBoundingClientRect(), box = cell.getBoundingClientRect();
             return text.left < box.left - 1 || text.right > box.right + 1;
           }).map(cell => cell.textContent.trim()).slice(0, 4);
-        return { width: sheetRect.width, height: sheetRect.height, footerWithinSheet: foot.bottom <= sheetRect.bottom + 1,
+        return { width: sheetRect.width, height: sheetRect.height, padding: parseFloat(getComputedStyle(sheet).paddingLeft),
+          detailWidth: detail.getBoundingClientRect().width, contentWithinSheet: contentBottom <= sheetRect.bottom + 1,
           groupsClearOfSummary: blocks.every(block => block.getBoundingClientRect().bottom <= below.top + 1),
           columnWidths: getComputedStyle(detail).gridTemplateColumns.split(' ').map(Number), overflowedCells, clippedGlyphs };
       }) };
@@ -139,20 +157,32 @@ async function renderProductionCase(page, base, name, input, options = {}) {
   assert.equal(new Set(inspection.entryIds).size, inspection.entryIds.length, `${name}: entry IDs unique`);
   assert.equal(inspection.summaryCount, 1);
   assert.equal(inspection.signCount, 1);
-  assert.ok(inspection.allRefsVisible, `${name}: full reference repeated on each page`);
-  assert.ok(inspection.sheets.every(sheet => sheet.footerWithinSheet && sheet.groupsClearOfSummary), `${name}: no overlapping summary or footer: ${JSON.stringify(inspection.sheets)}`);
+  assert.deepEqual(inspection.identityPages, Array(result.pages).fill(1), `${name}: one header per page`);
+  assert.deepEqual(inspection.managerFacts, Array(result.pages).fill(1), `${name}: the Manager fact on every page`);
+  assert.equal(inspection.footers, 0, `${name}: no per-page footer strip`);
+  assert.deepEqual(inspection.notes, [...Array(result.pages - 1).fill(1), 0], `${name}: continuation note on every page but the last`);
+  assert.deepEqual(inspection.finalSections, [...Array(result.pages - 1).fill(0), 1], `${name}: final section on the last page only`);
+  assert.equal(inspection.groupTotals, 0, `${name}: no combined per-group Total row`);
+  assert.equal(inspection.regularSubtotals + inspection.topSubtotals > 0, true, `${name}: Reg total / Top total rows are rendered`);
+  assert.ok(inspection.sheets.every(sheet => sheet.contentWithinSheet && sheet.groupsClearOfSummary), `${name}: no rows overlapping the closing block or past the sheet: ${JSON.stringify(inspection.sheets)}`);
   assert.ok(inspection.sheets.every(sheet => sheet.height <= 1123.3), `${name}: an A4 sheet grew past its physical page height`);
+  // 12 mm margins on a 210 mm sheet: measurement columns span the full 186 mm printable width.
+  const mm = 96 / 25.4;
+  assert.ok(inspection.sheets.every(sheet => Math.abs(sheet.padding - 12 * mm) < 0.6 && Math.abs(sheet.detailWidth - 186 * mm) < 1.5),
+    `${name}: sheets must use 12 mm margins and a 186 mm content width: ${JSON.stringify(inspection.sheets.map(({ padding, detailWidth }) => ({ padding, detailWidth })))}`);
   assert.ok(inspection.sheets.every(sheet => sheet.overflowedCells.length === 0), `${name}: an amount or area overflows its column: ${JSON.stringify(inspection.sheets)}`);
   assert.ok(inspection.sheets.every(sheet => sheet.clippedGlyphs.length === 0), `${name}: numeric glyphs overflow their cells: ${JSON.stringify(inspection.sheets)}`);
   if (options.logoFallback) {
-    assert.equal(await page.locator('.logo-placeholder[aria-label="Business logo placeholder"]').count(), result.pages,
-      `${name}: an unreadable saved logo must use the printed placeholder on every page`);
+    assert.equal(await page.locator('.logo-placeholder').count(), 1,
+      `${name}: the logo area appears once, in the page 1 identity block`);
+    assert.equal(await page.locator('.sample-sheet').first().locator('.invoice-header .logo-placeholder').count(), 1,
+      `${name}: the logo area sits on page 1`);
   }
   if (options.summaryOnly) assert.deepEqual(result.columns.at(-1), [[], [], []], `${name}: needs a dedicated summary page`);
   if (options.oversized) {
     assert.ok(result.columns.flatMap(p => p.flat()).filter(part => part.id === 1).length > 1, `${name}: the oversized group must repeat its heading`);
-    assert.equal(inspection.groupTotals, 0, `${name}: rows show Regular / Top subtotals, not a combined row total`);
-    assert.equal(inspection.regularSubtotals, 1, `${name}: the Regular subtotal must not repeat on continuation fragments`);
+    assert.equal(inspection.regularSubtotals, 1, `${name}: the split group shows one Reg total row, with its last Regular entry`);
+    assert.equal(inspection.topSubtotals, 1, `${name}: the split group shows one Top total row, on its last fragment only`);
   }
   if (options.shot) for (let i = 1; i <= result.pages; i++) await page.locator('.sample-sheet').nth(i - 1).screenshot({ path: path.join(out, `${name}-screen-page-${i}.png`) });
   const bytes = await page.pdf({ format: 'A4', preferCSSPageSize: true, scale: 1, printBackground: true, displayHeaderFooter: false,
@@ -161,9 +191,14 @@ async function renderProductionCase(page, base, name, input, options = {}) {
   const pageText = await inspectPdf(bytes, name, result.pages);
   assert.equal(pageText.filter(text => text.includes('NET PAYABLE')).length, 1, `${name}: PDF summary exactly once`);
   if (name === 'long-identity-and-money') {
-    assert.ok(pageText.join(' ').includes('Top material amount') && !/Rates? \/ sq ft/.test(pageText.join(' ')), 'Printed payment summary shows the material / top split and no rate row');
+    const all = pageText.join(' ');
+    assert.ok(all.includes('Material total') && !all.includes('Top material amount') && !/Rates? \/ sq ft/.test(all), 'Printed payment summary shows one Material total line and no rate row');
   }
-  if (options.oversized) assert.equal(pageText.join(' ').match(/Regular subtotal/g)?.length, 1);
+  // The header repeats, so every page carries the Manager fact. Letter-spaced uppercase
+  // labels extract as split glyphs ("MA N A GER"), so compare without spaces.
+  const squashed = text => text.replace(/\s+/g, '').toUpperCase();
+  assert.ok(pageText.every(text => squashed(text).includes('MANAGER')), `${name}: every PDF page carries the Manager fact`);
+  assert.ok(!/Regular subtotal|Top subtotal/.test(pageText.join(' ')), `${name}: PDF uses the Reg total / Top total wording`);
   console.log('CASE', name, JSON.stringify({ pages: result.pages, entries: inspection.entries, summaryPage: result.summaryPage,
     groups: result.columns.map(columns => columns.map(column => column.map(part => part.id))), geometry: result.geometry }));
   return result;
@@ -180,37 +215,49 @@ async function main() {
     page.on('pageerror', error => { throw error; });
     await page.goto(`${base}/sample_invoice_24_rows.html`, { waitUntil: 'networkidle' });
     await page.evaluate(() => document.fonts.ready);
-    assert.equal(await page.locator('.sample-sheet').count(), 3);
+    // The agreed distribution (.agents/tasks/reference-invoice-format FEAT-000): two A4
+    // pages, groups 1-15 as 5/5/5, then 16-24 as 3/3/3 with the final section.
+    const SAMPLE_PAGES = 2;
+    assert.equal(await page.locator('.sample-sheet').count(), SAMPLE_PAGES);
     const sampleLayout = await page.evaluate(() => [...document.querySelectorAll('.sample-sheet')].map(sheet => {
       const columns = [...sheet.querySelectorAll('.detail-column')];
-      const foot = sheet.querySelector('.page-foot').getBoundingClientRect();
       const sheetRect = sheet.getBoundingClientRect();
-      const area = sheet.querySelector('.invoice-summary, .continuation').getBoundingClientRect();
+      const closing = sheet.querySelector('.invoice-summary');
+      const area = closing ? closing.getBoundingClientRect() : { top: sheetRect.bottom };
+      const last = (sheet.querySelector('.closing') || sheet.querySelector('.detail-columns')).getBoundingClientRect();
       return { groups: columns.map(column => [...column.querySelectorAll('.row-block h3')].map(h => Number(h.firstChild.textContent.trim()))),
         columns: getComputedStyle(sheet.querySelector('.detail-columns')).gridTemplateColumns,
-        width: sheetRect.width, height: sheetRect.height, contentBottom: foot.bottom - sheetRect.top,
+        identity: sheet.querySelectorAll('.invoice-header').length, footers: sheet.querySelectorAll('.page-foot').length,
+        notes: sheet.querySelectorAll('.continuation').length, finals: sheet.querySelectorAll('.final-section').length,
+        width: sheetRect.width, height: sheetRect.height, contentBottom: last.bottom - sheetRect.top,
         overflow: columns.some(column => [...column.querySelectorAll('.row-block')].some(block => block.getBoundingClientRect().bottom > area.top + 1)) };
     }));
     assert.deepEqual(sampleLayout.map(item => item.groups), [
-      [[1, 2, 3], [4, 5, 6], [7, 8, 9]], [[10, 11, 12], [13, 14, 15], [16, 17, 18]], [[19, 20], [21, 22], [23, 24]],
+      [[1, 2, 3, 4, 5], [6, 7, 8, 9, 10], [11, 12, 13, 14, 15]], [[16, 17, 18], [19, 20, 21], [22, 23, 24]],
     ]);
     assert.ok(sampleLayout.every(item => !item.overflow));
-    for (let i = 1; i <= 3; i++) await page.locator('.sample-sheet').nth(i - 1).screenshot({ path: path.join(out, `sample-screen-page-${i}.png`) });
+    assert.deepEqual(sampleLayout.map(item => item.identity), Array(SAMPLE_PAGES).fill(1), 'Sample header on every page');
+    assert.deepEqual(sampleLayout.map(item => item.notes), [...Array(SAMPLE_PAGES - 1).fill(1), 0], 'Continuation note on every sample page but the last');
+    assert.deepEqual(sampleLayout.map(item => item.finals), [...Array(SAMPLE_PAGES - 1).fill(0), 1], 'Final section on the last sample page only');
+    assert.ok(sampleLayout.every(item => item.footers === 0 && item.contentBottom <= item.height + 1), 'Sample pages carry no footer and stay within the sheet');
+    for (let i = 1; i <= SAMPLE_PAGES; i++) await page.locator('.sample-sheet').nth(i - 1).screenshot({ path: path.join(out, `sample-screen-page-${i}.png`) });
     const pdfBytes = await page.pdf({ format: 'A4', preferCSSPageSize: true, scale: 1, printBackground: true, displayHeaderFooter: false,
       margin: { top: '0', right: '0', bottom: '0', left: '0' } });
     const pdfPath = process.env.INVOICE_PUBLISH_SAMPLE === '1'
       ? path.join(root, 'public/sample_invoice_24_rows.pdf') : path.join(out, 'sample_invoice_24_rows.pdf');
     await writeFile(pdfPath, pdfBytes);
-    const sampleText = await inspectPdf(pdfBytes, 'sample', 3);
-    assert.equal(sampleText.filter(text => text.includes('PAYMENT SUMMARY')).length, 1);
+    const sampleText = await inspectPdf(pdfBytes, 'sample', SAMPLE_PAGES);
+    // Letter-spaced uppercase headings extract as split glyphs ("PAY M E N T"), so compare without spaces.
+    assert.equal(sampleText.filter(text => text.replace(/\s+/g, '').includes('PAYMENTSUMMARY')).length, 1);
     assert.equal(sampleText.filter(text => text.includes('Rupees Two Lakh')).length, 1);
     assert.equal(sampleText.filter(text => text.includes('Not valid for payment')).length, 1);
-    assert.ok(['₹126,580.00', '₹94,935.00', '₹222,015.00'].every(amount => sampleText[2].includes(amount)),
+    // Unified summary: one Material total and Net payable (no Regular/Top amount split).
+    assert.ok(['₹221,515.00', '₹222,015.00'].every(amount => sampleText.at(-1).includes(amount)),
       'All final payment amounts must remain selectable and legible in the PDF');
     console.log('SAMPLE', JSON.stringify({ pages: sampleText.length, layout: sampleLayout, pdf: pdfPath }));
     if (process.env.INVOICE_REFERENCE_PDF) {
-      await inspectPdf(await readFile(process.env.INVOICE_REFERENCE_PDF), 'approved-reference', 3);
-      for (let index = 1; index <= 3; index++) {
+      await inspectPdf(await readFile(process.env.INVOICE_REFERENCE_PDF), 'approved-reference', SAMPLE_PAGES);
+      for (let index = 1; index <= SAMPLE_PAGES; index++) {
         const reference = await readFile(path.join(out, `approved-reference-pdf-page-${index}.png`));
         const recreated = await readFile(path.join(out, `sample-pdf-page-${index}.png`));
         assert.ok(reference.equals(recreated), `Page ${index} must match the approved PDF pixel for pixel`);
@@ -254,7 +301,7 @@ async function main() {
     assert.equal(mobile.columns, 1, 'Mobile screen preview should stack columns.');
     const mobilePdf = await page.pdf({ format: 'A4', preferCSSPageSize: true, scale: 1, printBackground: true, displayHeaderFooter: false,
       margin: { top: '0', right: '0', bottom: '0', left: '0' } });
-    await inspectPdf(mobilePdf, 'mobile-print-still-a4', 3);
+    await inspectPdf(mobilePdf, 'mobile-print-still-a4', SAMPLE_PAGES);
     console.log('MOBILE', JSON.stringify(mobile));
   } finally { await browser?.close(); await vite.close(); }
   console.log(`A4 artifacts: ${out}`);

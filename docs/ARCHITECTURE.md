@@ -27,8 +27,10 @@ StoneDesk/
       dispatchCalculations.js   Legacy piece-based totals
       dispatchAnalytics.js      30-day dashboard analytics (IST)
       organizationCode.js       Shareable organization code generator
-      businessBranding.js       Logo upload storage (sharp), business snapshot
-      requireOrganizationLogo.js  Restricts /uploads to the caller's own logo
+      businessBranding.js       Logo upload storage (sharp, content-addressed), business snapshot with a logo reference
+      logoStorage.js            Private Supabase bucket or local UPLOAD_DIR; org/<orgId>/<sha256>.png objects
+      serveContentLogo.js       Serves /uploads/logos/<sha256>.png from the caller's organization folder
+      requireOrganizationLogo.js  Restricts legacy /uploads/<uuid>.png to the caller's current logo
       rateLimiter.js            Upstash Redis sliding window, in-memory fallback
       securityHeaders.js        CSP and security headers
       auditLog.js, email.js, errorHandler.js, prisma.js
@@ -47,22 +49,20 @@ StoneDesk/
     vite.config.js              Dev proxy /api -> http://localhost:5000
     securityPolicy.js           Generates the Content Security Policy
     scripts/generateA4InvoiceSample.mjs   npm run invoice:sample
-    public/                     Favicon, icons, fonts, sample invoice
+    public/                     Favicon, icons, sample invoice
     src/
-      main.jsx                  Mounts App inside LanguageProvider (en / te)
+      main.jsx                  Mounts App
       App.jsx                   Checks /auth/session, renders LandingPage or PilotApp
       index.css                 Design tokens and shared controls
       styles/                   workspace.css, landing.css, invoice.css, a4Invoice.css
       components/
-        pilot/                  Active application (see section 5), incl. ProductsAndPlaces.jsx and SavedReferences.jsx
+        pilot/                  Active application (see section 5)
         LoadingListScreen.jsx   Loading requirements screen (lazy loaded at #requirements)
         SettingsScreen.jsx      Old saved trucks and destinations screen; no longer imported by the app
-        DispatchTracker.jsx, DispatchHistory.jsx, LanguageToggle.jsx   Legacy, not imported by the app
-        dispatch/               Legacy dispatch form parts; FractionChips is still used by LoadingListScreen
-      i18n/                     LanguageContext, translations, pilotMessages
+        dispatch/               FractionChips, used by LoadingListScreen
       lib/
         pilotApi.js             Fetch wrapper used by the pilot app
-        api.js, loadingListApi.js   Clients used by LoadingListScreen / SavedReferences
+        api.js, loadingListApi.js   Clients used by LoadingListScreen / NewLoad
         googleSignIn.js         Google PKCE redirect helpers
       utils/                    Calculations, drafts and document exports (see section 6)
         workspaceRoutes.js      Hash route, tab and navigation helpers
@@ -84,7 +84,8 @@ StoneDesk/
    - `/api/master-settings/:quarryId` (session + active user)
    - `/api/dispatches` (session + active user)
    - `/api/loading-lists` (session + active user)
-6. `/uploads`: session + active user + own-organization logo check, then static files from `UPLOAD_DIR`.
+6. `/uploads/logos/<sha256>.png`: session + active user, then the object `org/<session organization>/<sha256>.png` (404 if missing) with `private, max-age=31536000, immutable`. Finalized bills reference these by `businessSnapshot.logo.sha256`, so historical logos stay viewable for the same organization.
+   `/uploads/<uuid>.png` (legacy): session + active user + current-logo check, then Supabase Storage or static files from `UPLOAD_DIR`, with `private, no-store`.
 7. When `SERVE_FRONTEND=true`, serves `Frontend/dist` with an SPA fallback.
 8. Central error handler (`utils/errorHandler.js`).
 
@@ -124,13 +125,13 @@ Every query on tenant data is scoped by the caller's `organizationId`.
 | `#entries` | `LoadHub` | Load list, `?status=` filter, cursor pagination |
 | `#load` | `NewLoad` + `MeasurementEntry` + `LoadSummary` | Create or edit a draft load |
 | `#bill/:id` | `BillView` | Bill preview, finalize, PDF/Excel/share |
-| `#products`, `#products/trucks`, `#products/destinations` | `ProductsAndPlaces` (`ProductSettings` + `SavedReferences`) | Admin only; Products, Trucks and Destinations tabs |
+| `#products`, `#products/...` | (redirect) | Legacy aliases; replaced with `#settings/products` |
 | `#profile` | `BusinessSetup` | Admin only; Profile settings (sidebar item): business profile, logo and default charges |
-| `#references` | (redirect) | Legacy alias; redirects to `#products/trucks` |
+| `#references` | (redirect) | Legacy alias; replaced with `#settings/products` |
 | `#requirements` | `LoadingListScreen` | Loading requirement lists |
-| `#settings/...` | `AccountSettings` | Account, team members, password, delete |
+| `#settings/...` | `AccountSettings` | Organization, Products & rates (`#settings/products`, `ProductSettings`: Admin full, Manager add-only, hidden for Dispatcher), team members, account, delete |
 
-`WorkspaceShell.jsx` provides the header, drawer and bottom navigation. Until the business has a name and at least one stone rate, the app redirects to setup (`#profile`, then `#products`). Unsaved load drafts are kept in `localStorage` (`utils/pilotDraft.js`) and offered for recovery.
+`WorkspaceShell.jsx` provides the header and drawer navigation: Profile (Admin), Dashboard, New load, Loading entries, Settings. The New load item runs the same `newLoad()` as the header button. Until the business has a name, the app redirects to setup (`#profile`); a business without products can still open New load. Truck numbers and destinations are remembered automatically when a load is saved and offered as New load suggestions. Unsaved load drafts are kept in `localStorage` (`utils/pilotDraft.js`) and offered for recovery.
 
 ## 6. Calculations and Documents
 

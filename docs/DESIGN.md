@@ -24,7 +24,7 @@ Status uses words as well as color. Red is reserved for errors, not an additiona
 
 ## 3. Typography
 
-Use Geist (and Geist Mono for figures where needed), loaded in `index.css`, with Noto Telugu (`/fonts/NotoSansTelugu-Regular.ttf`) for Telugu and sans-serif fallbacks. Do not introduce another webfont or typography package. Show only the selected language; remember the language per device and set the document language.
+Use Geist (and Geist Mono for figures where needed), loaded in `index.css`, with sans-serif fallbacks. Do not introduce another webfont or typography package. The interface is English only and the document language is `en`.
 
 | Use | Size / line height | Weight |
 | --- | --- | --- |
@@ -40,9 +40,11 @@ Numbers use tabular figures. Amounts use Indian grouping and two decimal places 
 
 ## 4. Components
 
-- Buttons: minimum 44px tall (icon buttons 48px), 10px corners (`--ui-radius-sm`), text labels, stable width while busy. Primary actions have green fill and white text. Secondary buttons are white with gray borders. Use a visible focus outline, pressed feedback and a disabled HTML state while submitting. No hover-only actions.
+- Buttons: one set, rendered by `<Button>` in `Controls.jsx`. All are 44px tall pills (`--ui-radius-button`), 13px/500 labels, stable width while busy. Variants: `primary` (green fill, white text, one per section), `secondary` (default; white, gray border), `ghost` (no border or fill until hover), `danger` (red fill, confirm step only) and `danger-quiet` (red text, the trigger before a confirm). Screens never restyle these; colours live once in `index.css`. Inline link actions use `.text-button` (green text, underline on hover). Use a visible focus outline, pressed feedback and a disabled HTML state while submitting. No hover-only actions.
+- Back: one control, `<BackButton>` (arrow + label such as "Back to dashboard"), placed first in the screen heading, on its own line above the title.
 - Inputs: labels above controls, 16px text, white fill, 1px `--workspace-border` border, 44px height, green border and soft ring on focus. Native email, password, date, number, file and select controls. Keep fractions available on dimension entry. Never use a placeholder as the only label.
 - Cards: white with a 1px border and no shadow, 16px corners (`--ui-radius-md`) and 16 to 20px padding. Use them to group a load or a task; use dividers inside groups instead of nested cards.
+- One theme on every screen. Profile, Settings and the bill panels keep their layout variables (`--mn-*`, `--bill-*`), but these alias the shared `--ui-*` role tokens (canvas, border, ink, muted, danger, success, warning), so they match the rest of the app. Tailwind utilities use the matching `@theme` colours (`text-on-surface`, `bg-surface`, `text-error` …), never raw palette classes like `text-gray-600` or `bg-teal-700`.
 - Navigation: collapsible side drawer for all five destinations; four compact bottom destinations for daily work. Settings is available in the drawer/profile area. All hit areas are at least 48px tall.
 - Dialogs: native modal dialog for sign-in, navigation and information. Browser focus containment, Escape to close, labeled title, visible close button. The scrim is 50% ink. No hand-built focus trap.
 - Data: load cards on phones, containing lorry number, party, date, area, amount and textual status. The generated PDF and Excel are the detailed tabular views. Right-align numerical columns, repeat headings on new PDF pages, and preserve numeric Excel cells.
@@ -54,13 +56,13 @@ Numbers use tabular figures. Amounts use Indian grouping and two decimal places 
 
 Use a 4px base spacing scale: 8px related controls, 12px compact groups, 16px cards/gutters, 24px sections, 32–40px landing sections. No horizontal page overflow at 320px. A two-column summary is permitted for short numbers; forms remain single column. Bottom navigation has safe-area padding and matching content clearance.
 
-The utility header contains business identity, the language toggle, notifications and search. Search accepts lorry number, party, destination or bill ID. The adjacent plus button starts a load. The mobile drawer also provides the signed-in profile, role and logout.
+The utility header contains business identity, notifications and search. Search accepts lorry number, party, destination or bill ID. The adjacent plus button starts a load. The mobile drawer also provides the signed-in profile, role and logout.
 
 ## 6. Motion and accessibility
 
 Use CSS transitions: 160ms (`--ui-dur`) color and press feedback (`scale(.98)`). Motion is limited to the landing page (`pilot/MarketingMotion.jsx`) and light transitions in `SettingsScreen.jsx`, using the `motion` package with `useReducedMotion`. Honor reduced motion. Avoid perpetual animation during yard entry, animated counters, parallax, and staggered movement of operational rows. This prioritizes the UI/UX skill's accessibility and task-focus rules over decorative motion suggestions from taste-design.
 
-Visible keyboard focus, a skip link, semantic headings/labels, text status indicators, native dialogs, and 48px hit areas are required. Test at 320px and 390px plus landscape. Long business names and Telugu text wrap without covering controls.
+Visible keyboard focus, a skip link, semantic headings/labels, text status indicators, native dialogs, and 48px hit areas are required. Test at 320px and 390px plus landscape. Long business names and labels wrap without covering controls.
 
 ## 7. Deliberate exclusions
 

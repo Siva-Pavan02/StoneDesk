@@ -15,6 +15,9 @@ const { derivePaymentSummary } = require("../utils/paymentSummary");
 const { organizationCode } = require("../utils/organizationCode");
 const { buildAnalytics, windows } = require("../utils/dispatchAnalytics");
 const { authFlags, requiresCurrentPassword, buildResetUrl } = require("../utils/authFlags");
+const { STATUS_TARGETS, statusTransitionError } = require("../utils/dispatchStatus");
+const { canAddProduct } = require("../utils/roles");
+const { MAX_SAVED_REFERENCES, referenceKey, removeReference, rememberReference } = require("../utils/savedReferences");
 
 const PORT = process.env.MOCK_PORT || 5001;
 const DATA_FILE = path.join(__dirname, "mock-data.json");
@@ -535,6 +538,22 @@ settingsRouter.get(
     res.json(db.settings);
   }),
 );
+// Mirrors masterSettingsRoutes: creating a product is Admin + Manager, everything below stays Admin-only.
+settingsRouter.post("/stone-rates", (req, res, next) =>
+  canAddProduct(currentUser()?.role)
+    ? next()
+    : res.status(403).json({ error: "Your role does not allow this action" }),
+);
+settingsRoute("post", "/stone-rates", (s, req) => {
+  const stoneType = calc.text(req.body.stoneType, "product"),
+    finish = calc.text(req.body.finish, "finish"),
+    defaultRate = calc.number(req.body.defaultRate, "rate");
+  if (
+    s.stoneRates.some((r) => r.stoneType === stoneType && r.finish === finish)
+  )
+    fail(409, "Duplicate stone-rate combination");
+  s.stoneRates.push({ id: randomUUID(), stoneType, finish, defaultRate });
+});
 settingsRouter.use(requireAdmin);
 settingsRoute("put", "/", (s, req) => {
   for (const key of [
@@ -553,7 +572,7 @@ settingsRoute("put", "/", (s, req) => {
           finish: calc.text(r.finish, "finish"),
           defaultRate: calc.number(r.defaultRate, "rate"),
         }));
-      else s[key] = [...new Set(req.body[key].map((v) => calc.text(v, key)))];
+      else s[key] = [...new Set(req.body[key].map((v) => calc.text(v, key)))].slice(0, MAX_SAVED_REFERENCES);
     }
 });
 settingsRoute("put", "/profile", (s, req) => {
@@ -591,33 +610,29 @@ settingsRoute("put", "/profile", (s, req) => {
 });
 settingsRoute("post", "/trucks", (s, req) => {
   const v = calc.text(req.body.truckNumber, "truck number", 40).toUpperCase();
-  if (s.savedTrucks.includes(v)) fail(409, "Duplicate truck");
+  if (s.savedTrucks.some((t) => referenceKey("trucks", t) === referenceKey("trucks", v)))
+    fail(409, "Duplicate truck");
   s.savedTrucks.push(v);
 });
 settingsRoute("delete", "/trucks/:truckNumber", (s, req) => {
-  s.savedTrucks = s.savedTrucks.filter(
-    (v) => v !== req.params.truckNumber.trim().toUpperCase(),
-  );
+  s.savedTrucks = removeReference(s.savedTrucks, req.params.truckNumber, "trucks");
 });
 settingsRoute("post", "/destinations", (s, req) => {
   const v = calc.text(req.body.destination, "destination", 200);
-  if (s.savedDestinations.includes(v)) fail(409, "Duplicate destination");
+  if (
+    s.savedDestinations.some(
+      (d) => referenceKey("destinations", d) === referenceKey("destinations", v),
+    )
+  )
+    fail(409, "Duplicate destination");
   s.savedDestinations.push(v);
 });
 settingsRoute("delete", "/destinations/:destination", (s, req) => {
-  s.savedDestinations = s.savedDestinations.filter(
-    (v) => v !== req.params.destination.trim(),
+  s.savedDestinations = removeReference(
+    s.savedDestinations,
+    req.params.destination,
+    "destinations",
   );
-});
-settingsRoute("post", "/stone-rates", (s, req) => {
-  const stoneType = calc.text(req.body.stoneType, "product"),
-    finish = calc.text(req.body.finish, "finish"),
-    defaultRate = calc.number(req.body.defaultRate, "rate");
-  if (
-    s.stoneRates.some((r) => r.stoneType === stoneType && r.finish === finish)
-  )
-    fail(409, "Duplicate stone-rate combination");
-  s.stoneRates.push({ id: randomUUID(), stoneType, finish, defaultRate });
 });
 settingsRoute("put", "/stone-rates/:rateId", (s, req) => {
   const rate = s.stoneRates.find((r) => r.id === req.params.rateId);
@@ -653,7 +668,7 @@ api.use("/master-settings/:quarryId", requireSession, settingsRouter);
 
 // ---- dispatches ----
 function details(body) {
-  const supervisor = calc.text(body.supervisor, "supervisor");
+  const supervisor = calc.text(body.supervisor, "manager");
   const logistics = {
     truckNumber: calc
       .text(body.logistics?.truckNumber, "truck number", 40)
@@ -681,6 +696,19 @@ function details(body) {
   return { supervisor, logistics, date: date.toISOString(), partyName };
 }
 const findDispatch = (id) => db.dispatches.find((d) => d.id === id);
+// Mirrors rememberDispatchReferences: remembers truck/destination as suggestions, bumps version when changed.
+function rememberMockReferences(logistics) {
+  const s = db.settings;
+  const trucks = rememberReference(s.savedTrucks, logistics?.truckNumber, "trucks");
+  const destinations = rememberReference(
+    s.savedDestinations,
+    logistics?.buyerDestination,
+    "destinations",
+  );
+  if (trucks) s.savedTrucks = trucks;
+  if (destinations) s.savedDestinations = destinations;
+  if (trucks || destinations) bump(s);
+}
 const LIST_FIELDS = [
   "id",
   "dispatchSlipNumber",
@@ -744,6 +772,7 @@ dispatches.post(
       updatedAt: now(),
     };
     db.dispatches.unshift(record);
+    rememberMockReferences(record.logistics);
     save();
     res.json(record);
   }),
@@ -915,7 +944,7 @@ dispatches.put(
       supervisor: d.supervisor,
       partyName: d.partyName,
       date: d.date,
-      businessSnapshot: d.businessSnapshot,
+      // Like the real controller, revisions do not copy businessSnapshot.
       revisedAt: new Date().toISOString(),
       revisedByUserId: currentUser().id,
     };
@@ -925,6 +954,7 @@ dispatches.put(
     ];
     // dispatchSlipNumber and status are intentionally left unchanged.
     Object.assign(d, meta, { inventory, summary, revisions, updatedAt: now() });
+    rememberMockReferences(meta.logistics);
     save();
     res.json(d);
   }),
@@ -932,16 +962,21 @@ dispatches.put(
 // Mirrors dispatchController.deleteDispatch.
 dispatches.delete(
   "/:id",
-  allow("Admin"),
   wrap((req, res) => {
     const id = req.params.id;
     const index = db.dispatches.findIndex((d) => d.id === id);
     if (index < 0) fail(404, "Not found");
-    if (db.payments.some((p) => p.dispatchId === id))
-      fail(409, "Remove the recorded payments before deleting this invoice.");
+    // Any role may delete a Draft; only Admin may delete a finalized invoice.
+    if (db.dispatches[index].status !== "Draft" && currentUser().role !== "Admin")
+      fail(403, "Your role does not allow this action");
+    const paymentsRemoved = db.payments.filter((p) => p.dispatchId === id).length;
+    if (paymentsRemoved && currentUser().role !== "Admin")
+      fail(403, "Only an Admin can delete a load with recorded payments.");
+    // Admin delete removes the load's payments with it.
+    db.payments = db.payments.filter((p) => p.dispatchId !== id);
     db.dispatches.splice(index, 1);
     save();
-    res.json({ ok: true, id });
+    res.json({ ok: true, id, paymentsRemoved });
   }),
 );
 dispatches.put(
@@ -962,6 +997,7 @@ dispatches.put(
       summary: calc.totals(inventory, fee),
       updatedAt: now(),
     });
+    rememberMockReferences(meta.logistics);
     save();
     res.json(d);
   }),
@@ -983,9 +1019,11 @@ dispatches.post(
       bankDetails: s.bankDetails || "",
       gstNumber: s.gstNumber,
       tradeLicense: s.tradeLicense,
-      logoDataUrl: null,
+      // The mock never stores a logo; the real API writes { sha256, width, height, bytes }.
+      logo: null,
     };
     Object.assign(d, { status: "Dispatched", updatedAt: now() });
+    rememberMockReferences(d.logistics);
     save();
     res.json(d);
   }),
@@ -994,10 +1032,20 @@ dispatches.patch(
   "/:id/status",
   allow("Admin", "Dispatcher"),
   wrap((req, res) => {
-    const d = findDispatch(req.params.id);
-    if (req.body.status !== "Delivered" || !d || d.status !== "Dispatched")
+    // Mirrors dispatchController.updateStatus.
+    const to = req.body.status;
+    if (typeof to !== "string" || !STATUS_TARGETS.includes(to))
       fail(400, "Invalid status transition");
-    Object.assign(d, { status: "Delivered", updatedAt: now() });
+    const d = findDispatch(req.params.id);
+    if (!d) fail(404, "Not found");
+    if (req.body.updatedAt !== undefined) {
+      const clientTime = new Date(req.body.updatedAt).getTime();
+      if (clientTime !== new Date(d.updatedAt).getTime())
+        fail(409, "Load changed. Refresh and try again.");
+    }
+    const rejected = statusTransitionError(d.status, to, currentUser().role);
+    if (rejected) fail(rejected.status, rejected.error);
+    Object.assign(d, { status: to, updatedAt: now() });
     save();
     res.json(d);
   }),
@@ -1009,7 +1057,7 @@ const STATUSES = ["Draft", "Loading", "Completed"];
 function listFields(body) {
   const data = {};
   for (const key of ["supervisor", "buyerDestination", "stoneType", "finish"])
-    data[key] = calc.text(body[key], key);
+    data[key] = calc.text(body[key], key === "supervisor" ? "manager" : key);
   const date = body.date === undefined ? new Date() : new Date(body.date);
   if (!Number.isFinite(date.getTime())) calc.bad("Invalid date");
   data.date = date.toISOString();

@@ -13,8 +13,10 @@ router.post('/:id/payments', allowRoles('Admin', 'Dispatcher'), paymentControlle
 router.get('/slip/:dispatchSlipNumber', controller.getBySlip);
 router.put('/:id/revise', allowRoles('Admin'), controller.reviseDispatch);
 router.put('/:id', controller.updateDraft);
+// Delivered -> Dispatched is Admin only, checked in the controller (utils/dispatchStatus.js).
 router.patch('/:id/status', allowRoles('Admin', 'Dispatcher'), controller.updateStatus);
 router.post('/:id/finalize', allowRoles('Admin', 'Dispatcher'), controller.finalizeDispatch);
-router.delete('/:id', allowRoles('Admin'), controller.deleteDispatch);
+// Roles are checked in the controller: any role may delete a Draft, only Admin a finalized invoice.
+router.delete('/:id', controller.deleteDispatch);
 
 module.exports = router;

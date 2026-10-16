@@ -48,8 +48,9 @@ test('Dispatch API', async (t) => {
 
   await t.test('2. Reject missing supervisor', async () => {
     const p = { ...validPayload, supervisor: undefined };
-    const { status } = await request('POST', '/', p);
+    const { status, data } = await request('POST', '/', p);
     assert.equal(status, 400);
+    assert.deepEqual(data, { error: 'Invalid manager' });
   });
 
   await t.test('3. Reject missing truck number', async () => {
@@ -157,6 +158,59 @@ test('Dispatch API', async (t) => {
     assert.equal(status, 400);
   });
 
+  // Signs a user into a fresh session and returns a fetch helper for them.
+  const signedInAs = async (organizationId, role, email) => {
+    const crypto = require('node:crypto');
+    const user = await prisma.user.create({ data: { organizationId, name: role, email,
+      passwordHash: 'dummy', passwordSalt: 'dummy', role, active: true } });
+    const token = crypto.randomBytes(32).toString('hex');
+    await prisma.session.create({ data: { tokenHash: crypto.createHash('sha256').update(token).digest('hex'), userId: user.id, expiresAt: new Date(Date.now() + 1000000) } });
+    return async (method, path, body) => {
+      const res = await fetch(`${baseUrl}${path}`, { method, headers: { 'Content-Type': 'application/json', Cookie: `stonedesk_session=${token}` }, body: body ? JSON.stringify(body) : undefined });
+      return { status: res.status, data: await res.json().catch(() => null) };
+    };
+  };
+
+  await t.test('21. Dispatcher cannot move Delivered back', async () => {
+    const { organizationId } = await prisma.dispatch.findUnique({ where: { id: dispatchId } });
+    const asDispatcher = await signedInAs(organizationId, 'Dispatcher', 'dispatcher@dispatch.test');
+    assert.equal((await asDispatcher('PATCH', `/${dispatchId}/status`, { status: 'Dispatched' })).status, 403);
+    assert.equal((await request('GET', `/${dispatchId}`)).data.status, 'Delivered');
+  });
+
+  await t.test('22. Admin moves Delivered -> Dispatched', async () => {
+    const before = (await request('GET', `/${dispatchId}`)).data;
+    const { status, data } = await request('PATCH', `/${dispatchId}/status`, { status: 'Dispatched', updatedAt: before.updatedAt });
+    assert.equal(status, 200);
+    assert.equal(data.status, 'Dispatched');
+    assert.equal(data.dispatchSlipNumber, slipNumber);
+    assert.deepEqual(data.summary, before.summary);
+    assert.ok(new Date(data.updatedAt) > new Date(before.updatedAt));
+  });
+
+  await t.test('23. Admin can mark it delivered again', async () => {
+    const { status, data } = await request('PATCH', `/${dispatchId}/status`, { status: 'Delivered' });
+    assert.equal(status, 200);
+    assert.equal(data.status, 'Delivered');
+  });
+
+  await t.test('24. Stale updatedAt is rejected', async () => {
+    const { status } = await request('PATCH', `/${dispatchId}/status`, { status: 'Dispatched', updatedAt: '2000-01-01T00:00:00.000Z' });
+    assert.equal(status, 409);
+    assert.equal((await request('GET', `/${dispatchId}`)).data.status, 'Delivered');
+  });
+
+  await t.test('25. Delivered -> Draft still rejected for admin', async () => {
+    assert.equal((await request('PATCH', `/${dispatchId}/status`, { status: 'Draft' })).status, 400);
+  });
+
+  await t.test('26. Other organization gets 404', async () => {
+    const otherOrg = await prisma.masterSettings.create({ data: { organizationId: 'status-test-other-org' } });
+    const asOtherAdmin = await signedInAs(otherOrg.id, 'Admin', 'other-admin@dispatch.test');
+    assert.equal((await asOtherAdmin('PATCH', `/${dispatchId}/status`, { status: 'Dispatched' })).status, 404);
+    assert.equal((await request('GET', `/${dispatchId}`)).data.status, 'Delivered');
+  });
+
   await t.test('16 / 22. Historical Immutability Test', async () => {
     await prisma.masterSettings.update({ where: { id: org.id }, data: { defaultRoyaltyFee: 15000 } });
 
@@ -168,6 +222,43 @@ test('Dispatch API', async (t) => {
     assert.equal(data.summary.netBillableAmount, 18500);
   });
 
+  await t.test('Any role deletes a Draft; only Admin deletes a finalized invoice', async () => {
+    const crypto = require('node:crypto');
+    const staff = await prisma.user.create({ data: { organizationId: org.id, name: 'Yard Operator', email: 'yard@dispatch.test',
+      passwordHash: 'dummy', passwordSalt: 'dummy', role: 'YardManager', active: true } });
+    const token = crypto.randomBytes(32).toString('hex');
+    await prisma.session.create({ data: { tokenHash: crypto.createHash('sha256').update(token).digest('hex'), userId: staff.id, expiresAt: new Date(Date.now() + 1000000) } });
+    const asStaff = async (method, path, body) => {
+      const res = await fetch(`${baseUrl}${path}`, { method, headers: { 'Content-Type': 'application/json', Cookie: `stonedesk_session=${token}` }, body: body ? JSON.stringify(body) : undefined });
+      return { status: res.status, data: await res.json().catch(() => null) };
+    };
+    const draft = await asStaff('POST', '', validPayload);
+    assert.equal(draft.status, 200);
+    const removed = await asStaff('DELETE', `/${draft.data.id}`);
+    assert.equal(removed.status, 200);
+    assert.deepEqual(removed.data, { ok: true, id: draft.data.id });
+    assert.equal((await request('GET', `/${draft.data.id}`)).status, 404);
+
+    const finalized = await request('POST', '', validPayload);
+    assert.equal((await request('POST', `/${finalized.data.id}/finalize`)).status, 200);
+    assert.equal((await asStaff('DELETE', `/${finalized.data.id}`)).status, 403);
+    assert.equal((await request('GET', `/${finalized.data.id}`)).status, 200);
+    assert.equal((await request('DELETE', `/${finalized.data.id}`)).status, 200);
+  });
+
+  await t.test('Saving a load remembers truck and destination once', async () => {
+    await prisma.masterSettings.update({ where: { id: org.id }, data: { savedTrucks: [], savedDestinations: [] } });
+    const first = await request('POST', '/', { ...validPayload, logistics: { truckNumber: 'tn01ab1234', buyerDestination: ' Kadapa ' } });
+    assert.equal(first.status, 200);
+    let settings = await prisma.masterSettings.findUnique({ where: { id: org.id } });
+    assert.deepEqual(settings.savedTrucks, ['TN 01 AB 1234']);
+    assert.deepEqual(settings.savedDestinations, ['Kadapa']);
+    const second = await request('POST', '/', { ...validPayload, logistics: { truckNumber: 'TN 01 AB 1234', buyerDestination: 'kadapa' } });
+    assert.equal(second.status, 200);
+    settings = await prisma.masterSettings.findUnique({ where: { id: org.id } });
+    assert.deepEqual(settings.savedTrucks, ['TN 01 AB 1234']);
+    assert.deepEqual(settings.savedDestinations, ['Kadapa']);
+  });
   await t.test('Cleanup', async () => {
     await new Promise(resolve => server.close(resolve));
 

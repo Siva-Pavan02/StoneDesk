@@ -1,47 +1,14 @@
-import { useEffect, useId, useRef, useState } from "react";
-import { useLanguage } from "../../i18n/LanguageContext";
+import { useEffect, useRef, useState } from "react";
 import { logoUrl } from "../../lib/pilotApi.js";
 import Icon from "./Icon.jsx";
 import BrandLogo from "./BrandLogo.jsx";
 import LogoutDialog from "./LogoutDialog.jsx";
-import { navigationKey, visibleNavigation } from "../../utils/workspaceRoutes.js";
+import { NEW_LOAD_ROUTE, navigationKey, visibleNavigation } from "../../utils/workspaceRoutes.js";
+import { roleLabel } from "../../utils/roles.js";
 
 // Hash links: let Cmd/Ctrl/Shift/middle-click open a new tab, handle plain clicks in-app.
 const isPlainClick = (e) =>
   e.button === 0 && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey);
-
-function LanguageSwitch({ className }) {
-  const { pick, language, setLanguage } = useLanguage();
-  const labelId = useId();
-  return (
-    <div className={`language-row ${className}`}>
-      <span id={labelId} className="language-row-label">
-        {pick("Language", "భాష")}
-      </span>
-      <div
-        className="language-switch"
-        role="group"
-        aria-labelledby={labelId}
-      >
-        {[
-          ["en", "EN", "English"],
-          ["te", "తె", "తెలుగు"],
-        ].map(([value, short, name]) => (
-          <button
-            type="button"
-            key={value}
-            lang={value}
-            aria-label={name}
-            aria-pressed={language === value}
-            onClick={() => setLanguage(value)}
-          >
-            {short}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 export default function WorkspaceShell({
   settings,
@@ -55,7 +22,6 @@ export default function WorkspaceShell({
   attention,
   children,
 }) {
-  const { pick } = useLanguage();
   const drawer = useRef(null),
     notifications = useRef(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -102,16 +68,19 @@ export default function WorkspaceShell({
     drawer.current.close();
     setDrawerOpen(false);
   }
-  function go(viewName) {
-    closeDrawer();
-    navigate(viewName);
+  // New load runs the same newLoad() as the header button (setup and drafts checks);
+  // on the load screen a plain click does nothing so the open draft is not replaced.
+  function openItem(key) {
+    if (key === NEW_LOAD_ROUTE) {
+      if (view !== NEW_LOAD_ROUTE) onNew();
+    } else navigate(key);
   }
   function logout() {
     closeDrawer();
     setConfirmingLogout(true);
   }
   return (
-    <div className="pilot workspace min-h-dvh bg-gray-50 text-gray-900">
+    <div className="pilot workspace min-h-dvh bg-surface text-on-surface">
       <a
         href="#workspace-main"
         className="skip-link"
@@ -122,24 +91,24 @@ export default function WorkspaceShell({
           main?.scrollIntoView({ block: "start" });
         }}
       >
-        {pick("Skip to content", "విషయానికి వెళ్ళండి")}
+        {"Skip to content"}
       </a>
       <aside
         className="workspace-sidebar"
-        aria-label={pick("Workspace", "వర్క్‌స్పేస్")}
+        aria-label="Workspace"
       >
         <div className="sidebar-brand">
           <BrandLogo size={44} className="brand-mark" />
           <div>
             <strong translate="no">StoneDesk</strong>
-            <p className="text-xs text-gray-600">
-              {pick("Your yard. In order.", "మీ యార్డ్. క్రమబద్ధంగా.")}
+            <p className="text-xs text-on-surface-variant">
+              {"Your yard. In order."}
             </p>
           </div>
         </div>
-        <p className="eyebrow px-4 mb-3">{pick("WORKSPACE", "వర్క్‌స్పేస్")}</p>
-        <nav aria-label={pick("Desktop navigation", "డెస్క్‌టాప్ నావిగేషన్")}>
-          {navigation.map(([key, icon, en, te]) => (
+        <p className="eyebrow px-4 mb-3">{"WORKSPACE"}</p>
+        <nav aria-label="Desktop navigation">
+          {navigation.map(([key, icon, label]) => (
             <a
                 key={key}
                 href={`#${key}`}
@@ -148,37 +117,29 @@ export default function WorkspaceShell({
                 onClick={(event) => {
                   if (!isPlainClick(event)) return;
                   event.preventDefault();
-                  navigate(key);
+                  openItem(key);
                 }}
               >
                 <Icon name={icon} />
-                <span>{pick(en, te)}</span>
+                <span>{label}</span>
               </a>
           ))}
         </nav>
-        <LanguageSwitch className="sidebar-language" />
         <div className="sidebar-account flex items-center gap-3 px-3">
           <span className="account-monogram" aria-hidden="true">
             {initials}
           </span>
           <span className="min-w-0 flex-1">
             <strong className="block truncate font-medium">{user.name}</strong>
-            <span className="block text-xs text-gray-600">
-              {pick(
-                user.role,
-                user.role === "Admin"
-                  ? "అడ్మిన్"
-                  : user.role === "Yard Manager"
-                    ? "యార్డ్ మేనేజర్"
-                    : "డిస్పాచర్",
-              )}
+            <span className="block text-xs text-on-surface-variant">
+              {roleLabel(user.role)}
             </span>
           </span>
           <button
             type="button"
             className="icon-button sidebar-logout"
-            aria-label={pick("Log out", "లాగ్ అవుట్")}
-            title={pick("Log out", "లాగ్ అవుట్")}
+            aria-label="Log out"
+            title="Log out"
             onClick={logout}
           >
             <Icon name="logout" />
@@ -191,7 +152,7 @@ export default function WorkspaceShell({
             <button
               type="button"
               className="icon-button mobile-menu"
-              aria-label={pick("Open navigation", "మెనూ తెరవండి")}
+              aria-label="Open navigation"
               aria-haspopup="dialog"
               aria-expanded={drawerOpen}
               aria-controls="workspace-navigation-dialog"
@@ -219,7 +180,7 @@ export default function WorkspaceShell({
                   {settings?.businessName || "StoneDesk"}
                 </p>
                 <p className="workspace-organization-caption">
-                  {pick("Yard workspace", "యార్డ్ వర్క్‌స్పేస్")}
+                  {"Yard workspace"}
                 </p>
               </div>
             </div>
@@ -237,15 +198,12 @@ export default function WorkspaceShell({
             }}
           >
             <label className="sr-only" htmlFor="global-search">
-              {pick(
-                "Search lorry, party or invoice ID",
-                "లారీ, పార్టీ లేదా బిల్లు వెతకండి",
-              )}
+              {"Search lorry, party or invoice ID"}
             </label>
             <button
               type="submit"
               className="icon-button workspace-search-submit"
-              aria-label={pick("Search", "వెతకండి")}
+              aria-label="Search"
             >
               <Icon name="search" />
             </button>
@@ -267,15 +225,12 @@ export default function WorkspaceShell({
                 )
                   navigate("entries");
               }}
-              placeholder={pick(
-                "Lorry, party or bill ID…",
-                "లారీ, పార్టీ లేదా బిల్లు…",
-              )}
+              placeholder="Lorry, party or bill ID…"
             />
             <button
               type="button"
               className="icon-button workspace-search-close"
-              aria-label={pick("Close search", "శోధన మూసివేయండి")}
+              aria-label="Close search"
               onClick={closeSearch}
             >
               <Icon name="close" />
@@ -286,7 +241,7 @@ export default function WorkspaceShell({
               ref={searchToggle}
               type="button"
               className="icon-button workspace-search-toggle"
-              aria-label={pick("Open search", "శోధన తెరవండి")}
+              aria-label="Open search"
               aria-expanded={searchOpen}
               aria-controls="workspace-search-form"
               onClick={() => setSearchOpen(true)}
@@ -296,13 +251,13 @@ export default function WorkspaceShell({
             {view !== "load" && (
               <button
                 type="button"
-                className="btn workspace-create-load"
-                title={pick("Create a new load", "కొత్త లోడ్ సృష్టించండి")}
-                aria-label={pick("Create a new load", "కొత్త లోడ్ సృష్టించండి")}
+                className="btn control-button control-button-primary workspace-create-load"
+                title="Create a new load"
+                aria-label="Create a new load"
                 onClick={onNew}
               >
                 <Icon name="plus" />
-                <span>{pick("New load", "కొత్త లోడ్")}</span>
+                <span>{"New load"}</span>
               </button>
             )}
             <button
@@ -310,11 +265,8 @@ export default function WorkspaceShell({
               className="icon-button workspace-notifications"
               aria-label={
                 attention > 0
-                  ? pick(
-                      `Notifications and tasks, ${attention} drafts to review`,
-                      `నోటిఫికేషన్లు, ${attention} డ్రాఫ్ట్‌లు తనిఖీ చేయాలి`,
-                    )
-                  : pick("Notifications and tasks", "నోటిఫికేషన్లు")
+                  ? `Notifications and tasks, ${attention} drafts to review`
+                  : "Notifications and tasks"
               }
               aria-haspopup="dialog"
               onClick={() => notifications.current.showModal()}
@@ -367,7 +319,7 @@ export default function WorkspaceShell({
             <button
               type="button"
               className="icon-button"
-              aria-label={pick("Close navigation", "మెనూ మూసివేయండి")}
+              aria-label="Close navigation"
               onClick={closeDrawer}
             >
               <span className="menu-lines is-open" aria-hidden="true">
@@ -377,13 +329,13 @@ export default function WorkspaceShell({
             </button>
           </div>
           <p className="nav-drawer-label" aria-hidden="true">
-            {pick("Menu", "మెనూ")}
+            {"Menu"}
           </p>
           <nav
             className="nav-drawer-nav"
-            aria-label={pick("Main navigation", "ప్రధాన నావిగేషన్")}
+            aria-label="Main navigation"
           >
-            {navigation.map(([key, icon, en, te]) => (
+            {navigation.map(([key, icon, label]) => (
               <a
                 key={key}
                 href={`#${key}`}
@@ -391,16 +343,16 @@ export default function WorkspaceShell({
                 onClick={(event) => {
                   if (!isPlainClick(event)) return;
                   event.preventDefault();
-                  go(key);
+                  closeDrawer();
+                  openItem(key);
                 }}
                 className="sidebar-link"
               >
                 <Icon name={icon} />
-                {pick(en, te)}
+                {label}
               </a>
             ))}
           </nav>
-          <LanguageSwitch className="nav-drawer-language" />
           <div className="nav-drawer-footer">
             <div className="nav-drawer-account">
               <span className="account-monogram" aria-hidden="true">
@@ -410,15 +362,8 @@ export default function WorkspaceShell({
                 <strong className="block truncate font-medium">
                   {user.name}
                 </strong>
-                <span className="block text-xs text-gray-600">
-                  {pick(
-                    user.role,
-                    user.role === "Admin"
-                      ? "అడ్మిన్"
-                      : user.role === "Yard Manager"
-                        ? "యార్డ్ మేనేజర్"
-                        : "డిస్పాచర్",
-                  )}
+                <span className="block text-xs text-on-surface-variant">
+                  {roleLabel(user.role)}
                 </span>
               </span>
             </div>
@@ -428,7 +373,7 @@ export default function WorkspaceShell({
               onClick={logout}
             >
               <Icon name="logout" />
-              {pick("Log out", "లాగ్ అవుట్")}
+              {"Log out"}
             </button>
           </div>
         </div>
@@ -440,24 +385,21 @@ export default function WorkspaceShell({
       >
         <div className="space-y-4 p-6">
           <h2 id="attention-title" className="text-xl font-bold">
-            {pick("Needs attention", "చేయవలసినవి")}
+            {"Needs attention"}
           </h2>
           <p>
             {attention > 0 ? (
               <>
                 {attention}{" "}
-                {pick(
-                  "saved drafts to review.",
-                  "సేవ్ చేసిన డ్రాఫ్ట్‌లు తనిఖీ చేయాలి.",
-                )}
+                {"saved drafts to review."}
               </>
             ) : (
-              pick("Nothing waiting for review.", "తనిఖీ కోసం ఏమీ లేదు.")
+              "Nothing waiting for review."
             )}
           </p>
           <a
             href="#entries"
-            className="btn w-full min-h-12 bg-teal-800 text-white"
+            className="btn w-full min-h-12 bg-primary text-white"
             onClick={(event) => {
               if (!isPlainClick(event)) return;
               event.preventDefault();
@@ -465,13 +407,13 @@ export default function WorkspaceShell({
               navigate("entries");
             }}
           >
-            {pick("View loading entries", "లోడ్ వివరాలు చూడండి")}
+            {"View loading entries"}
           </a>
           <button
             className="text-button w-full"
             onClick={() => notifications.current.close()}
           >
-            {pick("Close", "మూసివేయండి")}
+            {"Close"}
           </button>
         </div>
       </dialog>

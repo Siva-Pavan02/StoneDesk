@@ -14,7 +14,7 @@ export async function generateLoadingListPdf(listData) {
   doc.text("StoneDesk", 14, y);
   y += 6;
   doc.setFontSize(12);
-  doc.text("SUPERVISOR LOADING LIST", 14, y);
+  doc.text("LOADING LIST", 14, y);
   y += 10;
 
   doc.setFont(font, 'normal');
@@ -30,7 +30,7 @@ export async function generateLoadingListPdf(listData) {
   drawLabel('Loading List No', listData.loadingListNumber, 14, y);
   drawLabel('Date', listData.date, 110, y);
   y += 6;
-  drawLabel('Supervisor', listData.supervisor, 14, y);
+  drawLabel('Manager', listData.supervisor, 14, y);
   drawLabel('Buyer', listData.buyerDestination, 110, y);
   y += 6;
   drawLabel('Destination', listData.buyerDestination, 14, y);

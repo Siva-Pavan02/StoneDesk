@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useLanguage } from "../../i18n/LanguageContext";
 import { billRows, rowGroups } from "../../utils/billData.js";
 import { fixed2, round2 } from "../../utils/loadMath.js";
 import { decimalToFraction } from "../../utils/fractionParser.js";
@@ -12,15 +11,14 @@ const amount = (value) =>
     maximumFractionDigits: 2,
   });
 export default function InvoiceTable({ record }) {
-  const { pick } = useLanguage();
   const [page, setPage] = useState(0);
   const groups = rowGroups(billRows(record));
   const pageSize = 6,
     pages = Math.max(1, Math.ceil(groups.length / pageSize));
   const current = Math.min(page, pages - 1);
-  const rowWord = pick("Row", "వరుస");
-  const regularWord = pick("Regular", "సాధారణ"),
-    topWord = pick("Top", "టాప్");
+  const rowWord = "Row";
+  const regularWord = "Regular",
+    topWord = "Top";
   const sub = (key, label, totals) => (
     <tr key={key} className="invoice-row-sub">
       <th scope="row" colSpan={3}>
@@ -64,38 +62,38 @@ export default function InvoiceTable({ record }) {
         </colgroup>
         <thead>
           <tr>
-            <th scope="col">{pick("Type", "రకం")}</th>
+            <th scope="col">{"Type"}</th>
             <th scope="col" className="numeric">
-              {pick("L (ft)", "పొడవు")}
+              {"L (ft)"}
             </th>
             <th scope="col" className="numeric">
-              {pick("W (ft)", "వెడల్పు")}
+              {"W (ft)"}
             </th>
             <th scope="col" className="numeric">
-              {pick("Qty", "సంఖ్య")}
+              {"Qty"}
             </th>
             <th scope="col" className="numeric">
-              {pick("Sq ft", "చ.అ.")}
+              {"Sq ft"}
             </th>
             <th scope="col" className="numeric">
-              {pick("Amount (₹)", "మొత్తం (₹)")}
+              {"Amount (₹)"}
             </th>
           </tr>
         </thead>
         <tbody>
           {g.regularLines.map((l, i) => lineRow(l, i + 1, false))}
           {g.regularLines.length > 0 &&
-            sub("rs", pick("Regular subtotal", "సాధారణ ఉప మొత్తం"), g.regular)}
+            sub("rs", "Regular subtotal", g.regular)}
           {g.topLines.map((l, i) =>
             lineRow(l, g.regularLines.length + i + 1, true),
           )}
           {g.topLines.length > 0 &&
-            sub("ts", pick("Top subtotal", "టాప్ ఉప మొత్తం"), g.top)}
+            sub("ts", "Top subtotal", g.top)}
         </tbody>
         <tfoot>
           <tr className="invoice-row-total">
             <th scope="row" colSpan={3}>
-              {pick("Total", "మొత్తం")}
+              {"Total"}
             </th>
             <td className="numeric">{g.total.quantity}</td>
             <td className="numeric">{area(g.total.sqFt)}</td>
@@ -109,10 +107,10 @@ export default function InvoiceTable({ record }) {
     <section className="invoice-section">
       <div className="invoice-section-heading">
         <div>
-          <h3>{pick("Rows", "వరుసలు")}</h3>
+          <h3>{"Rows"}</h3>
           <p>
             {groups.length}{" "}
-            {groups.length === 1 ? pick("row", "వరుస") : pick("rows", "వరుసలు")}
+            {groups.length === 1 ? "row" : "rows"}
           </p>
         </div>
       </div>
@@ -131,29 +129,24 @@ export default function InvoiceTable({ record }) {
         })}
       </div>
       {!groups.length && (
-        <p className="p-4 text-gray-600">
-          {pick(
-            "No measurement rows in this record.",
-            "ఈ రికార్డులో కొలతలు లేవు.",
-          )}
+        <p className="p-4 text-on-surface-variant">
+          {"No measurement rows in this record."}
         </p>
       )}
       {pages > 1 && (
         <div className="table-pagination">
-          <span role="status" className="text-sm text-gray-600">
-            {pick("Page", "పేజీ")} {current + 1} / {pages} · {groups.length}{" "}
-            {pick("rows", "వరుసలు")}
+          <span role="status" className="text-sm text-on-surface-variant">
+            {"Page"} {current + 1} / {pages} · {groups.length}{" "}
+            {"rows"}
           </span>
           <div className="flex gap-2">
             <Button
-              en="Previous"
-              te="మునుపటి"
+              label="Previous"
               disabled={current === 0}
               onClick={() => setPage(current - 1)}
             />
             <Button
-              en="Next"
-              te="తర్వాత"
+              label="Next"
               disabled={current + 1 >= pages}
               onClick={() => setPage(current + 1)}
             />

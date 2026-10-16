@@ -7,6 +7,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const sharp = require('sharp');
+const { createHash } = require('node:crypto');
 const API_PREFIX = '/api';
 
 test('pilot setup, upload, draft retries, finalization and historical bills', async t => {
@@ -35,7 +36,14 @@ test('pilot setup, upload, draft retries, finalization and historical bills', as
   const logo = await sharp({ create: { width: 20, height: 20, channels: 3, background: '#115e59' } }).png().toBuffer();
   const uploaded = await call('POST', settingsPath + '/logo', logo, 'image/png');
   assert.equal(uploaded.status, 200);
-  assert.equal((await fetch(base + uploaded.data.logoPath, { headers: { Cookie: cookie } })).status, 200);
+  // Logos are content-addressed: /uploads/logos/<sha256 of the stored PNG>.png.
+  const sha = uploaded.data.logoPath.match(/^\/uploads\/logos\/([a-f0-9]{64})\.png$/)?.[1];
+  assert.ok(sha, uploaded.data.logoPath);
+  const logoResponse = await fetch(base + uploaded.data.logoPath, { headers: { Cookie: cookie } });
+  assert.equal(logoResponse.status, 200);
+  assert.equal(createHash('sha256').update(Buffer.from(await logoResponse.arrayBuffer())).digest('hex'), sha);
+  assert.match(logoResponse.headers.get('cache-control'), /immutable/);
+  assert.equal((await call('POST', settingsPath + '/logo', logo, 'image/png')).data.logoPath, uploaded.data.logoPath);
   assert.equal((await call('POST', settingsPath + '/logo', Buffer.from('fake'), 'image/png')).status, 400);
   assert.equal((await call('POST', settingsPath + '/logo', logo, 'image/jpeg')).status, 400);
   assert.equal((await call('POST', settingsPath + '/logo', Buffer.alloc(2 * 1024 * 1024 + 1), 'image/png')).status, 413);
@@ -54,8 +62,14 @@ test('pilot setup, upload, draft retries, finalization and historical bills', as
   const finalized = await call('POST', `${API_PREFIX}/dispatches/${id}/finalize`);
   assert.equal(finalized.data.status, 'Dispatched');
   assert.equal(finalized.data.businessSnapshot.businessName, 'Original Business');
-  assert.match(finalized.data.businessSnapshot.logoDataUrl, /^data:image\/png;base64,/);
+  // The snapshot references the logo instead of embedding its bytes.
+  const { bytes, ...logoReference } = finalized.data.businessSnapshot.logo;
+  assert.deepEqual(logoReference, { sha256: sha, width: 20, height: 20 });
+  assert.ok(Number.isInteger(bytes) && bytes > 0);
+  assert.equal(finalized.data.businessSnapshot.logoDataUrl, undefined);
   await call('PUT', settingsPath + '/profile', { businessName: 'Changed Business', removeLogo: true, defaultRoyaltyFee: 999 });
+  // A historical bill's logo stays fetchable after the current logo is removed.
+  assert.equal((await fetch(`${base}/uploads/logos/${sha}.png`, { headers: { Cookie: cookie } })).status, 200);
   const rateId = uploaded.data.stoneRates[0].id;
   assert.equal((await call('PUT', `${settingsPath}/stone-rates/${rateId}`, { stoneType: 'Renamed Stone', finish: 'Honed', defaultRate: 99 })).status, 200);
   assert.equal((await call('PUT', `${API_PREFIX}/dispatches/${id}`, body)).status, 400);
@@ -64,4 +78,10 @@ test('pilot setup, upload, draft retries, finalization and historical bills', as
   assert.deepEqual(historical.businessSnapshot, finalized.data.businessSnapshot);
   assert.equal(historical.inventory[0].stoneType, 'Stone');
   assert.equal((await call('GET', `${API_PREFIX}/dispatches`)).data.data.length, 1);
+  // Revisions keep the previous version but no longer copy businessSnapshot.
+  const revised = await call('PUT', `${API_PREFIX}/dispatches/${id}/revise`, { ...body, updatedAt: historical.updatedAt });
+  assert.equal(revised.status, 200);
+  assert.equal(revised.data.revisions.length, 1);
+  assert.equal(revised.data.revisions[0].businessSnapshot, undefined);
+  assert.deepEqual(revised.data.businessSnapshot, finalized.data.businessSnapshot);
 });

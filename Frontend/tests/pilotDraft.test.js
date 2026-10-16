@@ -29,6 +29,7 @@ test('detailErrors reports each missing load detail by field and agrees with pay
   const blank = { ...newDraft(), date: '', fee: '-1' };
   assert.deepEqual(Object.keys(detailErrors(blank)).sort(), ['buyerDestination', 'date', 'fee', 'partyName', 'supervisor', 'truckNumber']);
   assert.equal(detailErrors({ ...blank, partyName: '   ' }).partyName, 'Enter the party name');
+  assert.equal(detailErrors(blank).supervisor, 'Enter the manager name');
   const filled = { ...newDraft(500), partyName: 'Buyer', truckNumber: 'TN 01 AB 1234', buyerDestination: 'Kadapa', supervisor: 'Ravi',
     rows: [{ stoneType: 'Granite', finish: 'Polished', rowNo: 1, lengthFt: 3, widthFt: 2, quantity: 1, ratePerSqFt: 40, category: 'Regular' }] };
   assert.deepEqual(detailErrors(filled), {});

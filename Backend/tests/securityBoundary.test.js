@@ -18,12 +18,21 @@ test('HTTP boundaries protect logs, browser responses and organization logos', a
   const otherLogo = 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb.png';
   await fs.writeFile(path.join(directory, logo), 'owner-logo');
   await fs.writeFile(path.join(directory, otherLogo), 'other-logo');
+  // Content-addressed logos live under org/<organizationId>/<sha256>.png.
+  const ORG_A = 'aaaaaaaa-0000-4000-8000-00000000000a';
+  const ORG_B = 'bbbbbbbb-0000-4000-8000-00000000000b';
+  const shaA = createHash('sha256').update('owner-content-logo').digest('hex');
+  const shaB = createHash('sha256').update('other-content-logo').digest('hex');
+  await fs.mkdir(path.join(directory, 'org', ORG_A), { recursive: true });
+  await fs.mkdir(path.join(directory, 'org', ORG_B), { recursive: true });
+  await fs.writeFile(path.join(directory, 'org', ORG_A, `${shaA}.png`), 'owner-content-logo');
+  await fs.writeFile(path.join(directory, 'org', ORG_B, `${shaB}.png`), 'other-content-logo');
   const token = 'a'.repeat(64);
   const tokenHash = createHash('sha256').update(token).digest('hex');
   let active = true;
   const database = {
-    session: { findFirst: async ({ where }) => where.tokenHash === tokenHash ? { user: { id: 'owner', organizationId: 'org-a', active, role: 'Admin' } } : null },
-    masterSettings: { findUnique: async ({ where }) => { assert.equal(where.id, 'org-a'); return { logoPath: `/uploads/${logo}` }; } },
+    session: { findFirst: async ({ where }) => where.tokenHash === tokenHash ? { user: { id: 'owner', organizationId: ORG_A, active, role: 'Admin' } } : null },
+    masterSettings: { findUnique: async ({ where }) => { assert.equal(where.id, ORG_A); return { logoPath: `/uploads/${logo}` }; } },
   };
   require.cache[require.resolve('../utils/prisma')] = { exports: database };
   const server = http.createServer(require('../app'));
@@ -61,6 +70,30 @@ test('HTTP boundaries protect logs, browser responses and organization logos', a
     active = false;
     assert.equal((await fetch(base + `/uploads/${logo}`, { headers: cookie })).status, 403);
     active = true;
+  });
+  await t.test('content-addressed logos resolve in the session organization only', async () => {
+    const own = await fetch(base + `/uploads/logos/${shaA}.png`, { headers: cookie });
+    assert.equal(own.status, 200);
+    assert.equal(await own.text(), 'owner-content-logo');
+    assert.equal(own.headers.get('cache-control'), 'private, max-age=31536000, immutable');
+    assert.match(own.headers.get('content-type'), /^image\/png/);
+    assert.equal(own.headers.get('x-content-type-options'), 'nosniff');
+    assert.equal((await fetch(base + `/uploads/logos/${shaA}.png`, { method: 'HEAD', headers: cookie })).status, 200);
+    // A foreign organization's sha is simply not in this organization's folder.
+    for (const target of [`${shaB}.png`, `${'0'.repeat(64)}.png`, `${shaA}.PNG`, `${shaA.slice(1)}.png`, logo, `..%2f${shaA}.png`, `%2e%2e%2forg%2f${ORG_B}%2f${shaB}.png`, `${shaA}.png/extra`]) {
+      const response = await fetch(base + '/uploads/logos/' + target, { headers: cookie });
+      assert.equal(response.status, 404, target);
+      const body = await response.text();
+      assert.ok(!body.includes('other-content-logo') && !body.includes('owner-content-logo'), target);
+      assert.equal(response.headers.get('cache-control'), 'private, no-store', target);
+    }
+    assert.equal((await fetch(base + `/uploads/org/${ORG_B}/${shaB}.png`, { headers: cookie })).status, 404);
+    assert.equal((await fetch(base + `/uploads/logos/${shaA}.png`)).status, 401);
+    active = false;
+    assert.equal((await fetch(base + `/uploads/logos/${shaA}.png`, { headers: cookie })).status, 403);
+    active = true;
+    // The current-logo route keeps no-store: its meaning changes when the logo is removed.
+    assert.equal((await fetch(base + `/uploads/${logo}`, { headers: cookie })).headers.get('cache-control'), 'private, no-store');
   });
   await t.test('JSON is bounded and malformed input stays generic', async () => {
     const large = await fetch(base + `${API_PREFIX}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: 'x'.repeat(103000) }) });

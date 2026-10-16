@@ -1,4 +1,3 @@
-import { useLanguage } from "../../i18n/LanguageContext";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { request, reviseDispatch } from "../../lib/pilotApi.js";
 import {
@@ -19,6 +18,7 @@ import {
   money,
 } from "../../utils/pilotDraft.js";
 import {
+  BackButton,
   Button,
   Card,
   ComboField,
@@ -27,8 +27,25 @@ import {
   ErrorMessage,
 } from "./Controls.jsx";
 import MeasurementEntry from "./MeasurementEntry.jsx";
+import { shouldRefreshEntryRate } from "../../utils/productForm.js";
 import LoadSummary from "./LoadSummary.jsx";
+import ConfirmDialog from "./ConfirmDialog.jsx";
 import { decimalToFraction } from "../../utils/fractionParser.js";
+import {
+  mergeSuggestions,
+  isSavedSuggestion,
+  suggestionKey,
+} from "../../utils/loadSuggestions.js";
+import {
+  canAddProduct,
+  canManageProducts,
+  canRemoveSuggestions,
+} from "../../utils/roles.js";
+import {
+  removeTruck,
+  removeDestination,
+  removeStoneRate,
+} from "../../lib/api.js";
 
 export default function NewLoad({
   settings,
@@ -38,9 +55,9 @@ export default function NewLoad({
   canFinalize = true,
   recentLoads = [],
   user,
+  onSettingsChanged,
 }) {
-  const { pick, language } = useLanguage();
-  const locale = language === "te" ? "te-IN" : "en-IN";
+  const locale = "en-IN";
   const [draft, setDraft] = useState(
     () =>
       initialDraft || {
@@ -59,6 +76,47 @@ export default function NewLoad({
         ].filter(Boolean),
       ),
     ].slice(0, 30);
+  // Truck and destination suggestions: saved lists first, then recent loads, one entry per key.
+  // A suggestion the Admin removes stays hidden for this session so recent loads do not bring it back.
+  const [hidden, setHidden] = useState(() => ({
+    trucks: new Set(),
+    destinations: new Set(),
+  }));
+  const removing = useRef(new Set());
+  const truckOptions = mergeSuggestions(
+    "trucks",
+    settings.savedTrucks,
+    recentLoads.map((l) => l.logistics?.truckNumber),
+    hidden.trucks,
+  );
+  const destinationOptions = mergeSuggestions(
+    "destinations",
+    settings.savedDestinations,
+    recentLoads.map((l) => l.logistics?.buyerDestination),
+    hidden.destinations,
+  );
+  const mayRemoveSuggestions = canRemoveSuggestions(user?.role);
+  // Never touches the draft or the measurement entry. Returns false when the removal failed.
+  async function removeSuggestion(kind, value) {
+    const key = suggestionKey(kind, value);
+    if (removing.current.has(`${kind}:${key}`)) return false;
+    removing.current.add(`${kind}:${key}`);
+    try {
+      const remove = kind === "trucks" ? removeTruck : removeDestination;
+      const updated = await remove(user.organizationId, value);
+      if (updated) onSettingsChanged?.(updated);
+      setHidden((current) => ({
+        ...current,
+        [kind]: new Set([...current[kind], key]),
+      }));
+      return true;
+    } catch {
+      setError("Could not remove this suggestion. Try again.");
+      return false;
+    } finally {
+      removing.current.delete(`${kind}:${key}`);
+    }
+  }
   const first = settings.stoneRates[0];
   const [entry, setEntry] = useState(() => {
     const saved = draft.entry;
@@ -87,6 +145,49 @@ export default function NewLoad({
   const [fieldErrors, setFieldErrors] = useState({});
   const [entryFieldErrors, setEntryFieldErrors] = useState({});
   const [notice, setNotice] = useState("");
+  // Admin removes a product from the product list after confirming. Rows already added keep
+  // their own product name and rate, so the draft is not touched.
+  const [confirmProduct, setConfirmProduct] = useState(null);
+  const removingProduct = useRef(false);
+  async function removeProduct(product) {
+    setConfirmProduct(null);
+    if (removingProduct.current) return;
+    removingProduct.current = true;
+    setError("");
+    try {
+      const updated = await removeStoneRate(user.organizationId, product.id);
+      if (updated) {
+        onSettingsChanged?.(updated);
+        // The selected product is gone: fall back to the first remaining one (or none).
+        const next = (updated.stoneRates || []).find((p) => p.id !== product.id);
+        setEntry((current) =>
+          current.productId === product.id
+            ? { ...current, productId: next?.id || "", rate: String(next?.defaultRate ?? "") }
+            : current,
+        );
+      }
+    } catch {
+      setError("Could not remove this product. Try again.");
+    } finally {
+      removingProduct.current = false;
+    }
+  }
+  // Admin edits a product's name, finish or rate. The selected entry takes the new rate only
+  // when the default changed and the entry still used the old default (a typed rate is kept);
+  // rows already added keep their copied values, like saved bills.
+  function productEdited(data, product, previous) {
+    onSettingsChanged?.(data);
+    if (!product) return;
+    const refresh = (rate) =>
+      shouldRefreshEntryRate(rate, previous?.defaultRate, product.defaultRate);
+    if (entry.productId !== product.id || !refresh(entry.rate)) return;
+    setEntryFieldErrors(({ rate: _rate, ...rest }) => rest);
+    setEntry((current) =>
+      current.productId === product.id && refresh(current.rate)
+        ? { ...current, rate: String(product.defaultRate ?? "") }
+        : current,
+    );
+  }
   const root = useRef(null);
   const [storageError, setStorageError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -128,17 +229,14 @@ export default function NewLoad({
           ok === true
             ? ""
             : ok === DRAFTS_FULL
-              ? pick(
-                  `This phone already keeps ${MAX_DRAFTS} unfinished loads. Save or delete one so this load is kept.`,
-                  `ఈ ఫోన్‌లో ఇప్పటికే ${MAX_DRAFTS} పూర్తి కాని లోడ్లు ఉన్నాయి. ఈ లోడ్ ఉండాలంటే ఒకదాన్ని సేవ్ చేయండి లేదా తొలగించండి.`,
-                )
+              ? `This phone already keeps ${MAX_DRAFTS} unfinished loads. Save or delete one so this load is kept.`
               : "This browser cannot keep a recovery copy. Save your draft before leaving.",
         );
     });
     return () => {
       cancelled = true;
     };
-  }, [draft, entry, settings.id, recoveryReady, reviseOf, pick]);
+  }, [draft, entry, settings.id, recoveryReady, reviseOf]);
   // Autosave keeps ordinary loads on this phone. Two cases are not kept and get
   // a leave warning: an admin revision (never stored locally) with edits, and a
   // load the phone could not store (drafts full or storage unavailable).
@@ -162,24 +260,15 @@ export default function NewLoad({
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [mayLoseWork]);
-  async function goBack() {
-    if (
-      mayLoseWork &&
-      !window.confirm(
-        revisionDirty
-          ? pick(
-              "Leave without saving your invoice changes?",
-              "బిల్లు మార్పులు సేవ్ చేయకుండా వెళ్ళాలా?",
-            )
-          : pick(
-              "This load is not stored on this phone. Leave without saving it?",
-              "ఈ లోడ్ ఈ ఫోన్‌లో నిల్వ కాలేదు. సేవ్ చేయకుండా వెళ్ళాలా?",
-            ),
-      )
-    )
-      return;
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
+  async function leave() {
+    setConfirmingLeave(false);
     if (!reviseOf) await flushDraft(settings.id);
     onBack();
+  }
+  function goBack() {
+    if (mayLoseWork) setConfirmingLeave(true);
+    else leave();
   }
   // The edit and review screens swap the button that was clicked; move focus to the heading.
   const heading = useRef(null);
@@ -257,15 +346,9 @@ export default function NewLoad({
     } catch (err) {
       setError(
         err.status === 409
-          ? pick(
-              "This invoice changed since you opened it. Cancel to reload the latest bill, then try again.",
-              "మీరు తెరిచిన తర్వాత ఈ బిల్లు మారింది. తాజా బిల్లు కోసం రద్దు చేసి, మళ్ళీ ప్రయత్నించండి.",
-            )
+          ? "This invoice changed since you opened it. Cancel to reload the latest bill, then try again."
           : err.status === 403
-            ? pick(
-                "You are not permitted to edit this invoice.",
-                "ఈ బిల్లును మార్చడానికి మీకు అనుమతి లేదు.",
-              )
+            ? "You are not permitted to edit this invoice."
             : err.message,
       );
     } finally {
@@ -408,49 +491,39 @@ export default function NewLoad({
   if (!recoveryReady)
     return (
       <p role="status">
-        {pick("Restoring draft…", "డ్రాఫ్ట్ పునరుద్ధరిస్తోంది…")}
+        {"Restoring draft…"}
       </p>
     );
   return (
     <div className="space-y-4" ref={root}>
       <div className="screen-heading">
+        <BackButton
+          disabled={busy}
+          onClick={review ? () => showReview(false) : goBack}
+          label={review ? "Back to edit" : reviseOf ? "Cancel and back to bill" : "Back to dashboard"}
+        />
         <h1 ref={heading} tabIndex={-1}>
           {review
             ? reviseOf
-              ? pick("Review changes", "మార్పులు తనిఖీ చేయండి")
-              : pick("Review load", "లోడ్ వివరాలు తనిఖీ చేయండి")
+              ? "Review changes"
+              : "Review load"
             : reviseOf
-              ? pick("Edit invoice", "బిల్లు మార్చండి")
-              : pick("New load", "కొత్త లోడ్")}
+              ? "Edit invoice"
+              : "New load"}
         </h1>
-        <button
-          type="button"
-          className="text-button"
-          disabled={busy}
-          onClick={review ? () => showReview(false) : goBack}
-        >
-          {review
-            ? pick("Back to edit", "వివరాలు మార్చండి")
-            : reviseOf
-              ? pick("Cancel and back to bill", "రద్దు చేసి బిల్లుకు వెళ్ళండి")
-              : pick("Back to dashboard", "డ్యాష్‌బోర్డ్‌కు వెళ్ళండి")}
-        </button>
       </div>
       {reviseOf && (
         <section
           className="flex flex-col gap-1 border-l-2 border-base-content/30 pl-3 text-sm"
-          aria-label={pick("Editing a finalized invoice", "ఖరారైన బిల్లును మారుస్తున్నారు")}
+          aria-label="Editing a finalized invoice"
         >
           <strong className="font-semibold">
             {reviseOf.slip
-              ? pick(`Editing finalized invoice ${reviseOf.slip}`, `ఖరారైన బిల్లు ${reviseOf.slip} మారుస్తున్నారు`)
-              : pick("Editing finalized invoice", "ఖరారైన బిల్లును మారుస్తున్నారు")}
+              ? `Editing finalized invoice ${reviseOf.slip}`
+              : "Editing finalized invoice"}
           </strong>
           <span className="opacity-70">
-            {pick(
-              "The slip number and status stay the same. The current version is kept in the invoice history.",
-              "స్లిప్ నంబర్ మరియు స్థితి మారవు. ప్రస్తుత వెర్షన్ బిల్లు చరిత్రలో భద్రపరచబడుతుంది.",
-            )}
+            {"The slip number and status stay the same. The current version is kept in the invoice history."}
           </span>
         </section>
       )}
@@ -459,10 +532,9 @@ export default function NewLoad({
       {!review ? (
         <div className="load-entry-grid">
           <Card className="gap-4 logistics-fields">
-            <h2>{pick("Load details", "లోడ్ వివరాలు")}</h2>
+            <h2>{"Load details"}</h2>
             <ComboField
-              en="Party name"
-              te="పార్టీ పేరు"
+              label="Party name"
               name="partyName"
               required
               maxLength={120}
@@ -472,21 +544,27 @@ export default function NewLoad({
               onValue={(value) => change("partyName")({ target: { value } })}
             />
             <ComboField
-              en="Truck number"
-              te="లారీ నంబర్"
+              label="Truck number"
               name="truckNumber"
               spellCheck={false}
               required
               maxLength={40}
               autoCapitalize="characters"
-              options={choices("truckNumber", settings.savedTrucks)}
+              options={truckOptions}
+              onRemoveOption={
+                mayRemoveSuggestions
+                  ? (value) => removeSuggestion("trucks", value)
+                  : undefined
+              }
+              isRemovable={(value) =>
+                isSavedSuggestion("trucks", settings.savedTrucks, value)
+              }
               error={fieldErrors.truckNumber}
               value={draft.truckNumber}
               onValue={(value) => change("truckNumber")({ target: { value } })}
             />
             <DateField
-              en="Load date"
-              te="తేదీ"
+              label="Load date"
               name="date"
               required
               error={fieldErrors.date}
@@ -494,12 +572,23 @@ export default function NewLoad({
               onValue={(value) => change("date")({ target: { value } })}
             />
             <ComboField
-              en="Destination"
-              te="గమ్యస్థానం"
+              label="Destination"
               name="buyerDestination"
               required
               maxLength={200}
-              options={choices("buyerDestination", settings.savedDestinations)}
+              options={destinationOptions}
+              onRemoveOption={
+                mayRemoveSuggestions
+                  ? (value) => removeSuggestion("destinations", value)
+                  : undefined
+              }
+              isRemovable={(value) =>
+                isSavedSuggestion(
+                  "destinations",
+                  settings.savedDestinations,
+                  value,
+                )
+              }
               error={fieldErrors.buyerDestination}
               value={draft.buyerDestination}
               onValue={(value) =>
@@ -507,8 +596,7 @@ export default function NewLoad({
               }
             />
             <Field
-              en="Supervisor"
-              te="సూపర్‌వైజర్"
+              label="Manager"
               name="supervisor"
               autoComplete="off"
               required
@@ -525,17 +613,26 @@ export default function NewLoad({
             onAdd={add}
             errors={entryFieldErrors}
             notice={notice}
+            canAddProduct={canAddProduct(user?.role)}
+            organizationId={user?.organizationId}
+            onProductAdded={(data) => onSettingsChanged?.(data)}
+            onRemoveProduct={
+              canManageProducts(user?.role) ? setConfirmProduct : undefined
+            }
+            onEditProduct={
+              canManageProducts(user?.role) ? productEdited : undefined
+            }
           />
         </div>
       ) : (
         <Card className="review-summary">
           <dl>
             {[
-              [pick("Party", "పార్టీ"), draft.partyName, true],
-              [pick("Truck", "లారీ"), draft.truckNumber],
-              [pick("Date", "తేదీ"), reviewDate(draft.date)],
-              [pick("Destination", "గమ్యస్థానం"), draft.buyerDestination],
-              [pick("Supervisor", "సూపర్‌వైజర్"), draft.supervisor],
+              ["Party", draft.partyName, true],
+              ["Truck", draft.truckNumber],
+              ["Date", reviewDate(draft.date)],
+              ["Destination", draft.buyerDestination],
+              ["Manager", draft.supervisor],
             ].map(([label, value, strong]) => (
               <div key={label} className={strong ? "is-primary" : undefined}>
                 <dt>{label}</dt>
@@ -547,7 +644,7 @@ export default function NewLoad({
       )}
       {removed && !review && (
         <p role="status" aria-live="polite" className="measurement-undo">
-          {pick("Entry removed.", "కొలత తొలగించబడింది.")}{" "}
+          {"Entry removed."}{" "}
           <button
             type="button"
             className="text-button"
@@ -558,7 +655,7 @@ export default function NewLoad({
               setRemoved(null);
             }}
           >
-            {pick("Undo", "రద్దు చేయండి")}
+            {"Undo"}
           </button>
         </p>
       )}
@@ -571,7 +668,7 @@ export default function NewLoad({
               aria-labelledby={titleId}
             >
               <h2 className="row-group-title" id={titleId}>
-                {pick("Row", "వరుస")} {no}
+                {"Row"} {no}
               </h2>
               {lines.map(({ r, i, order }, n) => {
                 const position = (review ? n : order) + 1;
@@ -579,26 +676,23 @@ export default function NewLoad({
                 <Card key={i} className="measurement-record gap-2">
                   <strong className="break-words">
                     {position}. {r.stoneType} · {r.finish}
-                    {r.category === "TOP" ? ` · ${pick("Top", "టాప్")}` : ""}
+                    {r.category === "TOP" ? ` · ${"Top"}` : ""}
                   </strong>
                   <p>
                     {decimalToFraction(r.lengthFt)} ×{" "}
-                    {decimalToFraction(r.widthFt)}{"\u00A0"}{pick("ft", "అడుగులు")} ×{" "}
-                    {countFormat.format(r.quantity)}{"\u00A0"}{pick("pieces", "ముక్కలు")}
+                    {decimalToFraction(r.widthFt)}{"\u00A0"}{"ft"} ×{" "}
+                    {countFormat.format(r.quantity)}{"\u00A0"}{"pieces"}
                   </p>
                   <p className="font-semibold">
-                    {areaFormat.format(r.sqFt)}{"\u00A0"}{pick("sq\u00A0ft", "చ.అ.")} ·{" "}
+                    {areaFormat.format(r.sqFt)}{"\u00A0"}{"sq\u00A0ft"} ·{" "}
                     {money(r.lineTotal)}
                   </p>
                   {!review && (
                     <div className="measurement-actions">
                       <Button
-                        en="Edit entry"
-                        te="కొలత మార్చండి"
-                        aria-label={pick(
-                          `Edit entry ${position}, row ${no}`,
-                          `కొలత మార్చండి ${position}, వరుస ${no}`,
-                        )}
+                        variant="ghost"
+                        label="Edit entry"
+                        aria-label={`Edit entry ${position}, row ${no}`}
                         onClick={() => {
                           if (entry.length || entry.width) {
                             setNotice(
@@ -631,12 +725,9 @@ export default function NewLoad({
                         }}
                       />
                       <Button
-                        en="Remove entry"
-                        te="కొలత తొలగించండి"
-                        aria-label={pick(
-                          `Remove entry ${position}, row ${no}`,
-                          `కొలత తొలగించండి ${position}, వరుస ${no}`,
-                        )}
+                        variant="danger-quiet"
+                        label="Remove entry"
+                        aria-label={`Remove entry ${position}, row ${no}`}
                         onClick={() => {
                           setDraft({
                             ...draft,
@@ -660,8 +751,7 @@ export default function NewLoad({
       {!review && (
         <Card className="fee-field">
           <Field
-            en="Loading charges (₹)"
-            te="లోడింగ్ ఛార్జీలు (₹)"
+            label="Loading charges (₹)"
             type="number"
             min="0"
             step="0.01"
@@ -674,11 +764,8 @@ export default function NewLoad({
       )}
       <LoadSummary rows={rows} summary={summary} />
       {review && !reviseOf && (
-        <p className="text-sm text-gray-700">
-          {pick(
-            "Finalizing locks this bill’s quantities, prices, totals, and business branding.",
-            "ఖరారు చేసిన తర్వాత ఈ బిల్లులోని కొలతలు, ధరలు, మొత్తాలు మరియు వ్యాపార వివరాలు మారవు.",
-          )}
+        <p className="text-sm text-on-surface">
+          {"Finalizing locks this bill’s quantities, prices, totals, and business branding."}
         </p>
       )}
       <div className="workflow-actions">
@@ -689,8 +776,7 @@ export default function NewLoad({
                 className="w-full"
                 primary
                 disabled={busy}
-                en={busy ? "Saving…" : "Save invoice changes"}
-                te={busy ? "సేవ్ అవుతోంది…" : "బిల్లు మార్పులు సేవ్ చేయండి"}
+                label={busy ? "Saving…" : "Save invoice changes"}
                 onClick={revise}
               />
             ) : canFinalize ? (
@@ -698,16 +784,12 @@ export default function NewLoad({
                 className="w-full"
                 primary
                 disabled={busy}
-                en={busy ? "Saving…" : "Create invoice"}
-                te={busy ? "సేవ్ అవుతోంది…" : "ఖరారు చేసి పంపండి"}
+                label={busy ? "Saving…" : "Create invoice"}
                 onClick={() => save(true)}
               />
             ) : (
               <p className="font-semibold">
-                {pick(
-                  "Save the draft for your dispatcher to finalize.",
-                  "డిస్పాచర్ ఖరారు చేయడానికి డ్రాఫ్ట్ సేవ్ చేయండి.",
-                )}
+                {"Save the draft for your dispatcher to finalize."}
               </p>
             )}
           </>
@@ -715,8 +797,7 @@ export default function NewLoad({
           <Button
             className="w-full"
             primary
-            en="Review load"
-            te="లోడ్ తనిఖీ చేయండి"
+            label="Review load"
             onClick={openReview}
           />
         )}
@@ -724,12 +805,36 @@ export default function NewLoad({
           <Button
             className="w-full"
             disabled={busy}
-            en="Save draft"
-            te="డ్రాఫ్ట్ సేవ్ చేయండి"
+            label="Save draft"
             onClick={() => save(false)}
           />
         )}
       </div>
+      <ConfirmDialog
+        open={confirmingLeave}
+        title={
+          revisionDirty
+            ? "Leave without saving your invoice changes?"
+            : "This load is not stored on this phone. Leave without saving it?"
+        }
+        cancelLabel="Stay here"
+        confirmLabel="Leave"
+        onCancel={() => setConfirmingLeave(false)}
+        onConfirm={leave}
+      />
+      <ConfirmDialog
+        open={!!confirmProduct}
+        title={
+          confirmProduct
+            ? `Remove ${confirmProduct.stoneType} (${confirmProduct.finish})?`
+            : ""
+        }
+        message="Saved bills keep their rates."
+        cancelLabel="Keep product"
+        confirmLabel="Remove product"
+        onCancel={() => setConfirmProduct(null)}
+        onConfirm={() => confirmProduct && removeProduct(confirmProduct)}
+      />
     </div>
   );
 }

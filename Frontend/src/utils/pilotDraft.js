@@ -13,7 +13,21 @@ export function newDraft(fee = 0) {
 const DRAFT_SALT_KEY = 'stonedesk:draft-salt:v1';
 const DRAFT_IV_SIZE = 12;
 
-async function getEncryptionKey(organizationId, storage = localStorage) {
+// PBKDF2 takes a noticeable moment on phones. Cache the derived key per storage,
+// organization and salt so autosave finishes before a closing tab is torn down.
+const keyCache = new WeakMap();
+function getEncryptionKey(organizationId, storage = localStorage) {
+  let cache = keyCache.get(storage);
+  if (!cache) { cache = new Map(); keyCache.set(storage, cache); }
+  const id = `${organizationId}:${storage.getItem(`${DRAFT_SALT_KEY}:${organizationId}`) || ''}`;
+  if (!cache.has(id)) {
+    const promise = deriveEncryptionKey(organizationId, storage);
+    cache.set(id, promise);
+    promise.catch(() => cache.delete(id));
+  }
+  return cache.get(id);
+}
+async function deriveEncryptionKey(organizationId, storage) {
   let salt = storage.getItem(`${DRAFT_SALT_KEY}:${organizationId}`);
   if (!salt) {
     salt = crypto.getRandomValues(new Uint8Array(16));
@@ -125,6 +139,8 @@ export async function flushDraft(organizationId, storage = localStorage) {
 }
 /** All unfinished drafts, newest first, each with its savedAt time (ms). */
 export async function readDrafts(storage = localStorage, organizationId) {
+  // Derive the key now, even with no drafts yet, so the first autosave is quick.
+  try { getEncryptionKey(organizationId, storage).catch(() => {}); } catch { /* storage blocked */ }
   await pendingWrites.get(storage)?.get(organizationId);
   return (await storedList(organizationId, storage)).map(entry => ({ ...entry.draft, savedAt: entry.savedAt }));
 }
@@ -158,7 +174,7 @@ export const DETAIL_MESSAGES = Object.freeze({
   truckNumber: 'Enter the truck number',
   date: 'Enter a valid date (dd/mm/yyyy)',
   buyerDestination: 'Enter the destination',
-  supervisor: 'Enter the supervisor name',
+  supervisor: 'Enter the manager name',
 });
 export function detailErrors(draft) {
   const errors = {};

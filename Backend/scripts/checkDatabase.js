@@ -18,6 +18,19 @@ const { Client } = require('pg');
       } catch (error) {
         console.error(`${setting}: "passwordLogin" column unknown (${error.code || 'QUERY_ERROR'})`);
       }
+      // The logo bucket must stay backend-only (secret key): no storage.objects policies
+      // may reference it. Read-only; never prints policy text.
+      const bucket = process.env.SUPABASE_LOGO_BUCKET || 'stonedesk-logos';
+      try {
+        const { rows } = await client.query(
+          `SELECT count(*)::int AS n FROM pg_policies
+           WHERE schemaname = 'storage' AND (coalesce(qual, '') ILIKE $1 OR coalesce(with_check, '') ILIKE $1)`, [`%${bucket}%`]);
+        const found = rows[0]?.n || 0;
+        if (found) { console.error(`${setting}: storage policies on ${bucket}: ${found} found: remove them, the bucket must stay backend-only`); process.exitCode = 1; }
+        else console.log(`${setting}: storage policies on ${bucket}: none (deny-all)`);
+      } catch (error) {
+        console.error(`${setting}: storage policies on ${bucket} unknown (${error.code || 'QUERY_ERROR'})`);
+      }
     } catch (error) {
       console.error(`${setting}: connection failed (${error.code || 'CONNECTION_ERROR'})`); process.exitCode = 1;
     } finally { await client.end().catch(() => {}); }

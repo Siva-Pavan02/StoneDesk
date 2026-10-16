@@ -74,7 +74,7 @@
 .pilot.workspace .workspace-header .workspace-notifications:hover,
 .pilot.workspace .workspace-header .workspace-search-toggle:hover {
   border-color: #9bbab1;
-  background: #f1f6f3;
+  background: var(--ui-hover);
 }
 .pilot.workspace .workspace-header-actions {
   gap: 10px;
@@ -208,6 +208,87 @@
 .pilot.workspace .combo-list li.is-active {
   background: #e7f1ec;
   color: var(--ui-accent);
+}
+/* Saved suggestions the Admin can remove: text plus a × button in the same row. */
+.pilot.workspace .combo-list li.has-remove {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-block: 2px;
+  padding-right: 2px;
+}
+.pilot.workspace .combo-option-text {
+  flex: 1;
+  min-width: 0;
+  padding-block: 8px;
+}
+.pilot.workspace .combo-remove {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  border: 0;
+  border-radius: var(--ui-radius-xs);
+  background: transparent;
+  color: var(--workspace-muted);
+  cursor: pointer;
+  transition:
+    color 150ms var(--ui-ease),
+    background-color 150ms var(--ui-ease);
+}
+.pilot.workspace .combo-remove:hover,
+.pilot.workspace .combo-remove:focus-visible {
+  color: var(--ui-ink);
+  background: rgb(32 61 54 / 0.08);
+}
+.pilot.workspace .combo-remove:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 1px;
+}
+@media (pointer: coarse) {
+  .pilot.workspace .combo-remove {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+/* Inline "add product" panel inside the Measurements card. */
+.pilot.workspace .quick-product {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-surface);
+}
+.pilot.workspace .quick-product h3 {
+  margin: 0;
+  color: var(--ui-ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+.pilot.workspace .quick-product-fields {
+  display: grid;
+  gap: 12px;
+}
+.pilot.workspace .quick-product-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (min-width: 640px) {
+  .pilot.workspace .quick-product-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .pilot.workspace .quick-product-fields > :last-child {
+    grid-column: 1 / -1;
+  }
+}
+.pilot.workspace .product-hint {
+  margin: 0;
+  color: var(--workspace-muted);
+  font-size: 13px;
 }
 .pilot.workspace .placement-field {
   flex-direction: row;
@@ -435,21 +516,6 @@
   outline: 2px solid var(--ui-accent);
   outline-offset: 1px;
 }
-/* Native selects share the datalist chevron so every dropdown reads the same. */
-.pilot select.input {
-  appearance: none;
-  padding-right: 44px;
-  cursor: pointer;
-  text-overflow: ellipsis;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%2317645d' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 16px center;
-  background-size: 16px 16px;
-}
-.pilot select.input:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
 .pilot.workspace .logistics-fields .input:-webkit-autofill,
 .pilot.workspace .logistics-fields .input:-webkit-autofill:hover,
 .pilot.workspace .logistics-fields .input:-webkit-autofill:focus {
@@ -468,11 +534,6 @@
 .pilot.workspace .sidebar-link[aria-current="page"] {
   background: #e7f1ec;
   color: var(--ui-accent);
-}
-.pilot.workspace .workspace-create-load {
-  background: var(--ui-accent);
-  border-color: var(--ui-accent);
-  border-radius: 999px;
 }
 .account-monogram {
   display: inline-flex;
@@ -522,7 +583,7 @@
   max-height: 100dvh;
   margin: 0 auto 0 0;
   border: 0;
-  border-right: 1px solid #eaeaea;
+  border-right: 1px solid var(--ui-border);
   border-radius: 0 16px 16px 0;
   background: #fbfdfc;
   box-shadow: 8px 0 32px rgb(32 61 54 / 0.08);
@@ -563,7 +624,7 @@
   align-items: center;
   gap: 10px;
   padding: 0 2px 14px;
-  border-bottom: 1px solid #eaeaea;
+  border-bottom: 1px solid var(--ui-border);
 }
 .nav-drawer-head .brand-mark,
 .nav-drawer-head img {
@@ -629,7 +690,7 @@
   gap: 8px;
   margin-top: auto;
   padding-top: 14px;
-  border-top: 1px solid #eaeaea;
+  border-top: 1px solid var(--ui-border);
 }
 .nav-drawer-account {
   display: flex;
@@ -654,7 +715,7 @@
   border: 0;
   border-radius: var(--ui-radius-sm);
   background: transparent;
-  color: #9f2f2d;
+  color: var(--ui-danger);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -667,7 +728,7 @@
   height: 16px;
 }
 .nav-drawer-logout:hover {
-  background: #fdebec;
+  background: var(--ui-danger-soft);
 }
 .nav-drawer-logout:active {
   transform: scale(0.98);
@@ -681,8 +742,8 @@
   color: var(--ui-muted);
 }
 .sidebar-logout:hover {
-  background: #fdebec;
-  color: #9f2f2d;
+  background: var(--ui-danger-soft);
+  color: var(--ui-danger);
 }
 /* Unsaved drafts: one bordered list, one compact line per draft (no nested cards). */
 .dashboard-resume {
@@ -756,7 +817,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid #eaeaea;
+  border: 1px solid var(--ui-border);
   border-radius: var(--ui-radius-md);
   background: white;
 }
@@ -786,8 +847,8 @@
   transition: background-color var(--ui-dur) var(--ui-ease), border-color var(--ui-dur) var(--ui-ease), color var(--ui-dur) var(--ui-ease);
 }
 
-.icon-delete-button:hover:not(:disabled) { border-color: #f5d5d6; background: #fdebec; color: #9f2f2d; }
-.icon-delete-button:focus-visible { outline: 2px solid #9f2f2d; outline-offset: 2px; color: #9f2f2d; }
+.icon-delete-button:hover:not(:disabled) { border-color: var(--ui-danger-line); background: var(--ui-danger-soft); color: var(--ui-danger); }
+.icon-delete-button:focus-visible { outline: 2px solid var(--ui-danger); outline-offset: 2px; color: var(--ui-danger); }
 .icon-delete-button:disabled { cursor: default; opacity: .45; }
 /* Saved loads: delete and open share one right-aligned row; the confirm replaces the icon inline. */
 .load-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px; }
@@ -799,18 +860,13 @@
 /* Load more appends 20 rows at a time; off-screen cards skip layout and paint. */
 .pilot.workspace .dashboard-activity .mobile-load-record { content-visibility: auto; contain-intrinsic-size: auto 160px; }
 .pilot .load-actions-card .load-open-wide { flex: 1 1 auto; min-width: 0; }
-.load-actions-card .icon-delete-button { width: 44px; height: 44px; border-color: #eaeaea; }
+.load-actions-card .icon-delete-button { width: 44px; height: 44px; border-color: var(--ui-border); }
 .load-delete { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; font-size: 13px; }
 .load-actions-card .load-delete[data-state="confirming"] { flex: 1 1 100%; }
 .load-actions-card:has(.load-delete[data-state="confirming"]) { flex-wrap: wrap; }
 .load-delete-question { color: var(--ui-ink); font-weight: 500; white-space: nowrap; }
 /* In the table the question is read by screen readers only, so the row keeps its width and the open arrow stays visible. */
 .load-actions-cell .load-delete-question { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.load-delete-confirm, .load-delete-cancel { min-height: 32px; padding: 4px 10px; border: 1px solid #eaeaea; border-radius: 6px; background: white; font-size: 12px; font-weight: 500; white-space: nowrap; cursor: pointer; }
-.load-delete-confirm { border-color: #9f2f2d; background: #9f2f2d; color: white; }
-.load-delete-confirm:hover:not(:disabled) { background: #842624; }
-.load-delete-cancel { color: var(--ui-ink); }
-.load-delete-cancel:hover:not(:disabled) { background: #f7f6f3; }
 .load-delete-error { flex: 1 1 100%; text-align: right; white-space: normal; }
 .dashboard-overview {
   display: grid;
@@ -820,7 +876,7 @@
   display: flex;
   flex-direction: column;
   padding: 28px;
-  border: 1px solid #eaeaea;
+  border: 1px solid var(--ui-border);
   border-radius: var(--ui-radius-md);
   background: white;
 }
@@ -845,12 +901,12 @@
   text-transform: uppercase;
 }
 .priority-status.is-clear {
-  background: #edf3ec;
-  color: #346538;
+  background: var(--ui-success-soft);
+  color: var(--ui-success);
 }
 .priority-status.is-pending {
-  background: #fbf3db;
-  color: #956400;
+  background: var(--ui-warning-soft);
+  color: var(--ui-warning);
 }
 .dashboard-priority h2 {
   display: flex;
@@ -860,7 +916,7 @@
   margin-top: 24px;
 }
 .dashboard-priority h2 strong {
-  font-family: "Geist Mono", "Noto Telugu", monospace;
+  font-family: "Geist Mono", monospace;
   font-size: 48px;
   font-weight: 400;
   font-variant-numeric: tabular-nums;
@@ -874,7 +930,7 @@
 .dashboard-priority > p {
   max-width: 45ch;
   margin-block: 10px 24px;
-  color: #787774;
+  color: var(--ui-muted);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -886,14 +942,14 @@
   gap: 16px;
   margin-top: auto;
   padding-top: 14px;
-  border-top: 1px solid #eaeaea;
+  border-top: 1px solid var(--ui-border);
   color: var(--ui-ink);
   font-size: 13px;
   font-weight: 500;
   text-align: left;
 }
 .dashboard-priority-action:disabled {
-  color: #787774;
+  color: var(--ui-muted);
   opacity: 0.6;
 }
 .dashboard-create-load {
@@ -911,7 +967,7 @@
   font-weight: 500;
   transition: background-color 150ms ease;
 }
-.dashboard-create-load:hover { background: #134e4a; }
+.dashboard-create-load:hover { background: var(--ui-accent-hover); }
 .dashboard-create-load:active { transform: scale(0.98); }
 .dashboard-create-load:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
 .dashboard-create-load svg { width: 16px; height: 16px; }
@@ -954,7 +1010,7 @@
   border-top: 1px solid var(--workspace-border);
 }
 .dashboard-support-metric .dashboard-metric-value {
-  font-family: "Geist Mono", "Noto Telugu", monospace;
+  font-family: "Geist Mono", monospace;
   font-size: 27px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
@@ -967,10 +1023,10 @@
 .dashboard-queue {
   display: grid;
   margin-block: 16px 8px;
-  border-top: 1px solid #eaeaea;
+  border-top: 1px solid var(--ui-border);
 }
 .dashboard-queue li {
-  border-bottom: 1px solid #eaeaea;
+  border-bottom: 1px solid var(--ui-border);
 }
 .dashboard-queue-row {
   display: flex;
@@ -985,7 +1041,7 @@
   transition: background-color 150ms ease;
 }
 .dashboard-queue-row:hover {
-  background: #f7f6f3;
+  background: var(--ui-canvas);
 }
 .queue-main,
 .queue-side {
@@ -999,14 +1055,14 @@
 }
 .queue-lorry,
 .queue-amount {
-  font-family: "Geist Mono", "Noto Telugu", monospace;
+  font-family: "Geist Mono", monospace;
   font-size: 13px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 .queue-sub {
   overflow: hidden;
-  color: #787774;
+  color: var(--ui-muted);
   font-size: 12px;
   line-height: 1.5;
   text-overflow: ellipsis;
@@ -1018,18 +1074,18 @@ p.queue-sub {
 }
 .queue-age {
   flex-shrink: 0;
-  color: #787774;
+  color: var(--ui-muted);
   font-size: 12px;
 }
 .queue-age.is-late {
   padding: 2px 8px;
   border-radius: 9999px;
-  background: #fbf3db;
-  color: #956400;
+  background: var(--ui-warning-soft);
+  color: var(--ui-warning);
 }
 .dashboard-queue-empty {
   margin-block: 14px 8px;
-  color: #787774;
+  color: var(--ui-muted);
   font-size: 13px;
 }
 .pilot.workspace .dashboard-heading h1 {
@@ -1040,7 +1096,7 @@ p.queue-sub {
 }
 .pilot.workspace .dashboard-activity {
   border-radius: var(--ui-radius-md);
-  border-color: #eaeaea;
+  border-color: var(--ui-border);
 }
 .dashboard-activity .business-table th,
 .dashboard-activity .business-table td {
@@ -1120,7 +1176,7 @@ p.queue-sub {
   grid-area: value;
   align-self: center;
   margin: 0;
-  font-family: "Geist Mono", "Noto Telugu", monospace;
+  font-family: "Geist Mono", monospace;
   display: flex;
   align-items: baseline;
   justify-content: flex-end;
@@ -1240,7 +1296,7 @@ p.queue-sub {
 .analytics-table .business-table th,
 .analytics-table .business-table td {
   padding: 10px 0;
-  border-bottom: 1px solid #eaeaea;
+  border-bottom: 1px solid var(--ui-border);
   background: transparent;
   font-weight: 400;
   text-align: left;
@@ -1252,7 +1308,7 @@ p.queue-sub {
   letter-spacing: 0.06em;
 }
 .analytics-table .business-table :is(th, td):not(:first-child) {
-  font-family: "Geist Mono", "Noto Telugu", monospace;
+  font-family: "Geist Mono", monospace;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -1293,7 +1349,7 @@ p.queue-sub {
 }
 .analytics-insights li strong {
   flex: none;
-  font-family: "Geist Mono", "Noto Telugu", monospace;
+  font-family: "Geist Mono", monospace;
   font-weight: 500;
 }
 .analytics-warning {
@@ -1441,13 +1497,6 @@ p.queue-sub {
   padding: 24px;
   background: #edf4f0;
 }
-.pilot .control-button-primary {
-  border-radius: 999px;
-}
-.pilot .control-button-primary:has(.action-icon-disc) {
-  padding-block: 6px;
-  padding-right: 6px;
-}
 @keyframes drawer-reveal {
   from {
     transform: translateX(-100%);
@@ -1524,7 +1573,6 @@ p.queue-sub {
     width: calc(100% + 24px);
     margin-inline: -12px;
     padding-inline: 12px;
-    border-radius: var(--ui-radius-sm);
   }
   .settings-jump {
     padding-right: 32px;
@@ -1542,8 +1590,13 @@ p.queue-sub {
   .nav-drawer[open] .sidebar-link,
   .pilot.workspace .nav-drawer::backdrop,
   .refresh-spin,
-  .pilot.workspace .combo-list {
+  .pilot.workspace .combo-list,
+  .pilot .product-picker-list {
     animation: none;
+  }
+  .pilot .product-picker-chevron,
+  .pilot .product-picker-trigger {
+    transition: none;
   }
   .pilot.workspace .workspace-search.is-open {
     animation: none;
@@ -1606,7 +1659,7 @@ p.queue-sub {
   transition: border-color 200ms var(--ui-ease), background-color 200ms var(--ui-ease);
 }
 .auth-screen .auth-mode-option:hover {
-  border-color: #c9d8d1;
+  border-color: var(--ui-border-strong);
 }
 .auth-screen .auth-mode-option:has(.auth-mode-input:checked) {
   border-color: var(--ui-accent);
@@ -1672,4 +1725,134 @@ p.queue-sub {
 }
 @media (prefers-reduced-motion: reduce) {
   .auth-screen .auth-mode-option, .auth-screen .auth-mode-mark, .auth-screen .auth-mode-mark::after { transition: none; }
+}
+
+/* Product / finish picker: a custom listbox matching the suggestion lists, with the rate beside each product. */
+.pilot .product-picker-control { position: relative; }
+.pilot .product-picker-trigger {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 14px 8px 16px;
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-surface);
+  color: var(--ui-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: border-color 150ms var(--ui-ease), box-shadow 150ms var(--ui-ease);
+}
+.pilot .product-picker-trigger:hover { border-color: #c5d3cc; }
+.pilot .product-picker-trigger:focus-visible,
+.pilot .product-picker-trigger[aria-expanded="true"] {
+  border-color: var(--ui-accent);
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(23 100 93 / 0.14);
+}
+.pilot .product-picker-trigger[aria-invalid="true"] { border-color: #b3261e; }
+.pilot .product-picker-value { display: flex; flex: 1 1 auto; align-items: baseline; gap: 8px; min-width: 0; }
+/* Name and finish both shrink with an ellipsis; the finish gives way first so the name stays visible. */
+.pilot .product-picker-name { flex: 0 1 auto; min-width: 0; max-width: 100%; overflow: hidden; color: var(--ui-ink); font-size: 15px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.pilot .product-picker-finish { flex: 0 10 auto; min-width: 0; max-width: 100%; overflow: hidden; color: var(--ui-muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.pilot .product-picker-placeholder { color: var(--ui-muted); font-size: 15px; }
+.pilot .product-picker-rate { flex: none; color: var(--ui-ink); font-size: 13px; font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.pilot .product-picker-rate small { margin-left: 3px; color: var(--ui-muted); font-size: 11px; font-weight: 400; }
+.pilot .product-picker-chevron {
+  display: inline-flex;
+  flex: none;
+  color: var(--ui-accent);
+  transition: transform 150ms var(--ui-ease);
+}
+.pilot .product-picker-trigger[aria-expanded="true"] .product-picker-chevron { transform: rotate(180deg); }
+/* The open list must sit above the cards that follow it (they create their own stacking contexts). */
+.pilot .product-picker { position: relative; }
+.pilot .product-picker.is-open { z-index: 40; }
+.pilot .product-picker-list {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: 280px;
+  margin: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-surface);
+  list-style: none;
+  box-shadow: 0 12px 32px rgb(32 61 54 / 0.12);
+  animation: search-reveal 150ms var(--ui-ease) both;
+  transform-origin: top center;
+}
+.pilot .product-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 8px 10px 8px 12px;
+  border-radius: var(--ui-radius-xs);
+  cursor: pointer;
+}
+.pilot .product-picker-option-text { display: flex; flex: 1 1 auto; align-items: baseline; gap: 8px; min-width: 0; overflow: hidden; }
+.pilot .product-picker-option.is-active { background: #e7f1ec; }
+.pilot .product-picker-option.is-active .product-picker-name { color: var(--ui-accent); }
+.pilot .product-picker-option[aria-selected="true"] .product-picker-name { font-weight: 600; }
+.pilot .product-picker-check { display: inline-flex; flex: none; width: 16px; color: var(--ui-accent); }
+/* Subtle per-product edit / remove buttons; full strength on the highlighted option. */
+.pilot .product-picker-action {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--ui-radius-xs);
+  background: transparent;
+  color: var(--ui-muted);
+  cursor: pointer;
+  opacity: 0.45;
+  transition: color 150ms var(--ui-ease), background-color 150ms var(--ui-ease), opacity 150ms var(--ui-ease);
+}
+.pilot .product-picker-remove { margin-right: -4px; }
+.pilot .product-picker-option.is-active .product-picker-action,
+.pilot .product-picker-option:hover .product-picker-action { opacity: 1; }
+.pilot .product-picker-action:hover,
+.pilot .product-picker-action:focus-visible { color: var(--ui-ink); background: rgb(32 61 54 / 0.08); }
+.pilot .product-picker-action:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 1px; }
+@media (pointer: coarse) {
+  .pilot .product-picker-action { width: 44px; height: 44px; opacity: 1; }
+}
+/* While a product save is in flight the edit / remove buttons and the add row are locked. */
+.pilot .product-picker-option .product-picker-action:disabled { opacity: 0.25; cursor: not-allowed; background: transparent; color: var(--ui-muted); }
+.pilot .product-picker-option.is-add[aria-disabled="true"] { color: var(--ui-muted); cursor: not-allowed; }
+/* Narrow screens: the finish stacks under the name (like the trigger) so the text never runs into the rate. */
+@media (max-width: 520px) {
+  .pilot .product-picker-option { gap: 8px; padding-right: 6px; }
+  .pilot .product-picker-option-text { flex-direction: column; align-items: flex-start; gap: 0; }
+  .pilot .product-picker-option-text .product-picker-finish { font-size: 12px; }
+}
+.pilot .product-picker-option.is-add {
+  gap: 8px;
+  margin-top: 4px;
+  border-top: 1px solid #eef2f0;
+  border-radius: 0 0 var(--ui-radius-xs) var(--ui-radius-xs);
+  color: var(--ui-accent);
+  font-size: 14px;
+  font-weight: 500;
+}
+.pilot .product-picker-option.is-add.is-active { border-radius: var(--ui-radius-xs); }
+.pilot .product-picker-empty { padding: 10px 12px; color: var(--ui-muted); font-size: 13px; }
+@media (max-width: 380px) {
+  .pilot .product-picker-value { flex-direction: column; gap: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pilot .product-picker-list { animation: none; }
+  .pilot .product-picker-trigger, .pilot .product-picker-chevron { transition: none; }
 }

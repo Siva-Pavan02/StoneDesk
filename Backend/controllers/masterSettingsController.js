@@ -2,6 +2,7 @@ const prisma = require('../utils/prisma');
 const { text, number, bad } = require('../utils/pilotCalculations');
 const { storeLogo } = require('../utils/businessBranding');
 const { randomUUID } = require('crypto');
+const { referenceKey, removeReference, MAX_SAVED_REFERENCES } = require('../utils/savedReferences');
 
 const getOrCreateSettings = async (organizationId) => {
   if (!organizationId) throw new Error('Missing organizationId');
@@ -46,7 +47,7 @@ exports.updateProfile = async (req, res, next) => {
 
 exports.uploadLogo = async (req, res, next) => {
   try {
-    const logoPath = await storeLogo(req.body, req.get('Content-Type'));
+    const logoPath = await storeLogo(req.body, req.get('Content-Type'), req.user.organizationId);
     let settings = await getOrCreateSettings(req.user.organizationId);
     settings = await updateWithVersion(settings, { logoPath });
     res.json(settings);
@@ -73,7 +74,7 @@ exports.updateSettings = async (req, res, next) => {
     if (data.defaultRoyaltyFee !== undefined) number(data.defaultRoyaltyFee, 'charges');
     for (const field of ['savedTrucks', 'savedDestinations']) if (data[field] !== undefined) {
       if (!Array.isArray(data[field])) return res.status(400).json({ error: 'Invalid list' });
-      data[field] = [...new Set(data[field].map(value => text(value, field)))];
+      data[field] = [...new Set(data[field].map(value => text(value, field)))].slice(0, MAX_SAVED_REFERENCES);
     }
     if (data.stoneRates !== undefined) {
       if (!Array.isArray(data.stoneRates)) return res.status(400).json({ error: 'Invalid products' });
@@ -114,16 +115,17 @@ const mutate = change => async (req, res, next) => {
 };
 exports.addTruck = mutate((settings, req) => {
   const value = text(req.body.truckNumber, 'truck number', 40).toUpperCase();
-  if (settings.savedTrucks.includes(value)) conflict('Duplicate truck');
+  // Same dedupe key as the remembered suggestions (utils/savedReferences.js).
+  if (settings.savedTrucks.some(item => referenceKey('trucks', item) === referenceKey('trucks', value))) conflict('Duplicate truck');
   return { savedTrucks: { push: value } };
 });
-exports.deleteTruck = mutate((settings, req) => ({ savedTrucks: { set: settings.savedTrucks.filter(value => value !== req.params.truckNumber.trim().toUpperCase()) } }));
+exports.deleteTruck = mutate((settings, req) => ({ savedTrucks: { set: removeReference(settings.savedTrucks, req.params.truckNumber, 'trucks') } }));
 exports.addDestination = mutate((settings, req) => {
   const value = text(req.body.destination, 'destination', 200);
-  if (settings.savedDestinations.includes(value)) conflict('Duplicate destination');
+  if (settings.savedDestinations.some(item => referenceKey('destinations', item) === referenceKey('destinations', value))) conflict('Duplicate destination');
   return { savedDestinations: { push: value } };
 });
-exports.deleteDestination = mutate((settings, req) => ({ savedDestinations: { set: settings.savedDestinations.filter(value => value !== req.params.destination.trim()) } }));
+exports.deleteDestination = mutate((settings, req) => ({ savedDestinations: { set: removeReference(settings.savedDestinations, req.params.destination, 'destinations') } }));
 exports.addStoneRate = mutate((settings, req) => {
   const stoneType = text(req.body.stoneType, 'product'), finish = text(req.body.finish, 'finish'), defaultRate = number(req.body.defaultRate, 'rate');
   if (settings.stoneRates.some(r => r.stoneType === stoneType && r.finish === finish)) conflict('Duplicate stone-rate combination');

@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { useLanguage } from "../../i18n/LanguageContext";
 import { Button } from "./Controls.jsx";
 
 export default function LogoutDialog({ open, onCancel, onConfirm }) {
-  const { pick } = useLanguage();
   const dialog = useRef(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -32,24 +30,19 @@ export default function LogoutDialog({ open, onCancel, onConfirm }) {
     >
       <div className="logout-dialog-body">
         <h2 id="logout-title">
-          {pick(
-            "Are you sure you want to log out?",
-            "StoneDesk నుండి లాగ్ అవుట్ అవ్వాలా?",
-          )}
+          {"Are you sure you want to log out?"}
         </h2>
       </div>
       <div className="logout-dialog-actions">
         <Button
-          en="Cancel"
-          te="రద్దు"
+          label="Cancel"
           disabled={busy}
           onClick={onCancel}
           autoFocus
         />
         <Button
           primary
-          en={busy ? "Logging out…" : "Log out"}
-          te={busy ? "లాగ్ అవుట్ అవుతోంది…" : "లాగ్ అవుట్"}
+          label={busy ? "Logging out…" : "Log out"}
           disabled={busy}
           onClick={confirm}
         />

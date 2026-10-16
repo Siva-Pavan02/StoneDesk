@@ -10,11 +10,11 @@ export function generateLoadingListExcel(listData) {
   // ----------------------------------------------------
   const ws1Data = [];
   
-  ws1Data.push(["StoneDesk - Supervisor Loading List"]);
+  ws1Data.push(["StoneDesk - Loading List"]);
   ws1Data.push([]);
   ws1Data.push(["Loading List Number", listData.loadingListNumber || 'N/A']);
   ws1Data.push(["Date", listData.date || 'N/A']);
-  ws1Data.push(["Supervisor", listData.supervisor || 'N/A']);
+  ws1Data.push(["Manager", listData.supervisor || 'N/A']);
   ws1Data.push(["Buyer", listData.buyerDestination || 'N/A']);
   ws1Data.push(["Destination", listData.buyerDestination || 'N/A']);
   ws1Data.push(["Truck Number", listData.truckNumber || 'N/A']);

@@ -66,7 +66,7 @@ This is the one data-loss risk in retirement, and it is easy to miss.
 - [ ] Confirm the live Vercel backend can serve each one through `GET /uploads/<file>` as an authenticated member of the owning organization
 - [ ] Only then treat Render's disk as disposable
 
-Finalized bills embed their logo as base64 at finalization time, so historical invoices are unaffected either way. The risk is limited to the current logo of each organization.
+Bills finalized before the logo backfill embed their logo as base64, so those invoices are unaffected either way. Newer bills reference a content-addressed object (`org/<organizationId>/<sha256>.png`) in the bucket, written at upload or finalize time, so they never depend on Render's disk. The risk is limited to the current logo of each organization.
 
 ---
 

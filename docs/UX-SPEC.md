@@ -12,7 +12,7 @@ flowchart TD
     Admin --> Business[1 Business name / logo / identifiers]
     Business --> Contact[2 Contact and yard address]
     Contact --> Defaults[3 Feet / sq ft / INR / charges]
-    Defaults --> Products[Add at least one product and rate]
+    Defaults --> Products[New load: add the first product and rate]
     Products --> Home[Dashboard]
     Login --> Active{Active account?}
     Active -->|No| Pending
@@ -40,8 +40,8 @@ One business serves all approved staff. There is one current account, with logou
 
 Mobile reading order:
 
-1. Compact header: StoneDesk identity, language toggle and Log in. For signed-in people, the action opens the workspace.
-2. Hero: “Every load. Accounted for.” A short yard-to-bill explanation, full-width Get Started, and a one-business/team/language note.
+1. Compact header: StoneDesk identity and Log in. For signed-in people, the action opens the workspace.
+2. Hero: “Every load. Accounted for.” A short yard-to-bill explanation, full-width Get Started, and a one-business/team note.
 3. Example ledger card: clearly marked EXAMPLE LOAD, showing `3 × 2 ft`, 19 pieces and 114 sq ft. This is a calculation illustration, not a live customer metric.
 4. Three vertical feature sections: Log the load; Keep dispatch moving; Finish with a clear bill. Each uses a consistent outline icon and a short explanation.
 5. Record-integrity panel: account approval and locked finalized values, followed by Sign Up.
@@ -101,7 +101,7 @@ Read saved records on entry, on Refresh, and every 30 seconds while visible. Thi
 | Billed | Invoice view of a finalized record, not a separate payment state |
 | Completed | Delivered record |
 
-Admin and Dispatcher can finalize/dispatch, then mark delivered. Yard Manager prepares and saves drafts. Delivery changes only transport status, not bill values.
+Admin and Dispatcher can finalize/dispatch, then mark delivered. Manager prepares and saves drafts. Delivery changes only transport status, not bill values.
 
 ### Invoices and exports
 
@@ -111,9 +111,10 @@ Native sharing lets the user select WhatsApp/email when supported; downloads are
 
 ### Settings and roles
 
-| Action | Admin | Yard Manager | Dispatcher |
+| Action | Admin | Manager | Dispatcher |
 | --- | --- | --- | --- |
 | Read business records and export finalized bills | Yes | Yes | Yes |
+| Add products (Settings > Products & rates, New load) | Yes | Yes | No |
 | Create/edit drafts and loading requirements | Yes | Yes | Yes |
 | Finalize/dispatch and mark delivered | Yes | No | Yes |
 | Change business/catalogue/default charges | Yes | No | No |
@@ -141,7 +142,7 @@ The screenshots guide layout, not arithmetic. The server's stored quantities, ar
 - First owner signup, login/logout, reload session; later account pending, approval, each role restriction, session expiry, password change revocation and rejected external origin.
 - Setup wizard back/forward, optional identifiers, failed upload/save, products and rate overrides.
 - Dashboard counts, search by truck/party/ID, browser Back, invoice deep link, monitor refresh and delivered action.
-- Language toggle, 320px/390px widths, portrait/landscape, keyboard dialog dismissal, labels, focus and no horizontal overflow.
+- 320px/390px widths, portrait/landscape, keyboard dialog dismissal, labels, focus and no horizontal overflow.
 - Quantity example, fractions, TOP, mixed rates, charges, stored rounding, legacy bills, missing/long branding, multipage PDF and numeric Excel.
 
 See DESIGN.md for tokens and component states, and PILOT.md for deployment and operational limits.

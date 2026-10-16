@@ -25,7 +25,7 @@ test('Vercel imports Express without opening a listener or connecting to the dat
         const response=await fetch(base+path);if(response.status!==200)process.exitCode=1;
       }
       // Mounted but protected: a 404 here would mean the route never reached the entrypoint.
-      for(const path of ['/api/dispatches','/api/loading-lists','/api/master-settings/x','/uploads/aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa.png']) {
+      for(const path of ['/api/dispatches','/api/loading-lists','/api/master-settings/x','/uploads/aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa.png','/uploads/logos/'+'a'.repeat(64)+'.png']) {
         const response=await fetch(base+path);if(response.status!==401)process.exitCode=1;
       }
       server.close();

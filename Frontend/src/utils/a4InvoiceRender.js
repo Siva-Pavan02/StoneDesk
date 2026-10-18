@@ -26,7 +26,7 @@ const money = value => escapeA4Text(formatA4Money(value));
 const TIMES = '<td aria-hidden="true" class="operator-cell times-cell">×</td>';
 const EQUALS = '<td aria-hidden="true" class="operator-cell equals-cell">=</td>';
 const COLGROUP = '<colgroup><col class="col-type"><col class="col-l"><col class="col-times"><col class="col-w"><col class="col-equals"><col class="col-qty"><col class="col-area"></colgroup>';
-const THEAD = '<thead><tr><th scope="col">Type</th><th class="dim" scope="col">L (ft)</th><th aria-hidden="true" class="operator-cell times-cell">×</th><th class="dim" scope="col">W (ft)</th><th aria-hidden="true" class="operator-cell equals-cell">=</th><th class="qty" scope="col">Qty</th><th class="num" scope="col">Sq ft</th></tr></thead>';
+const THEAD = '<thead><tr><th scope="col">Type</th><th class="dim" scope="col">L (ft)</th><th aria-hidden="true" class="operator-cell times-cell"></th><th class="dim" scope="col">W (ft)</th><th aria-hidden="true" class="operator-cell equals-cell"></th><th class="qty" scope="col">Qty</th><th class="num" scope="col">Sq ft</th></tr></thead>';
 
 export function continuationText(copy) {
   assertCopy(copy);

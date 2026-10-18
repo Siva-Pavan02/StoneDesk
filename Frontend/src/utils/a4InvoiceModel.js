@@ -1,4 +1,5 @@
 import Decimal from 'decimal.js';
+import { netTotal } from './loadMath.js';
 
 const D = Decimal.clone({ precision: 40, rounding: Decimal.ROUND_HALF_UP });
 const ZERO = new D(0);
@@ -184,20 +185,23 @@ export function prepareA4Invoice(input) {
   // Keep both printed category amounts reconcilable to the authoritative round-once total.
   const topAmount = materialTotal.minus(regularAmount);
   const loadingRoyalty = decimal(input.loadingRoyalty, 'Loading / royalty', { monetary: true });
-  const netPayable = materialTotal.plus(loadingRoyalty);
+  const calculatedNet = new D(netTotal(sum(all, 'unroundedAmount').plus(loadingRoyalty).toNumber()));
+  // A saved bill keeps its authoritative payable, including historical rounding.
+  const netPayable = input.storedTotals?.netPayable == null ? calculatedNet
+    : decimal(input.storedTotals.netPayable, 'Stored net payable');
   const stored = input.storedTotals || {};
   for (const [key, calculated, label] of [
     ['totalPieces', all.reduce((n, entry) => n + entry.quantity, 0), 'Total pieces'],
     ['totalArea', regularArea.plus(topArea).toDecimalPlaces(2, MONEY_ROUNDING), 'Total area'],
     ['materialTotal', materialTotal, 'Material total'],
-    ['netPayable', netPayable, 'Net payable'],
+    ['netPayable', calculatedNet, 'Net payable'],
   ]) if (stored[key] != null && !new D(stored[key]).equals(calculated)) {
     warnings.push(`${label}: stored ${stored[key]} differs from the sum of the saved measurement lines (${calculated}).`);
   }
   return { ...identity, groups, loadingRoyalty: loadingRoyalty.toFixed(2),
     totals: { pieces: all.reduce((n, entry) => n + entry.quantity, 0), regularArea: regularArea.toString(), topArea: topArea.toString(),
       area: regularArea.plus(topArea).toString(), regularAmount: regularAmount.toFixed(2), topAmount: topAmount.toFixed(2),
-      materialTotal: materialTotal.toFixed(2), netPayable: netPayable.toFixed(2) },
+      materialTotal: materialTotal.toFixed(2), netPayable: netPayable.toFixed(Math.max(2, netPayable.decimalPlaces())) },
     amountWords: amountInWords(netPayable), warnings };
 }
 

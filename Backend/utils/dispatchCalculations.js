@@ -23,3 +23,9 @@ exports.calculatePiece = function(lengthFt, widthFt) {
     sqFt: round2(l * w)
   };
 }
+
+// Net payable only: tolerate binary noise around .75; preserve every other value.
+function netTotal(value) {
+  return Math.abs(value - Math.floor(value) - 0.75) <= 1e-9 ? Math.floor(value) + 1 : value;
+}
+exports.netTotal = netTotal;

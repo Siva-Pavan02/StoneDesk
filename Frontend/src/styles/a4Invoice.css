@@ -5,7 +5,7 @@
 .bill-screen .export-option-title, .bill-screen .export-option-meta { overflow-wrap: anywhere; }
 .bill-screen .invoice-export-footer .action-row { min-width: 0; }
 .bill-screen .invoice-export-footer .action-row > .btn { min-width: 0; }
-.a4-preview-feedback { padding: 14px 16px; border: 1px solid var(--border, #e2e8e5); border-radius: 6px; background: #fff; color: #203d36; }
+.a4-preview-feedback { padding: 14px 16px; border: 1px solid var(--border, #d1d1d1); border-radius: 6px; background: #fff; color: #111111; }
 .a4-preview-feedback[role="alert"] { border-color: #c78980; color: #78382e; }
 .a4-preview-feedback ul { margin: 6px 0 0; padding-inline-start: 20px; }
 
@@ -29,23 +29,22 @@
 
 .a4-invoice, body.a4-body {
   color-scheme: light;
-  /* StoneDesk green palette (the app's brand accent #17645d), applied to the
-     reference's layout. Only colours differ from the reference's neutral grey;
-     every size, spacing and geometry value is unchanged. */
-  --ink: #203d36;
-  --muted: #526661;
-  --accent: #17645d;
-  --border: #d4e0db;
-  --line: #eaf0ed;
-  --tint: #f1f6f3;
-  --total-bg: #e0ece6;
+  /* Shared monochrome invoice palette for preview, print and PDF.
+     Existing size, spacing and geometry values are unchanged. */
+  --ink: #111111;
+  --muted: #4b4b4b;
+  --accent: #111111;
+  --border: #d1d1d1;
+  --line: #e5e5e5;
+  --tint: #f9f9f9;
+  --total-bg: #f3f3f3;
   --paper: #ffffff;
-  --canvas: #f4f7f5;
-  --shadow: 0 8px 32px #203d3612;
-  --subtotal-bg: #e9f3ee;
-  --subtotal-border: #c6ddd2;
-  --subtotal-marker: #5e9b8a;
-  --column-rule: #cfdcd6;
+  --canvas: #f9f9f9;
+  --shadow: 0 8px 32px rgb(0 0 0 / 0.08);
+  --subtotal-bg: #f3f3f3;
+  --subtotal-border: #d1d1d1;
+  --subtotal-marker: #6b6b6b;
+  --column-rule: #e5e5e5;
   --table-font: 8pt;
   --cell-y: 1.1px;
   --cell-x: 3px;
@@ -94,7 +93,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
 .a4-invoice table { inline-size: 100%; border-collapse: collapse; font-size: var(--table-font); line-height: 1.35; }
 .a4-invoice .row-table { table-layout: fixed; }
 .a4-invoice th, .a4-invoice td { padding: var(--cell-y) var(--cell-x); border-block-end: 1px solid var(--line); text-align: start; font-weight: 400; }
-.a4-invoice thead th { color: var(--muted); font-size: .86em; font-weight: 500; }
+.a4-invoice thead th { background: var(--total-bg); color: var(--ink); font-size: .86em; font-weight: 500; }
 .a4-invoice .row-table thead th { border-block-end-color: var(--border); }
 .a4-invoice tbody th { color: var(--muted); }
 .a4-invoice .row-table .dim, .a4-invoice .row-table .qty { text-align: center; white-space: nowrap; }

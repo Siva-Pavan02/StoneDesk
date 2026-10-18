@@ -117,8 +117,8 @@ export function Reveal({ children, className = '', delay = 0 }) {
 // 60fps Compositor-Only Sample Motion Badge
 export const SampleMotionBadge = memo(function SampleMotionBadge() {
   return (
-    <div className="flex min-h-[61px] items-center border-t border-[#e0eae7] px-4 py-3 text-xs sm:px-5">
-      <span className="sample-badge-float inline-flex items-center gap-2 text-[#17645d]">
+    <div className="flex min-h-[61px] items-center border-t border-[#e7e5e4] px-4 py-3 text-xs sm:px-5">
+      <span className="sample-badge-float inline-flex items-center gap-2 text-[#FB471F]">
         <Icon name="check" className="h-4 w-4" />
         Sample bill · saved totals
       </span>

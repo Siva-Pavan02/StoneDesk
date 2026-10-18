@@ -53,6 +53,6 @@ export default function SampleA4Invoice({ variant = 'frame', prefix, onOpenBill 
       </div>
       <figcaption className="sr-only">{caption()}</figcaption>
     </figure>
-    {onOpenBill && <button type="button" onClick={onOpenBill} className="mk-text-link mt-3 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[#17645d]">View full sample bill<span className="mk-link-disc" aria-hidden="true"><Icon name="arrow" className="h-3.5 w-3.5" /></span></button>}
+    {onOpenBill && <button type="button" onClick={onOpenBill} className="mk-text-link mt-3 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[#FB471F]">View full sample bill<span className="mk-link-disc" aria-hidden="true"><Icon name="arrow" className="h-3.5 w-3.5" /></span></button>}
   </div>;
 }

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { round2, fixed2, summarize } from '../src/utils/loadMath.js';
+import { round2, fixed2, summarize, netTotal } from '../src/utils/loadMath.js';
 import { previewRows, payload, money } from '../src/utils/pilotDraft.js';
 import { billRows, rowGroups, rowOverview, subtotals } from '../src/utils/billData.js';
 import { parseFraction, decimalToFraction } from '../src/utils/fractionParser.js';
@@ -74,7 +74,8 @@ test('property: preview, server and bill totals agree for random loads', () => {
     assert.equal(overview.totalSqFt, record.summary.totalDispatchVolumeSqFt);
     assert.equal(overview.totalAmount, record.summary.baseMaterialTotal);
     assert.equal(overview.pieces, record.summary.totalPieces);
-    assert.equal(record.summary.netBillableAmount, round2(record.summary.baseMaterialTotal + fee));
+    const rawAmount = record.inventory.reduce((sum, g) => sum + g.measurementRows.reduce((n, r) => n + r.lengthFt * r.widthFt * r.quantity * g.ratePerSqFt, 0), 0);
+    assert.equal(record.summary.netBillableAmount, netTotal(rawAmount + fee));
   }
 });
 

@@ -3,7 +3,7 @@
  *
  * Rounding strategy: shared half-up round2 from loadMath.js.
  */
-import { round2 } from './loadMath.js';
+import { round2, netTotal } from './loadMath.js';
 
 function isValidDimension(val) {
   const n = Number(val);
@@ -39,9 +39,11 @@ export function calculateDispatchTotals(stoneGroups, loadingAndRoyaltyFees = 0) 
   const fees = Number(loadingAndRoyaltyFees) || 0;
   let totalDispatchVolumeSqFt = 0;
   let baseMaterialTotal = 0;
+  let rawMaterialTotal = 0;
 
   for (const group of stoneGroups) {
     totalDispatchVolumeSqFt += Number(group.totalSqFt || 0);
+    rawMaterialTotal += Number(group.totalSqFt || 0) * Number(group.ratePerSqFt || 0);
     baseMaterialTotal += calculateLineTotal(group.totalSqFt || 0, group.ratePerSqFt || 0);
   }
 
@@ -49,6 +51,6 @@ export function calculateDispatchTotals(stoneGroups, loadingAndRoyaltyFees = 0) 
     totalDispatchVolumeSqFt: round2(totalDispatchVolumeSqFt),
     baseMaterialTotal: round2(baseMaterialTotal),
     loadingAndRoyaltyFees: round2(fees),
-    netBillableAmount: round2(baseMaterialTotal + fees)
+    netBillableAmount: netTotal(rawMaterialTotal + round2(fees))
   };
 }

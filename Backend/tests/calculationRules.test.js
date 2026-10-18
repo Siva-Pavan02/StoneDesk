@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { processInventory, totals } = require('../utils/pilotCalculations');
-const { round2, calculatePiece } = require('../utils/dispatchCalculations');
+const { round2, calculatePiece, netTotal } = require('../utils/dispatchCalculations');
 
 const row = (lengthFt, widthFt, quantity, category = 'Regular') => ({ lengthFt, widthFt, quantity, category });
 const group = (ratePerSqFt, measurementRows, stoneType = 'Granite') => ({ stoneType, finish: 'Polished', ratePerSqFt, measurementRows });
@@ -62,7 +62,7 @@ test('calculatePiece rejects zero dimensions', () => {
   assert.deepEqual(calculatePiece(1.115, 1), { lengthFt: 1.115, widthFt: 1, sqFt: 1.12 });
 });
 
-test('property: totals equal round-once sums and net = base + fee', () => {
+test('property: totals equal round-once sums and net follows the net-only rule on raw charges plus fee', () => {
   let seed = 7;
   const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const quarter = () => Math.ceil(rand() * 40) / 4;
@@ -76,6 +76,7 @@ test('property: totals equal round-once sums and net = base + fee', () => {
     assert.equal(summary.totalPieces, pieces);
     assert.equal(summary.totalDispatchVolumeSqFt, round2(sqFt));
     assert.equal(summary.baseMaterialTotal, round2(amount));
-    assert.equal(summary.netBillableAmount, round2(summary.baseMaterialTotal + fee));
+    const rawAmount = groups.reduce((sum, g) => sum + g.measurementRows.reduce((n, r) => n + r.lengthFt * r.widthFt * r.quantity * g.ratePerSqFt, 0), 0);
+    assert.equal(summary.netBillableAmount, netTotal(rawAmount + fee));
   }
 });

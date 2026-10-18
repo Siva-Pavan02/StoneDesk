@@ -336,7 +336,7 @@ export default function SettingsScreen({ user, onClose, embedded = false, refere
                       type="number"
                       value={royaltyInput}
                       onChange={(e) => setRoyaltyInput(e.target.value)}
-                      className="w-full h-12 pl-8 pr-3 border border-outline-variant rounded-lg focus:border-teal-700 outline-none"
+                      className="w-full h-12 pl-8 pr-3 border border-outline-variant rounded-lg focus:border-primary outline-none"
                       min="0"
                     />
                   </div>

@@ -4,6 +4,9 @@ const prisma = require('./prisma');
 const { authLimit } = require('./rateLimiter');
 const { authFlags } = require('./authFlags');
 const derive = promisify(scrypt);
+// Fields consumed by session authorization, publicUser and account deletion.
+const userSelect = { id: true, organizationId: true, name: true, email: true,
+  role: true, active: true, supabaseUserId: true, passwordLogin: true };
 const cookieName = 'stonedesk_session';
 const cookieOptions = () => ({ httpOnly: true, sameSite: 'strict', secure: process.env.NODE_ENV === 'production', path: '/' });
 const hash = token => createHash('sha256').update(token).digest('hex');
@@ -35,7 +38,7 @@ async function readSession(req) {
   const token = tokenFrom(req);
   if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
   const tokenHash = hash(token);
-  const session = await prisma.session.findFirst({ where: { tokenHash, expiresAt: { gt: new Date() } }, include: { user: true } });
+  const session = await prisma.session.findFirst({ where: { tokenHash, expiresAt: { gt: new Date() } }, select: { user: { select: userSelect } } });
   return session?.user || null;
 }
 async function requireSession(req, res, next) {
@@ -72,4 +75,4 @@ function allowedOrigin(origin, req) {
   } catch { return false; }
 }
 
-module.exports = { passwordHash, verifyPassword, startSession, endSession, readSession, requireSession, requireActive, allowRoles, publicUser, allowedOrigin, authLimit };
+module.exports = { userSelect, passwordHash, verifyPassword, startSession, endSession, readSession, requireSession, requireActive, allowRoles, publicUser, allowedOrigin, authLimit };

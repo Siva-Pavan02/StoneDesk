@@ -185,7 +185,7 @@ router.post("/signup", auth.authLimit, async (req, res, next) => {
         });
 
     // Check if the user already exists to fail fast
-    if (await prisma.user.findUnique({ where: { email } })) {
+    if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) {
       return res
         .status(409)
         .json({ error: "Unable to create this account. Try signing in." });
@@ -378,6 +378,7 @@ router.get(
           await prisma.user.findMany({
             where: { organizationId: req.user.organizationId },
             orderBy: { createdAt: "asc" },
+            select: auth.userSelect,
           })
         ).map(auth.publicUser),
       );

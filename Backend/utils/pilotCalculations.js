@@ -1,4 +1,4 @@
-const { calculatePiece, round2 } = require('./dispatchCalculations');
+const { calculatePiece, round2, netTotal } = require('./dispatchCalculations');
 
 function bad(message) {
   const error = new Error(message);
@@ -9,7 +9,8 @@ function round(value) {
   if (!Number.isFinite(value) || Math.abs(value) > Number.MAX_SAFE_INTEGER / 100) bad('Calculation exceeds supported range');
   return round2(value);
 }
-// Rounding policy: areas and amounts are summed unrounded and rounded once at the end.
+// Areas and material subtotals retain two-decimal rounding; net payable alone
+// uses the .75 business rule on raw charges plus the stored fee.
 // Row values are rounded for display only and are never added up.
 const rawArea = row => row.lengthFt * row.widthFt * (row.quantity ?? 1);
 function rawTotals(group) {
@@ -72,6 +73,8 @@ function totals(inventory, fee) {
   const raw = inventory.map(rawTotals);
   const totalDispatchVolumeSqFt = round(raw.reduce((sum, g) => sum + g.sqFt, 0));
   const baseMaterialTotal = round(raw.reduce((sum, g) => sum + g.amount, 0));
-  return { totalPieces, totalDispatchVolumeSqFt, baseMaterialTotal, loadingAndRoyaltyFees: round(fee), netBillableAmount: round(baseMaterialTotal + round(fee)) };
+  const rawNet = raw.reduce((sum, g) => sum + g.amount, 0) + round(fee);
+  round(rawNet); // Retain the existing finite/range validation, not its rounded result.
+  return { totalPieces, totalDispatchVolumeSqFt, baseMaterialTotal, loadingAndRoyaltyFees: round(fee), netBillableAmount: netTotal(rawNet) };
 }
 module.exports = { bad, number, text, processInventory, totals };

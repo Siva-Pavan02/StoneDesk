@@ -93,7 +93,7 @@ test('measurement tables have seven columns, Reg total / Top total rows and no m
     assert.equal(tables.length, 24);
     for (const table of tables) {
       assert.deepEqual([...table.match(/<thead>[^]*?<\/thead>/)[0].matchAll(/<th[^>]*>([^<]*)<\/th>/g)].map(([, text]) => text),
-        ['Type', 'L (ft)', '×', 'W (ft)', '=', 'Qty', 'Sq ft']);
+        ['Type', 'L (ft)', '', 'W (ft)', '', 'Qty', 'Sq ft']);
       assert.equal(hits(table, /<col class=/g), 7);
       assert.doesNotMatch(table, /₹|Rs\.|Rate|Amount|data-money/);
       for (const row of table.match(/<tr data-kind=[^]*?<\/tr>/g)) assert.equal(hits(row, /<t[hd][\s>]/g), 7);
@@ -404,4 +404,21 @@ test('projectCopy driver drops every money field, is titled Driver slip and keep
 test('projectCopy rejects an unknown copy', () => {
   assert.throws(() => projectCopy(prepared(), 'seller'), /buyer or driver/);
   assert.throws(() => projectCopy(prepared(), undefined), /buyer or driver/);
+});
+
+
+test('buyer and driver headings omit operators without changing measurement rows', () => {
+  for (const copy of ['buyer', 'driver']) {
+    const html = render(prepared(), copy);
+    const headings = [...html.matchAll(/<thead>([^]*?)<\/thead>/g)];
+    assert.ok(headings.length > 0);
+    for (const [, heading] of headings) {
+      const text = heading.replace(/<[^>]*>/g, '');
+      assert.doesNotMatch(text, /[X\u00d7=]/);
+      assert.match(text, /L \(ft\)/);
+      assert.match(text, /W \(ft\)/);
+    }
+    assert.match(html, /class="operator-cell times-cell">\u00d7<\/td>/);
+    assert.match(html, /class="operator-cell equals-cell">=<\/td>/);
+  }
 });

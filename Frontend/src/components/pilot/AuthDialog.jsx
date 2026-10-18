@@ -121,7 +121,6 @@ export default function AuthDialog({ mode, initialMethod = null, onClose, onSign
   return <dialog ref={dialog} className="app-dialog pilot auth-screen" aria-labelledby="auth-title" onCancel={e => { if (locked) e.preventDefault(); else onClose(); }}>
     <div className="p-6 text-sm"><div className="action-row flex items-center justify-between gap-3"><p className="eyebrow" translate="no">STONEDESK</p><button type="button" className="text-button px-3" disabled={locked} onClick={onClose}>Close</button></div>
       {backControl}
-      {backControl}
       <h2 id="auth-title" className="screen-heading mt-3 text-2xl font-semibold">{heading}</h2>
 
       {view === 'chooser' && <>

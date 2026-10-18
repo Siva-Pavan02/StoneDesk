@@ -67,3 +67,9 @@ test('calculateDispatchTotals: multiple stone groups and fees', () => {
 test('floating-point precision/rounding', () => {
   assert.equal(calculateLineTotal(10.123, 2), 20.25); 
 });
+
+
+test('legacy dispatch net uses raw charges and only rounds .75 up', () => {
+  assert.equal(calculateDispatchTotals([{ totalSqFt: 50.375, ratePerSqFt: 1 }, { totalSqFt: 50.375, ratePerSqFt: 1 }]).netBillableAmount, 101);
+  assert.equal(calculateDispatchTotals([{ totalSqFt: 100.749, ratePerSqFt: 1 }]).netBillableAmount, 100.749);
+});

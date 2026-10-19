@@ -1,4 +1,4 @@
-import { SAMPLE_BANK_NAMES, SAMPLE_BANK_PAIRS, a4StatusLabel, bankDetailPairs, bankDetailSegments, formatA4Dimension, formatA4Money, formatA4Number } from './a4InvoiceModel.js';
+import { SAMPLE_BANK_NAMES, SAMPLE_BANK_PAIRS, a4StatusLabel, bankDetailPairs, bankDetailSegments, formatA4Dimension, formatA4Money, formatA4Number, formatA4Rate } from './a4InvoiceModel.js';
 import { fragmentRows } from './a4InvoicePagination.js';
 
 // Markup of the user's reference invoice (sample_invoice_space_optimized.html):
@@ -109,6 +109,13 @@ function renderBank(model, id) {
   return `<section aria-labelledby="${id}-bank-heading" class="bank-details"><div class="bank-head"><h2 class="bank-heading" id="${id}-bank-heading">Bank details</h2>${sample ? '<p class="bank-note">Preview placeholders only</p>' : ''}</div>${body}</section>`;
 }
 
+function renderProducts(model, id) {
+  if (!model.products?.length) return '';
+  return `<section class="product-summary" aria-labelledby="${id}-products-heading"><h2 class="summary-title" id="${id}-products-heading">Product Summary</h2>`
+    + model.products.map(product => `<div class="product-summary-row"><span class="product-summary-name">${escapeA4Text([product.stoneType, product.finish].filter(Boolean).join(' · '))}</span><span class="product-summary-quantity">${product.quantity} pcs</span><span class="product-summary-rate">${product.ratePerSqFt == null ? '—' : `${formatA4Rate(product.ratePerSqFt).replace(/\.00$/, '')}/sq ft`}</span></div>`).join('')
+    + '</section>';
+}
+
 // Buyer: order and payment summary, amount in words, bank details and signature.
 // Driver: pieces and area, then the signature; it reads no money, words or bank field.
 function renderFinal(model, copy, prefix) {
@@ -121,6 +128,7 @@ function renderFinal(model, copy, prefix) {
   }
   const totals = model.totals;
   return '<div class="final-section">'
+    + renderProducts(model, id)
     + `<section aria-label="Order and payment summary" class="invoice-summary">${orderOverview(model, id, true)}`
     + `<div class="settlement-overview"><h2 class="summary-title" id="${id}-payment-heading">Payment summary</h2>`
     + `<dl aria-labelledby="${id}-payment-heading" class="settlement"><div class="settlement-row"><dt>Material total</dt><dd data-amount="material">${money(totals.materialTotal)}</dd></div><div class="settlement-row"><dt>Loading / royalty</dt><dd data-amount="loading">${money(model.loadingRoyalty)}</dd></div><div class="settlement-net"><dt>Net payable</dt><dd data-total="net">${money(totals.netPayable)}</dd></div></dl></div>`

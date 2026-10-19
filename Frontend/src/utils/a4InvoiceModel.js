@@ -1,4 +1,5 @@
 import Decimal from 'decimal.js';
+import { productSummary } from './productSummary.js';
 import { netTotal } from './loadMath.js';
 
 const D = Decimal.clone({ precision: 40, rounding: Decimal.ROUND_HALF_UP });
@@ -219,7 +220,7 @@ export function projectCopy(model, copy) {
   if (copy !== 'driver') throw new Error('Copy must be buyer or driver.');
   // Underscored names are the fields deliberately dropped from the driver copy.
   const { materialTotal: _materialTotal, regularAmount: _regularAmount, topAmount: _topAmount, netPayable: _netPayable, ...totals } = model.totals || {};
-  const { loadingRoyalty: _loadingRoyalty, amountWords: _amountWords, ...rest } = model;
+  const { loadingRoyalty: _loadingRoyalty, amountWords: _amountWords, products: _products, ...rest } = model;
   const { bankDetails: _bankDetails, ...seller } = model.seller || {};
   return {
     ...rest,
@@ -274,11 +275,12 @@ export function a4InvoiceFromDispatch(record) {
         ratePerSqFt: group.ratePerSqFt, authoritativeAmount: row.lineTotal });
     }
   }
-  return prepareA4Invoice({ mode: 'production', currency: 'INR', invoiceNumber: record?.dispatchSlipNumber, invoiceDate: record?.date,
+  const model = prepareA4Invoice({ mode: 'production', currency: 'INR', invoiceNumber: record?.dispatchSlipNumber, invoiceDate: record?.date,
     status: record?.status, seller: { name: business.businessName, location: business.address, phone: business.phone,
       logo: business.logoDataUrl, signatoryName: business.signatoryName, bankDetails: business.bankDetails }, party: record?.partyName,
     lorryNumber: record?.logistics?.truckNumber, destination: record?.logistics?.buyerDestination,
     supervisor: record?.supervisor, groups: [...byNumber.values()], loadingRoyalty: record?.summary?.loadingAndRoyaltyFees,
     storedTotals: { totalPieces: record?.summary?.totalPieces, totalArea: record?.summary?.totalDispatchVolumeSqFt,
       materialTotal: record?.summary?.baseMaterialTotal, netPayable: record?.summary?.netBillableAmount } });
+  return { ...model, products: productSummary(record) };
 }

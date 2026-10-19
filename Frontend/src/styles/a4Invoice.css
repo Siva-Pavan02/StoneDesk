@@ -620,3 +620,9 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   .bill-screen .invoice-export-footer .action-row > .btn { flex: 1 1 100%; }
   .bill-screen .invoice-export-footer .action-icon-disc { width: 24px; height: 24px; }
 }
+
+/* Buyer-only saved product rates, measured with the existing final summary. */
+.a4-invoice .product-summary { margin-block-end: 10px; }
+.a4-invoice .product-summary-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: baseline; column-gap: 14px; padding-block: 4px; border-block-end: 1px solid var(--line); font-size: 8pt; }
+.a4-invoice .product-summary-name { overflow-wrap: anywhere; }
+.a4-invoice .product-summary-quantity, .a4-invoice .product-summary-rate { text-align: end; white-space: nowrap; font-variant-numeric: tabular-nums; }

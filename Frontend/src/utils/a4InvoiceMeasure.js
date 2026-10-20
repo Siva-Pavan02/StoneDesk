@@ -1,6 +1,6 @@
 import { INVOICE_FONT_FAMILY } from './a4InvoiceFonts.js';
 import { COPIES, capacitiesFrom, planFromMeasurements, splitOversizedUnits, wholeGroupUnits } from './a4InvoicePagination.js';
-import { renderA4MeasureSheet, renderA4Pages } from './a4InvoiceRender.js';
+import { renderA4MeasureSheet } from './a4InvoiceRender.js';
 
 // Browser only. Measures one copy at real A4 print geometry in an offscreen host
 // (the reference's #invoice-measure-host), independent of the viewport and of a
@@ -51,16 +51,15 @@ function rowLayout(block, unit) {
 }
 
 // One synchronous pass: mount, read, remove. No await in between.
-function measurePass(doc, model, copy, units, mode = '', scale = 1) {
+function measurePass(doc, model, copy, units) {
   const view = doc.defaultView;
   const host = mountA4Host(doc, renderA4MeasureSheet(model, copy, units, `measure-${copy}`));
   try {
-    if (mode) host.querySelector('.sample-sheet').dataset.layout = mode;
     const blocks = [...host.querySelectorAll('.row-block')];
     if (blocks.length !== units.length) throw new Error('Invalid group measurements');
     const heights = blocks.map(block => block.getBoundingClientRect().height);
     const gap = blocks.length > 1 ? parseFloat(view.getComputedStyle(blocks[0]).marginBlockEnd) || 0 : 8;
-    const pageHeight = host.querySelector('.page-height-ruler').getBoundingClientRect().height / scale;
+    const pageHeight = host.querySelector('.page-height-ruler').getBoundingClientRect().height;
     const headerHeight = outsideHeight(view, host.querySelector('.invoice-header'));
     const finalHeight = outsideHeight(view, host.querySelector('.final-section'));
     const noticeHeight = outsideHeight(view, host.querySelector('.continuation'));
@@ -76,15 +75,14 @@ function measurePass(doc, model, copy, units, mode = '', scale = 1) {
  * Measures `model` (already projected to `copy`). Groups taller than a column are
  * split at entry boundaries and measured again; ordinary groups stay whole.
  */
-export async function measureA4Copy(model, copy, { doc = document, mode = '', scale = 1 } = {}) {
+export async function measureA4Copy(model, copy, { doc = document } = {}) {
   if (!COPIES.includes(copy)) throw new Error('Copy must be buyer or driver.');
   await invoiceFontsReady(doc);
-  let result = measurePass(doc, model, copy, wholeGroupUnits(model), mode, scale);
-  const capacity = result => mode && result.finalCapacity > 0 ? result.finalCapacity : result.normalCapacity;
-  const tooTall = result => result.heights.some(height => height > capacity(result) + 0.01);
+  let result = measurePass(doc, model, copy, wholeGroupUnits(model));
+  const tooTall = ({ heights, normalCapacity }) => heights.some(height => height > normalCapacity + 0.01);
   if (tooTall(result)) {
-    const units = splitOversizedUnits(result.units, result.heights, result.rowLayouts, capacity(result));
-    result = measurePass(doc, model, copy, units, mode, scale);
+    const units = splitOversizedUnits(result.units, result.heights, result.rowLayouts, result.normalCapacity);
+    result = measurePass(doc, model, copy, units);
     if (tooTall(result)) throw new Error(OVERSIZED);
   }
   const { rowLayouts: _rowLayouts, ...measurements } = result;
@@ -93,33 +91,6 @@ export async function measureA4Copy(model, copy, { doc = document, mode = '', sc
 
 /** The measured page plan of one copy, shared by preview, print and PDF. */
 export async function planA4CopyMeasured(model, copy, opts) {
-  if (copy !== 'buyer') {
-    const measured = await measureA4Copy(model, copy, opts);
-    return planFromMeasurements(model, measured.units, measured);
-  }
-  const doc = opts?.doc || document;
-  let fallback;
-  // Preserve 8pt measurement text until spacing modes have been exhausted.
-  // Scaling stops at 7.5pt (8 * .9375); extreme bills remain complete.
-  for (const [mode, scale] of [['normal', 1], ['compact', 1], ['dense', 1], ['dense', .9375]]) {
-    const measured = await measureA4Copy(model, copy, { ...opts, mode, scale });
-    const pages = planFromMeasurements(model, measured.units, measured).map(page => ({ ...page, layout: mode, scale }));
-    if (scale === 1) fallback = pages;
-    if (pages.length !== 1) continue;
-    const host = mountA4Host(doc, renderA4Pages(model, pages, copy));
-    try {
-      const body = host.querySelector('.page-body');
-      if (scale < 1) {
-        const naturalHeight = body.getBoundingClientRect().height / scale;
-        pages[0].scale = Math.min(1, (measured.pageHeight * scale - 3) / naturalHeight);
-        if (pages[0].scale < .9375) continue;
-        body.style.zoom = String(pages[0].scale);
-      }
-      const box = body.getBoundingClientRect();
-      const fits = box.height <= measured.pageHeight * scale - 2 && body.scrollWidth <= body.clientWidth + 1;
-      if (fits) return pages;
-    } finally { host.remove(); }
-  }
-  fallback[0].layoutWarning = 'This invoice exceeds the readable single-page limit. All details are retained across multiple A4 pages.';
-  return fallback;
+  const measured = await measureA4Copy(model, copy, opts);
+  return planFromMeasurements(model, measured.units, measured);
 }

@@ -328,22 +328,8 @@ export function collectA4PdfPages(sheets, { baselineRatio = DEFAULT_BASELINE_RAT
     const view = sheet.ownerDocument.defaultView;
     const rect = sheet.getBoundingClientRect();
     const ops = [];
-    const bodyElement = sheet.querySelector('.page-body');
-    const scale = Number(sheet.dataset.scale) || 1;
-    const zoom = bodyElement?.style.zoom;
-    if (scale !== 1) bodyElement.style.zoom = '1';
-    try {
-      walk(sheet, { view, origin: { x: rect.left, y: rect.top }, ratio: baselineRatio, collapsed: false }, ops);
-      // Read unscaled DOM metrics, then scale every vector primitive around
-      // the printable area's origin (including fonts and word positions).
-      if (scale !== 1) for (const op of ops) {
-        op.x = A4.marginMm + (op.x - A4.marginMm) * scale;
-        op.y = A4.marginMm + (op.y - A4.marginMm) * scale;
-        for (const key of ['w', 'h', 'size', 'radius', 'lineWidth', 'charSpace', 'width']) if (Number.isFinite(op[key])) op[key] *= scale;
-        for (const word of op.words || []) word.x = A4.marginMm + (word.x - A4.marginMm) * scale;
-      }
-    } finally { if (scale !== 1) bodyElement.style.zoom = zoom; }
-    const body = bodyElement?.getBoundingClientRect();
+    walk(sheet, { view, origin: { x: rect.left, y: rect.top }, ratio: baselineRatio, collapsed: false }, ops);
+    const body = sheet.querySelector('.page-body')?.getBoundingClientRect();
     if (body && mm(body.top + body.height - rect.top) > CONTENT_BOTTOM_MM + 0.5) throw new Error(`Page ${index + 1} content is taller than an A4 page`);
     return ops;
   });

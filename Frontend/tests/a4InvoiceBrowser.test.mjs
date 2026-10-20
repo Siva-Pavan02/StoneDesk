@@ -102,28 +102,15 @@ async function renderProductionCase(page, base, name, input, options = {}) {
       import('/src/utils/a4InvoiceModel.js'), import('/src/utils/a4InvoiceMeasure.js'), import('/src/utils/a4InvoiceRender.js'),
     ]);
     const model = prepareA4Invoice(data);
-    if (data.products) model.products = data.products;
-    const unchanged = JSON.stringify(model);
-    const { projectCopy } = await import('/src/utils/a4InvoiceModel.js');
-    const { planFromMeasurements } = await import('/src/utils/a4InvoicePagination.js');
-    const driver = projectCopy(model, 'driver');
-    const measuredDriver = await measureA4Copy(driver, 'driver');
-    const originalDriver = planFromMeasurements(driver, measuredDriver.units, measuredDriver);
-    if (JSON.stringify(await planA4CopyMeasured(driver, 'driver')) !== JSON.stringify(originalDriver)) throw new Error('Driver layout changed');
     if (model.warnings.length) throw new Error(model.warnings.join(' / '));
     // The one measured plan the app preview, print and PDF share for this copy.
     const { gap, normalCapacity, finalCapacity, pageHeight, headerHeight, noticeHeight, finalHeight } = await measureA4Copy(model, 'buyer');
     const pages = await planA4CopyMeasured(model, 'buyer');
-    if (JSON.stringify(model) !== unchanged) throw new Error('Layout changed invoice data');
-    window.invoiceTest = { model, pages };
     document.body.innerHTML = renderA4Invoice(model, pages);
-    return { pages: pages.length, layout: pages[0].layout, scale: pages[0].scale, warning: Boolean(pages[0].layoutWarning), geometry: { gap, normalCapacity, finalCapacity, pageHeight, headerHeight, noticeHeight, finalHeight },
+    return { pages: pages.length, geometry: { gap, normalCapacity, finalCapacity, pageHeight, headerHeight, noticeHeight, finalHeight },
       columns: pages.map(p => p.columns.map(column => column.map(fragment => ({ id: fragment.group.id, from: fragment.from, to: fragment.to })))),
       summaryPage: pages.findIndex(page => page.final) + 1, expectedEntries: model.groups.reduce((n, group) => n + group.entries.length, 0) };
   }, input);
-  if (options.single) assert.equal(result.pages, 1, `${name}: supported invoice must fit one page`);
-  if (result.pages > 1) assert.ok(result.warning, `${name}: unreadable single-page case must warn`);
-  assert.ok(result.scale >= .9375, `${name}: measurement text must remain at least 7.5pt`);
   assert.ok(result.pages >= 1 && result.summaryPage === result.pages, `${name}: final summary must be on the last page`);
   const inspection = await page.evaluate(() => {
     const sheets = [...document.querySelectorAll('.sample-sheet')];
@@ -181,7 +168,7 @@ async function renderProductionCase(page, base, name, input, options = {}) {
   assert.ok(inspection.sheets.every(sheet => sheet.height <= 1123.3), `${name}: an A4 sheet grew past its physical page height`);
   // 12 mm margins on a 210 mm sheet: measurement columns span the full 186 mm printable width.
   const mm = 96 / 25.4;
-  assert.ok(inspection.sheets.every(sheet => Math.abs(sheet.padding - 12 * mm) < 0.6 && Math.abs(sheet.detailWidth - 186 * mm * result.scale) < 1.5),
+  assert.ok(inspection.sheets.every(sheet => Math.abs(sheet.padding - 12 * mm) < 0.6 && Math.abs(sheet.detailWidth - 186 * mm) < 1.5),
     `${name}: sheets must use 12 mm margins and a 186 mm content width: ${JSON.stringify(inspection.sheets.map(({ padding, detailWidth }) => ({ padding, detailWidth })))}`);
   assert.ok(inspection.sheets.every(sheet => sheet.overflowedCells.length === 0), `${name}: an amount or area overflows its column: ${JSON.stringify(inspection.sheets)}`);
   assert.ok(inspection.sheets.every(sheet => sheet.clippedGlyphs.length === 0), `${name}: numeric glyphs overflow their cells: ${JSON.stringify(inspection.sheets)}`);
@@ -190,16 +177,6 @@ async function renderProductionCase(page, base, name, input, options = {}) {
       `${name}: the logo area appears once, in the page 1 identity block`);
     assert.equal(await page.locator('.sample-sheet').first().locator('.invoice-header .logo-placeholder').count(), 1,
       `${name}: the logo area sits on page 1`);
-  }
-  if (options.single) {
-    await page.emulateMedia({ media: 'screen' });
-    await page.setViewportSize({ width: 390, height: 844 });
-    assert.ok(await page.evaluate(() => {
-      const preview = document.querySelector('.sample-pages');
-      return preview.clientWidth <= 390 && getComputedStyle(preview).overflowX === 'auto' && document.querySelectorAll('.sample-sheet').length === 1;
-    }), `${name}: mobile preserves the same A4 page in a scrollable preview`);
-    await page.setViewportSize({ width: 1280, height: 900 });
-    await page.emulateMedia({ media: null });
   }
   if (options.summaryOnly) assert.deepEqual(result.columns.at(-1), [[], [], []], `${name}: needs a dedicated summary page`);
   if (options.oversized) {
@@ -212,16 +189,6 @@ async function renderProductionCase(page, base, name, input, options = {}) {
     margin: { top: '0', right: '0', bottom: '0', left: '0' } });
   await writeFile(path.join(out, `${name}.pdf`), bytes);
   const pageText = await inspectPdf(bytes, name, result.pages);
-  if (options.single) {
-    const vector = await page.evaluate(async () => {
-      const { a4InvoicePdf } = await import('/src/utils/a4InvoicePdf.js');
-      const { model, pages } = window.invoiceTest;
-      const result = await a4InvoicePdf(model, pages, 'buyer');
-      return Array.from(new Uint8Array(await result.blob.arrayBuffer()));
-    });
-    await writeFile(path.join(out, `${name}-vector.pdf`), new Uint8Array(vector));
-    await inspectPdf(new Uint8Array(vector), `${name}-vector`, 1);
-  }
   assert.equal(pageText.filter(text => text.includes('NET PAYABLE')).length, 1, `${name}: PDF summary exactly once`);
   if (name === 'long-identity-and-money') {
     const all = pageText.join(' ');
@@ -232,7 +199,7 @@ async function renderProductionCase(page, base, name, input, options = {}) {
   const squashed = text => text.replace(/\s+/g, '').toUpperCase();
   assert.ok(pageText.every(text => squashed(text).includes('MANAGER')), `${name}: every PDF page carries the Manager fact`);
   assert.ok(!/Regular subtotal|Top subtotal/.test(pageText.join(' ')), `${name}: PDF uses the Reg total / Top total wording`);
-  console.log('CASE', name, JSON.stringify({ pages: result.pages, mode: result.layout, scale: result.scale, entries: inspection.entries, summaryPage: result.summaryPage,
+  console.log('CASE', name, JSON.stringify({ pages: result.pages, entries: inspection.entries, summaryPage: result.summaryPage,
     groups: result.columns.map(columns => columns.map(column => column.map(part => part.id))), geometry: result.geometry }));
   return result;
 }
@@ -299,16 +266,11 @@ async function main() {
     }
 
     const one = browserFixture(); one.groups = one.groups.slice(0, 1);
-    await renderProductionCase(page, base, 'single-group', one, { shot: true, single: true });
+    await renderProductionCase(page, base, 'single-group', one, { shot: true });
     const small = varyingFixture(4);
     small.groups[1].entries = small.groups[1].entries.filter(entry => entry.type === 'top');
     if (!small.groups[1].entries.length) small.groups[1].entries = [{ ...sampleA4Invoice().groups[0].entries[4], id: 'top-only' }];
-    await renderProductionCase(page, base, 'varying-small', small, { single: true });
-    await renderProductionCase(page, base, 'medium-12-groups', varyingFixture(12), { single: true });
-    await renderProductionCase(page, base, 'compact-20-groups', varyingFixture(20), { single: true });
-    const large = varyingFixture(24);
-    large.products = [{ stoneType: 'Black Granite', finish: 'Polished', quantity: 20, ratePerSqFt: 40 }, { stoneType: 'Black Granite', finish: 'Polished', quantity: 15, ratePerSqFt: 45 }];
-    await renderProductionCase(page, base, 'large-24-groups', large, { single: true, shot: true });
+    await renderProductionCase(page, base, 'varying-small', small);
     await renderProductionCase(page, base, 'more-than-24', varyingFixture(37), { shot: true });
     await renderProductionCase(page, base, 'oversized-group', oversizedFixture(96, 18), { shot: true, oversized: true });
     await renderProductionCase(page, base, 'summary-reservation', oversizedFixture(29, 3), { shot: true });

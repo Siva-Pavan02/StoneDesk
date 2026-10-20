@@ -587,19 +587,19 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
 .a4-invoice.sample-pages { display: grid; justify-items: center; gap: 20px; inline-size: 100%; min-inline-size: 0; container: a4-preview / inline-size; }
 @media screen {
   @container a4-preview (max-width: 793px) {
-    .a4-invoice.sample-pages .sample-sheet:not([data-layout]) { inline-size: 100%; min-block-size: 0; padding: 18px; }
-    .a4-invoice.sample-pages .sample-sheet:not([data-layout]) .detail-columns { grid-template-columns: minmax(0, 1fr); gap: 0; }
-    .a4-invoice.sample-pages .sample-sheet:not([data-layout]) .detail-column + .detail-column { margin-block-start: 8px; }
-    .a4-invoice.sample-pages .sample-sheet:not([data-layout]) .column-rule { display: none; }
-    .a4-invoice.sample-pages .sample-sheet:not([data-layout]) .invoice-header { grid-template-columns: minmax(0, 1fr); }
-    .a4-invoice.sample-pages .sample-sheet:not([data-layout]) .business-panel { padding-inline-end: 0; border-inline-end: 0; }
-    .a4-invoice.sample-pages .sample-sheet:not([data-layout]) .invoice-panel { padding-inline-start: 0; border-block-start: 1px solid var(--line); }
-    .a4-invoice.sample-pages .sample-sheet:not([data-layout]) .invoice-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .a4-invoice.sample-pages .sample-sheet:not([data-layout]) .invoice-summary { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-    .a4-invoice.sample-pages .sample-sheet:not([data-layout]) .settlement-overview { padding-inline-start: 0; padding-block-start: 8px; border-inline-start: 0; border-block-start: 1px solid var(--border); }
-    .a4-invoice.sample-pages .sample-sheet:not([data-layout]) .footer-details { grid-template-columns: minmax(0, 1fr); }
-    .a4-invoice.sample-pages .sample-sheet:not([data-layout]) .sign { max-inline-size: 150px; }
-    .a4-invoice.sample-pages .sample-sheet:not([data-layout]) .bank-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .a4-invoice.sample-pages .sample-sheet { inline-size: 100%; min-block-size: 0; padding: 18px; }
+    .a4-invoice.sample-pages .sample-sheet .detail-columns { grid-template-columns: minmax(0, 1fr); gap: 0; }
+    .a4-invoice.sample-pages .sample-sheet .detail-column + .detail-column { margin-block-start: 8px; }
+    .a4-invoice.sample-pages .sample-sheet .column-rule { display: none; }
+    .a4-invoice.sample-pages .sample-sheet .invoice-header { grid-template-columns: minmax(0, 1fr); }
+    .a4-invoice.sample-pages .sample-sheet .business-panel { padding-inline-end: 0; border-inline-end: 0; }
+    .a4-invoice.sample-pages .sample-sheet .invoice-panel { padding-inline-start: 0; border-block-start: 1px solid var(--line); }
+    .a4-invoice.sample-pages .sample-sheet .invoice-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .a4-invoice.sample-pages .sample-sheet .invoice-summary { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+    .a4-invoice.sample-pages .sample-sheet .settlement-overview { padding-inline-start: 0; padding-block-start: 8px; border-inline-start: 0; border-block-start: 1px solid var(--border); }
+    .a4-invoice.sample-pages .sample-sheet .footer-details { grid-template-columns: minmax(0, 1fr); }
+    .a4-invoice.sample-pages .sample-sheet .sign { max-inline-size: 150px; }
+    .a4-invoice.sample-pages .sample-sheet .bank-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 }
 @media print {
@@ -626,32 +626,3 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
 .a4-invoice .product-summary-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: baseline; column-gap: 14px; padding-block: 4px; border-block-end: 1px solid var(--line); font-size: 8pt; }
 .a4-invoice .product-summary-name { overflow-wrap: anywhere; }
 .a4-invoice .product-summary-quantity, .a4-invoice .product-summary-rate { text-align: end; white-space: nowrap; font-variant-numeric: tabular-nums; }
-
-/* Buyer-only measured compaction. Financial values and Driver Slip are untouched. */
-.a4-invoice.sample-pages:has([data-layout]) { overflow-x: auto; justify-items: start; }
-.a4-invoice .sample-sheet[data-layout] { max-inline-size: none; flex-shrink: 0; }
-.a4-invoice .sample-sheet[data-layout] .row-table { font-size: 8pt; }
-.a4-invoice .sample-sheet[data-layout] .product-summary { font-size: 8pt; }
-.a4-invoice .sample-sheet[data-layout="compact"],
-.a4-invoice .sample-sheet[data-layout="dense"] { --cell-y: 1px; }
-.a4-invoice .sample-sheet[data-layout="compact"] .row-block,
-.a4-invoice .sample-sheet[data-layout="dense"] .row-block { margin-block-end: 3px; }
-.a4-invoice .sample-sheet[data-layout="compact"] .row-block h3,
-.a4-invoice .sample-sheet[data-layout="dense"] .row-block h3 { margin-block-end: 2px; }
-.a4-invoice .sample-sheet[data-layout="compact"] .invoice-header,
-.a4-invoice .sample-sheet[data-layout="dense"] .invoice-header { margin-block-end: 5px; }
-.a4-invoice .sample-sheet[data-layout="dense"] { --cell-y: .2px; }
-.a4-invoice .sample-sheet[data-layout="dense"] .business-panel { margin-block: 3px; }
-.a4-invoice .sample-sheet[data-layout="dense"] .invoice-panel { padding-block: 3px; }
-.a4-invoice .sample-sheet[data-layout="dense"] .logo-placeholder { flex-basis: 32px; inline-size: 32px; block-size: 32px; }
-.a4-invoice .sample-sheet[data-layout="dense"] .invoice-facts { margin-block-start: 3px; gap: 3px; }
-.a4-invoice .sample-sheet[data-layout="dense"] .product-summary { margin-block: 3px; padding-block: 2px; }
-.a4-invoice .sample-sheet[data-layout="dense"] .product-summary-row { padding-block: 1px; }
-.a4-invoice .sample-sheet[data-layout="dense"] .invoice-summary { padding-block-start: 3px; margin-block-start: 2px; }
-.a4-invoice .sample-sheet[data-layout="dense"] .summary-title { margin-block-end: 3px; }
-.a4-invoice .sample-sheet[data-layout="dense"] .closing { margin-block: 3px; gap: 3px; }
-.a4-invoice .sample-sheet[data-layout="dense"] .words-line .amount-in-words { font-size: 8pt; }
-@media print { .a4-preview-feedback { display: none; } .a4-invoice.sample-pages:has([data-layout]) { overflow: visible; } }
-.a4-invoice .sample-sheet[data-layout="dense"] .row-table { line-height: 1.05; }
-.a4-invoice .sample-sheet[data-layout="dense"] .row-block { margin-block-end: 1px; }
-.a4-invoice .sample-sheet[data-layout="dense"] .row-block h3 { font-size: 8pt; margin-block-end: 1px; }

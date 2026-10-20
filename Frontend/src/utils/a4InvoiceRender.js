@@ -146,8 +146,10 @@ function renderColumns(columns, copy, prefix) {
 
 export function renderA4Page(model, page, pageNumber, pageCount, copy = 'buyer', prefix = 'document') {
   assertCopy(copy);
+  const layout = copy === 'buyer' && ['normal', 'compact', 'dense'].includes(page.layout) ? page.layout : '';
+  const scale = layout && Number.isFinite(page.scale) && page.scale >= .9375 && page.scale <= 1 ? page.scale : 1;
   const hasRows = page.columns.some(column => column.length);
-  return `<article aria-label="${escapeA4Text(model.title)} page ${pageNumber} of ${pageCount}" class="paper sample-sheet" data-page="${pageNumber}"><div class="page-body">`
+  return `<article aria-label="${escapeA4Text(model.title)} page ${pageNumber} of ${pageCount}" class="paper sample-sheet" ${layout ? `data-layout="${layout}" data-scale="${scale}"` : ''} data-page="${pageNumber}"><div class="page-body"${layout ? ` style="zoom:${scale};inline-size:186mm"` : ''}>`
     + renderA4Header(model)
     + (hasRows ? renderColumns(page.columns, copy, prefix) : '')
     + (page.final ? renderFinal(model, copy, prefix) : `<p class="continuation">${continuationText(copy)}</p>`)
@@ -168,7 +170,8 @@ export function renderA4Pages(model, pages, copy = 'buyer', prefix = 'document')
 
 export function renderA4Invoice(model, pages, copy = 'buyer', prefix = 'document') {
   const articles = renderA4Pages(model, pages, copy, prefix);
-  return `<main aria-label="${escapeA4Text(model.title)}" class="a4-invoice sample-pages" data-page-count="${pages.length}" data-group-count="${model.groups.length}">${articles}</main>`;
+  const warning = pages[0]?.layoutWarning ? `<p role="alert" class="a4-preview-feedback">${escapeA4Text(pages[0].layoutWarning)}</p>` : '';
+  return warning + `<main aria-label="${escapeA4Text(model.title)}" class="a4-invoice sample-pages" data-page-count="${pages.length}" data-group-count="${model.groups.length}">${articles}</main>`;
 }
 
 export function renderStandaloneA4Invoice(model, pages, css, copy = 'buyer') {

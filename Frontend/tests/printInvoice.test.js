@@ -80,8 +80,9 @@ test('driver print HTML carries the same pages and no rupee value, and reaches t
   assert.ok(!html.includes('₹'));
   assert.doesNotMatch(html, /Payment summary|Material total|Net payable|Bank details|Amount in words/);
   assert.equal((html.match(/class="paper sample-sheet"/g) || []).length, pages.length);
-  // Header on every page, the continuation note on every page but the last.
-  assert.equal((html.match(/<header class="invoice-header">/g) || []).length, pages.length);
+  // Header on page 1, minimal continued header on subsequent pages, note on non-final pages.
+  assert.equal((html.match(/<header class="invoice-header">/g) || []).length, 1);
+  assert.equal((html.match(/<header class="invoice-continued-header">/g) || []).length, pages.length - 1);
   assert.equal((html.match(/class="continuation"/g) || []).length, pages.length - 1);
 
   const { win, html: written } = fakeWindow();

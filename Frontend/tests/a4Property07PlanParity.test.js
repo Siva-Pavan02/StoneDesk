@@ -9,7 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { genA4Input, runProperty, syntheticGeometry } from './helpers/a4Generators.js';
 import { prepareA4Invoice, projectCopy, sampleA4Invoice } from '../src/utils/a4InvoiceModel.js';
-import { planFromMeasurements } from '../src/utils/a4InvoicePagination.js';
+import { COLUMNS, planFromMeasurements } from '../src/utils/a4InvoicePagination.js';
 import { renderA4Invoice, renderStandaloneA4Invoice } from '../src/utils/a4InvoiceRender.js';
 
 const COPIES = ['buyer', 'driver'];
@@ -31,8 +31,8 @@ function htmlShape(html) {
     const columns = page.split('<div class="detail-column">').slice(1).map(column =>
       [...column.matchAll(/data-group="([^"]+)" data-from="(\d+)" data-to="(\d+)"/g)]
         .map(([, id, from, to]) => ({ id, from: Number(from), to: Number(to) })));
-    // A page with no measurement rows renders no columns at all; the plan still has three.
-    while (columns.length < 3) columns.push([]);
+    // A page with no measurement rows renders no columns at all; the plan still has four.
+    while (columns.length < COLUMNS) columns.push([]);
     return { columns, final: page.includes('class="final-section"') };
   });
 }

@@ -1,5 +1,5 @@
 import { SAMPLE_BANK_NAMES, SAMPLE_BANK_PAIRS, a4StatusLabel, bankDetailPairs, bankDetailSegments, formatA4Dimension, formatA4Money, formatA4Number, formatA4Rate } from './a4InvoiceModel.js';
-import { fragmentRows } from './a4InvoicePagination.js';
+import { COLUMNS, fragmentRows } from './a4InvoicePagination.js';
 
 // Markup of the user's reference invoice (sample_invoice_space_optimized.html):
 // the header on every page, three measurement columns with Reg total / Top total
@@ -54,7 +54,7 @@ export function renderA4Group(group, from = 0, to = group.entries.length, copy =
   const id = `${idPrefix(prefix)}-row-${group.id}-${from}`;
   const continued = from > 0;
   return `<section aria-labelledby="${id}-heading" class="row-block" id="${id}" data-group="${group.id}" data-from="${from}" data-to="${to}">`
-    + `<h3 id="${id}-heading">${group.id}${continued ? '<span class="continuation-marker">(continued)</span>' : ''}<span class="group-rule" aria-hidden="true"></span></h3>`
+    + `<h3 id="${id}-heading"><span class="serial-badge">${group.id}</span>${continued ? '<span class="continuation-marker">conti</span>' : ''}<span class="group-rule" aria-hidden="true"></span></h3>`
     + `<table class="row-table"><caption class="sr-only">Measurements for group ${group.id}${continued ? ', continued' : ''}; dimensions in feet and areas in square feet</caption>`
     + `${COLGROUP}${THEAD}<tbody>${rows}</tbody></table></section>`;
 }
@@ -75,6 +75,11 @@ export function renderA4Header(model) {
     + `<p class="invoice-reference">No. ${escapeA4Text(model.invoiceNumber)}${model.mode === 'sample' ? ' · Fictional data — not for payment' : ''}</p>`
     + `<dl class="invoice-facts">${facts.map(([label, value, cls]) => `<div><dt>${label}</dt><dd${cls}>${escapeA4Text(value)}</dd></div>`).join('')}</dl>`
     + '</div></header>';
+}
+
+/** Minimal continued header for emergency page 2+ (no repeated business header/metadata). */
+export function renderA4ContinuedHeader() {
+  return '<header class="invoice-continued-header"><span class="continued-label">Continued</span></header>';
 }
 
 // Pieces and area only: shared by both copies.
@@ -147,15 +152,16 @@ function renderColumns(columns, copy, prefix) {
 export function renderA4Page(model, page, pageNumber, pageCount, copy = 'buyer', prefix = 'document') {
   assertCopy(copy);
   const hasRows = page.columns.some(column => column.length);
-  return `<article aria-label="${escapeA4Text(model.title)} page ${pageNumber} of ${pageCount}" class="paper sample-sheet" data-page="${pageNumber}"><div class="page-body">`
-    + renderA4Header(model)
+  const density = page.tier ? ` density-${page.tier}` : '';
+  return `<article aria-label="${escapeA4Text(model.title)} page ${pageNumber} of ${pageCount}" class="paper sample-sheet${density}" data-page="${pageNumber}"><div class="page-body">`
+    + (pageNumber === 1 ? renderA4Header(model) : renderA4ContinuedHeader())
     + (hasRows ? renderColumns(page.columns, copy, prefix) : '')
     + (page.final ? renderFinal(model, copy, prefix) : `<p class="continuation">${continuationText(copy)}</p>`)
     + '</div></article>';
 }
 
 function assertPages(pages) {
-  if (!pages?.length || pages.some(page => !Array.isArray(page?.columns) || page.columns.length !== 3)) throw new Error('The invoice needs complete, paginated columns.');
+  if (!pages?.length || pages.some(page => !Array.isArray(page?.columns) || page.columns.length !== COLUMNS)) throw new Error('The invoice needs complete, paginated columns.');
   if (pages.filter(page => page.final).length !== 1 || !pages.at(-1).final) throw new Error('The invoice summary must appear once on the final page.');
 }
 
@@ -179,15 +185,18 @@ export function renderStandaloneA4Invoice(model, pages, css, copy = 'buyer') {
 
 /**
  * One A4 sheet for the measure host: the header, every unit in the first column
- * (columns 2 and 3 empty, with their rules), the final section and the
+ * (columns 2..COLUMNS empty, with their rules), the final section and the
  * continuation note, followed by the 272.5 mm page-height ruler.
  */
-export function renderA4MeasureSheet(model, copy, units, prefix = 'measure') {
+export function renderA4MeasureSheet(model, copy, units, prefix = 'measure', tier = '') {
   assertCopy(copy);
   const blocks = units.map(({ group, from, to }) => renderA4Group(group, from, to, copy, prefix)).join('');
-  return `<article class="paper sample-sheet" data-measure="${copy}"><div class="page-body">`
+  const emptyColumns = Array.from({ length: COLUMNS - 1 }, () => `<div class="detail-column">${RULE}</div>`).join('');
+  const density = tier ? ` density-${tier}` : '';
+  return `<article class="paper sample-sheet${density}" data-measure="${copy}"><div class="page-body">`
     + renderA4Header(model)
-    + `<section aria-label="Invoice measurement columns" class="detail-columns"><div class="detail-column">${blocks}</div><div class="detail-column">${RULE}</div><div class="detail-column">${RULE}</div></section>`
+    + `<section aria-label="Invoice measurement columns" class="detail-columns"><div class="detail-column">${blocks}</div>${emptyColumns}</section>`
+    + renderA4ContinuedHeader()
     + renderFinal(model, copy, prefix)
     + `<p class="continuation">${continuationText(copy)}</p>`
     + '</div></article><div class="page-height-ruler"></div>';

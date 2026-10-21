@@ -25,7 +25,10 @@ test('committed public sample matches freshly rendered output (Req 11.4)', async
   const pages = recordedSamplePages(prepareA4Invoice(sampleA4Invoice()), SAMPLE_24_GEOMETRY);
   assert.equal(pages.length, PAGE_COUNT, 'the recorded sample plan keeps the agreed page count');
   const planned = pages.map(page => page.columns.map(column => column.map(fragment => fragment.group.id)));
-  assert.deepEqual(planned, [[[1, 2, 3, 4, 5], [6, 7, 8, 9, 10], [11, 12, 13, 14, 15]], [[16, 17, 18], [19, 20, 21], [22, 23, 24]]]);
+  assert.deepEqual(planned, [
+    [[1, 2, 3, 4, 5], [6, 7, 8, 9, 10], [11, 12, 13, 14, 15], [16, 17, 18, 19, 20]],
+    [[21], [22], [23], [24]],
+  ]);
   const sheets = html.split('<article ').slice(1);
   assert.equal(sheets.length, PAGE_COUNT);
   assert.deepEqual(sheets.map(sheet => sheet.split('<div class="detail-column">').slice(1)
@@ -33,12 +36,12 @@ test('committed public sample matches freshly rendered output (Req 11.4)', async
   assert.equal(html.match(/data-page-count="(\d+)"/)[1], String(PAGE_COUNT));
   assert.equal(html.match(/data-group-count="(\d+)"/)[1], '24');
 
-  // Reference format: the header with the Manager fact on every page, the continuation
-  // note on every page but the last, the final section only on the last.
-  for (const sheet of sheets) {
-    assert.equal(count(sheet, /<header class="invoice-header">/g), 1);
-    assert.match(sheet, /<dt>Manager<\/dt><dd>SAMPLE<\/dd>/);
-  }
+  // Reference format: the header with Manager fact on page 1, minimal Continued
+  // header on page 2, continuation note on non-final pages, final section only on the last.
+  assert.equal(count(sheets[0], /<header class="invoice-header">/g), 1);
+  assert.match(sheets[0], /<dt>Manager<\/dt><dd>SAMPLE<\/dd>/);
+  assert.equal(count(sheets[1], /<header class="invoice-continued-header">/g), 1);
+  assert.match(sheets[1], /class="continued-label">Continued<\/span>/);
   assert.equal(count(html, /class="continuation"/g), PAGE_COUNT - 1);
   assert.match(html, /Continued on the next page\. Order totals and payment summary appear on the final page\./);
   assert.equal(count(html, /class="final-section"/g), 1);

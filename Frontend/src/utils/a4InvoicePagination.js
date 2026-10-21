@@ -1,4 +1,4 @@
-﻿// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
 // Height-measured A4 pagination, ported from the reference invoice
 // (sample_invoice_space_optimized.html). Pure functions: no DOM access. The
 // heights come from the offscreen measure host in a4InvoiceMeasure.js (live
@@ -10,17 +10,20 @@
 
 export const COPIES = Object.freeze(['buyer', 'driver']);
 
+/** Number of measurement columns per A4 page (4 for single-page optimisation). */
+export const COLUMNS = 4;
+
 /** A4 portrait with 12 mm margins: a 186 × 272.5 mm content box (reference ruler). */
 export const A4 = Object.freeze({ widthMm: 210, heightMm: 297, marginMm: 12, contentWidthMm: 186, pageHeightMm: 272.5, safetyPx: 2 });
 
 // --- Reference planner (verbatim port; only `export` added) ---------------
 
 export function fillColumns(heights, start, end, capacity, gap) {
-  const columns = [[], [], []];
-  const used = [0, 0, 0];
+  const columns = Array.from({ length: COLUMNS }, () => []);
+  const used = Array(COLUMNS).fill(0);
   let index = start;
   if (capacity <= 0) return { columns, used, end: start };
-  for (let col = 0; col < 3 && index < end; col += 1) {
+  for (let col = 0; col < COLUMNS && index < end; col += 1) {
     while (index < end) {
       const next = heights[index] + (columns[col].length ? gap : 0);
       if (used[col] + next > capacity + 0.01) break;
@@ -90,7 +93,7 @@ export function planPages(heights, normalCapacity, finalCapacity, gap) {
         // keep that summary intact on its own page instead of cropping it.
         const first = balancedRange(heights, start, full.end, normalCapacity, gap);
         pages.push({ columns: first.columns, used: first.used, final: false });
-        pages.push({ columns: [[], [], []], used: [0, 0, 0], final: true });
+        pages.push({ columns: Array.from({ length: COLUMNS }, () => []), used: Array(COLUMNS).fill(0), final: true });
       }
       return pages;
     }
@@ -98,7 +101,7 @@ export function planPages(heights, normalCapacity, finalCapacity, gap) {
     pages.push({ columns: packed.columns, used: packed.used, final: false });
     start = full.end;
   }
-  pages.push({ columns: [[], [], []], used: [0, 0, 0], final: true });
+  pages.push({ columns: Array.from({ length: COLUMNS }, () => []), used: Array(COLUMNS).fill(0), final: true });
   return pages;
 }
 
@@ -186,7 +189,7 @@ const ORDER_ERROR = 'Group ordering or completeness check failed';
  * and every entry of each group exactly once and contiguously.
  */
 export function validateA4Pages(model, pages) {
-  if (!Array.isArray(pages) || !pages.length || pages.some(page => !Array.isArray(page?.columns) || page.columns.length !== 3 || page.columns.some(column => !Array.isArray(column)))) throw new Error(ORDER_ERROR);
+  if (!Array.isArray(pages) || !pages.length || pages.some(page => !Array.isArray(page?.columns) || page.columns.length !== COLUMNS || page.columns.some(column => !Array.isArray(column)))) throw new Error(ORDER_ERROR);
   if (pages.filter(page => page.final === true).length !== 1 || pages.at(-1).final !== true) throw new Error(ORDER_ERROR);
   const groups = model.groups;
   let groupIndex = 0, next = 0;
@@ -201,8 +204,188 @@ export function validateA4Pages(model, pages) {
   return pages;
 }
 
+export function calcFragmentHeight(layout, group, from, to) {
+  const rows = fragmentRows(group, from, to);
+  let total = layout?.head ?? 33;
+  if (!layout?.rows) return total + rows.length * 16;
+  for (const row of rows) {
+    const item = layout.rows.find(r => r.kind === row.kind && (row.kind === 'entry' ? r.index === row.index : r.of === row.of));
+    if (!item) throw new Error(`Missing row measurement for group ${group.id}`);
+    total += item.height;
+  }
+  return total;
+}
+
+export function entriesToFragments(allEntries, startIdx, endIdx) {
+  if (startIdx >= endIdx) return [];
+  const fragments = [];
+  let curGroupIdx = allEntries[startIdx].groupIndex;
+  let curFrom = allEntries[startIdx].entryIndex;
+  let curGroup = allEntries[startIdx].group;
+
+  for (let i = startIdx; i < endIdx; i++) {
+    const item = allEntries[i];
+    if (item.groupIndex !== curGroupIdx) {
+      fragments.push({ group: curGroup, from: curFrom, to: curGroup.entries.length });
+      curGroupIdx = item.groupIndex;
+      curFrom = item.entryIndex;
+      curGroup = item.group;
+    }
+  }
+  const lastItem = allEntries[endIdx - 1];
+  fragments.push({ group: curGroup, from: curFrom, to: lastItem.entryIndex + 1 });
+  return fragments;
+}
+
+export function calcColumnHeight(allEntries, startIdx, endIdx, getLayout, gap) {
+  if (startIdx >= endIdx) return 0;
+  const fragments = entriesToFragments(allEntries, startIdx, endIdx);
+  let total = 0;
+  for (let i = 0; i < fragments.length; i++) {
+    const f = fragments[i];
+    const layout = getLayout(f.group);
+    total += calcFragmentHeight(layout, f.group, f.from, f.to);
+    if (i > 0) total += gap;
+  }
+  return total;
+}
+
+/** Fill each column to its actual capacity; never split merely to balance heights. */
+export function fillFragmentRange(allEntries, startIdx, endIdx, capacity, gap, getLayout) {
+  const filled = greedyFillPage1(allEntries, startIdx, capacity, gap, getLayout, endIdx);
+  return filled.endIdx === endIdx ? filled : null;
+}
+
+export function greedyFillPage1(allEntries, startIdx, capacity, gap, getLayout, endIdx = allEntries.length) {
+  const colH = (from, to) => calcColumnHeight(allEntries, from, to, getLayout, gap);
+  let p = startIdx;
+  const cuts = [];
+  const used = [];
+
+  for (let c = 0; c < COLUMNS && p < endIdx; c++) {
+    let next = p;
+    while (next < endIdx && colH(p, next + 1) <= capacity + 0.01) {
+      next++;
+    }
+    if (next === p && p < endIdx) {
+      break;
+    }
+    cuts.push(next);
+    used.push(colH(p, next));
+    p = next;
+  }
+
+  while (cuts.length < COLUMNS) {
+    cuts.push(p);
+    used.push(0);
+  }
+
+  return {
+    columns: [
+      entriesToFragments(allEntries, startIdx, cuts[0]),
+      entriesToFragments(allEntries, cuts[0], cuts[1]),
+      entriesToFragments(allEntries, cuts[1], cuts[2]),
+      entriesToFragments(allEntries, cuts[2], cuts[3]),
+    ],
+    used,
+    endIdx: cuts[3],
+  };
+}
+
+export function planFragmentPages(model, measurements, units = measurements.units || wholeGroupUnits(model)) {
+  const allEntries = [];
+  model.groups.forEach((group, groupIndex) => {
+    group.entries.forEach((entry, entryIndex) => {
+      allEntries.push({ groupIndex, entryIndex, group, entry });
+    });
+  });
+
+  const { normalCapacity, finalCapacity, gap, rowLayouts, heights } = measurements;
+
+  const layoutsByGroup = new Map();
+  units.forEach((unit, i) => {
+    const measured = rowLayouts?.[i];
+    if (!measured) return;
+    const previous = layoutsByGroup.get(unit.group.id);
+    layoutsByGroup.set(unit.group.id, {
+      head: Math.max(previous?.head || 0, measured.head),
+      rows: [...(previous?.rows || []), ...measured.rows],
+    });
+  });
+  const getLayout = (group) => {
+    if (layoutsByGroup.has(group.id)) return layoutsByGroup.get(group.id);
+    if (rowLayouts) throw new Error(`Missing measurements for group ${group.id}`);
+    const gIdx = model.groups.findIndex(g => g.id === group.id);
+    const unitH = heights?.[gIdx] ?? 120;
+    const rows = fragmentRows(group, 0, group.entries.length);
+    const head = 33;
+    const rHeight = rows.length ? Math.max(1, (unitH - head) / rows.length) : 16;
+    return {
+      head,
+      rows: rows.map(r => ({ height: rHeight, ...(r.kind === 'entry' ? { kind: 'entry', index: r.index } : { kind: 'sub', of: r.of }) })),
+    };
+  };
+
+  // 1. First attempt: Single page with finalCapacity across all 4 columns
+  const single = fillFragmentRange(allEntries, 0, allEntries.length, finalCapacity, gap, getLayout);
+  if (single) {
+    return validateA4Pages(model, [{ columns: single.columns, used: single.used, final: true }]);
+  }
+
+  const continuedNormal = measurements.continuationNormalCapacity ?? normalCapacity;
+  const continuedFinal = measurements.continuationFinalCapacity ?? finalCapacity;
+
+  // 2. Multi-page: Page 1 does NOT reserve final section height.
+  // Uses normalCapacity (nearly entire remaining page height).
+  const pages = [];
+  let cursor = 0;
+  const T = allEntries.length;
+
+  while (cursor < T) {
+    if (pages.length > 0) {
+      // On page 2+, check if remaining entries fit on a final page
+      const finalTry = fillFragmentRange(allEntries, cursor, T, continuedFinal, gap, getLayout);
+      if (finalTry) {
+        pages.push({ columns: finalTry.columns, used: finalTry.used, final: true });
+        return validateA4Pages(model, pages);
+      }
+    }
+
+    const capacity = pages.length ? continuedNormal : normalCapacity;
+    const filled = greedyFillPage1(allEntries, cursor, capacity, gap, getLayout);
+    if (filled.endIdx === T) {
+      // Leave a nonempty suffix beside the closing block, never a summary-only page.
+      for (let split = cursor + 1; split < T; split++) {
+        const last = fillFragmentRange(allEntries, split, T, continuedFinal, gap, getLayout);
+        if (!last) continue;
+        const first = fillFragmentRange(allEntries, cursor, split, capacity, gap, getLayout);
+        if (!first) continue;
+        pages.push({ columns: first.columns, used: first.used, final: false },
+          { columns: last.columns, used: last.used, final: true });
+        return validateA4Pages(model, pages);
+      }
+      throw new Error('The final summary cannot fit with a measurement row on A4.');
+    }
+    if (filled.endIdx <= cursor) {
+      throw new Error('Page packing made no progress');
+    }
+    pages.push({ columns: filled.columns, used: filled.used, final: false });
+    cursor = filled.endIdx;
+  }
+
+  if (!pages.some(p => p.final)) {
+    pages.push({ columns: Array.from({ length: COLUMNS }, () => []), used: Array(COLUMNS).fill(0), final: true });
+  }
+
+  return validateA4Pages(model, pages);
+}
+
 /** Plans one copy from measured unit heights and validates the result. */
-export function planFromMeasurements(model, units, { heights, normalCapacity, finalCapacity, gap }) {
+export function planFromMeasurements(model, units, measurements) {
+  if (measurements?.rowLayouts) {
+    return planFragmentPages(model, measurements, units);
+  }
+  const { heights, normalCapacity, finalCapacity, gap } = measurements;
   if (!Array.isArray(units) || !Array.isArray(heights) || heights.length !== units.length) throw new Error('Invalid group measurements');
   const plan = planPages(heights, normalCapacity, finalCapacity, gap);
   const flattened = plan.flatMap(page => page.columns.flat());
@@ -337,7 +520,7 @@ function assertHeaderAndClosingFit(firstFinal) {
   if (firstFinal < -EPSILON) throw new Error('The header and final summary cannot fit together on a single A4 page. Shorten the supplied identity or amount in words.');
 }
 
-function emptyPage() { return { columns: [[], [], []], used: [0, 0, 0], start: null, summary: false }; }
+function emptyPage() { return { columns: Array.from({ length: COLUMNS }, () => []), used: Array(COLUMNS).fill(0), start: null, summary: false }; }
 function asPage(page) { return { columns: page.columns, summary: page.summary, final: page.summary }; }
 const perPage = capacity => typeof capacity === 'function' ? capacity : () => capacity;
 
@@ -365,7 +548,7 @@ export function packA4Groups(groups, measure, capacity, from = { groupIndex: 0, 
   const largest = Math.max(fullAt(0), fullAt(1));
   const used = () => page.used[columnIndex];
   const remaining = () => cap() - used();
-  const advance = () => { if (++columnIndex === 3) open(); };
+  const advance = () => { if (++columnIndex === COLUMNS) open(); };
   const add = (group, groupIndex, start, end, height) => {
     if (!page.start) page.start = { groupIndex, entryIndex: start };
     page.columns[columnIndex].push({ group, from: start, to: end });
@@ -449,7 +632,7 @@ export function planA4Invoice(model, measure, { regular, final, first = regular,
       return [...original.slice(0, -1).map(asPage), ...repacked.map(asPage)];
     }
   }
-  return [...original.map(asPage), { columns: [[], [], []], summary: true, final: true }];
+  return [...original.map(asPage), { columns: Array.from({ length: COLUMNS }, () => []), summary: true, final: true }];
 }
 
 /**

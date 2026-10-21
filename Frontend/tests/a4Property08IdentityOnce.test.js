@@ -24,16 +24,22 @@ function checkHtml(model, pages, copy) {
   const html = renderA4Invoice(model, pages, copy, `p8-${copy}`);
   const sheets = html.split('<article ').slice(1);
   assert.equal(sheets.length, pages.length, `${copy}: HTML sheet count`);
-  assert.equal(count(html, /<header class="invoice-header">/g), pages.length, `${copy}: one header per page`);
+  assert.equal(count(html, /<header class="invoice-header">/g), 1, `${copy}: one main header on page 1`);
+  assert.equal(count(html, /<header class="invoice-continued-header">/g), pages.length - 1, `${copy}: continued header on later pages`);
   assert.equal(count(html, /class="final-section"/g), 1, `${copy}: one final section`);
   assert.ok(sheets.at(-1).includes('class="final-section"'), `${copy}: the final section is on the last page`);
   assert.equal(count(html, /class="continuation"/g), pages.length - 1, `${copy}: continuation notes`);
   assert.ok(!html.includes(AREA_ROUNDING_NOTE), `${copy}: no area rounding note`);
   sheets.forEach((sheet, index) => {
     const last = index === sheets.length - 1;
-    for (const marker of [/<header class="invoice-header">/g, /class="business-name"/g, /class="invoice-reference"/g,
-      /class="invoice-facts"/g, /<span class="status">/g, /<dt>Manager<\/dt>/g]) {
-      assert.equal(count(sheet, marker), 1, `${copy}: HTML page ${index + 1}/${sheets.length} ${marker}`);
+    if (index === 0) {
+      for (const marker of [/<header class="invoice-header">/g, /class="business-name"/g, /class="invoice-reference"/g,
+        /class="invoice-facts"/g, /<span class="status">/g, /<dt>Manager<\/dt>/g]) {
+        assert.equal(count(sheet, marker), 1, `${copy}: HTML page 1 ${marker}`);
+      }
+    } else {
+      assert.equal(count(sheet, /<header class="invoice-continued-header">/g), 1, `${copy}: HTML page ${index + 1} continued header`);
+      assert.equal(count(sheet, /<header class="invoice-header">/g), 0, `${copy}: HTML page ${index + 1} no full header`);
     }
     assert.equal(count(sheet, /class="continuation"/g), last ? 0 : 1, `${copy}: page ${index + 1} continuation note`);
     if (!last) assert.ok(sheet.includes(continuationText(copy)), `${copy}: page ${index + 1} continuation text`);
@@ -62,9 +68,9 @@ function genMultiPageInput(rng) {
   return { ...input, mode: 'production', status: rng.pick(['Draft', 'Dispatched', 'Delivered']) };
 }
 
-test('Feature: unified-a4-bill-format, Property 8: one header on every page, continuation on non-final pages, no footer strip', async () => {
+test('Feature: unified-a4-bill-format, Property 8: header on page 1, minimal continued header on later pages, continuation note on non-final pages, no footer strip', async () => {
   let multiPage = 0, cases = 0;
-  const runs = await runProperty('Property 8: header per page, no footer', genMultiPageInput, input => {
+  const runs = await runProperty('Property 8: page 1 header, minimal continued header, no footer', genMultiPageInput, input => {
     multiPage += checkModel(prepareA4Invoice(input));
     cases += COPIES.length;
   });
@@ -72,7 +78,7 @@ test('Feature: unified-a4-bill-format, Property 8: one header on every page, con
   assert.ok(multiPage >= cases / 2, `only ${multiPage} of ${cases} copies spanned 2+ pages`);
 });
 
-test('Feature: unified-a4-bill-format, Property 8: the sample invoice repeats its header on every page', () => {
+test('Feature: unified-a4-bill-format, Property 8: the sample invoice has page 1 header and continued header on page 2', () => {
   const multiPage = checkModel(prepareA4Invoice(sampleA4Invoice()));
   assert.equal(multiPage, COPIES.length, 'sample spans several pages for both copies');
 });

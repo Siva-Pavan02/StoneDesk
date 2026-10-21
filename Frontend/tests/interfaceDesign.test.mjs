@@ -272,7 +272,7 @@ async function landing(language, width) {
       await expect(sample.locator('.mk-a4-stage [data-total="net"]')).toHaveText('₹18,384.00');
       const [frame, windowBox] = [await sample.locator('.mk-a4-viewport').boundingBox(), await sample.boundingBox()];
       assert.ok(frame.x + frame.width <= windowBox.x + windowBox.width + 1);
-      assert.equal((await sample.locator('.mk-a4-stage .detail-columns').evaluate(element => getComputedStyle(element).gridTemplateColumns)).split(' ').length, 3);
+      assert.equal((await sample.locator('.mk-a4-stage .detail-columns').evaluate(element => getComputedStyle(element).gridTemplateColumns)).split(' ').length, 4);
       await tabs.nth(index === 0 ? 0 : 1).click();
     });
   }
@@ -714,9 +714,10 @@ async function workspace(language, width) {
       await expect(main().locator('.a4-invoice .invoice-summary')).toHaveCount(1);
       await expect(main().locator('.a4-invoice .sample-sheet:last-child .invoice-summary')).toHaveCount(1);
       await expect(main().locator('.a4-invoice .settlement-net dd')).toHaveText('₹344,880.00');
-      // Reference format across pages: a header on each sheet, the note on all but the last.
+      // Reference format across pages: main header on page 1, minimal continued header on later pages.
       const sheets = await main().locator('.a4-invoice .sample-sheet').count();
-      await expect(main().locator('.a4-invoice .invoice-header')).toHaveCount(sheets);
+      await expect(main().locator('.a4-invoice .invoice-header')).toHaveCount(1);
+      await expect(main().locator('.a4-invoice .invoice-continued-header')).toHaveCount(sheets - 1);
       await expect(main().locator('.a4-invoice .continuation')).toHaveCount(sheets - 1);
       await expect(main().locator('.a4-invoice .sample-sheet:last-child .continuation')).toHaveCount(0);
       await overflow('large-invoice');

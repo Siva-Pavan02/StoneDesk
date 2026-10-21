@@ -51,9 +51,9 @@ function rowLayout(block, unit) {
 }
 
 // One synchronous pass: mount, read, remove. No await in between.
-function measurePass(doc, model, copy, units) {
+function measurePass(doc, model, copy, units, tier = '') {
   const view = doc.defaultView;
-  const host = mountA4Host(doc, renderA4MeasureSheet(model, copy, units, `measure-${copy}`));
+  const host = mountA4Host(doc, renderA4MeasureSheet(model, copy, units, `measure-${copy}`, tier));
   try {
     const blocks = [...host.querySelectorAll('.row-block')];
     if (blocks.length !== units.length) throw new Error('Invalid group measurements');
@@ -61,11 +61,13 @@ function measurePass(doc, model, copy, units) {
     const gap = blocks.length > 1 ? parseFloat(view.getComputedStyle(blocks[0]).marginBlockEnd) || 0 : 8;
     const pageHeight = host.querySelector('.page-height-ruler').getBoundingClientRect().height;
     const headerHeight = outsideHeight(view, host.querySelector('.invoice-header'));
+    const continuationHeaderHeight = outsideHeight(view, host.querySelector('.invoice-continued-header'));
     const finalHeight = outsideHeight(view, host.querySelector('.final-section'));
     const noticeHeight = outsideHeight(view, host.querySelector('.continuation'));
     const { normalCapacity, finalCapacity } = capacitiesFrom({ pageHeight, headerHeight, noticeHeight, finalHeight });
+    const continued = capacitiesFrom({ pageHeight, headerHeight: continuationHeaderHeight, noticeHeight, finalHeight });
     const rowLayouts = blocks.map((block, i) => rowLayout(block, units[i]));
-    return { units, heights, gap, normalCapacity, finalCapacity, pageHeight, headerHeight, noticeHeight, finalHeight, rowLayouts };
+    return { continuationHeaderHeight, continuationNormalCapacity: continued.normalCapacity, continuationFinalCapacity: continued.finalCapacity, units, heights, gap, normalCapacity, finalCapacity, pageHeight, headerHeight, noticeHeight, finalHeight, rowLayouts, tier };
   } finally {
     host.remove();
   }
@@ -75,22 +77,29 @@ function measurePass(doc, model, copy, units) {
  * Measures `model` (already projected to `copy`). Groups taller than a column are
  * split at entry boundaries and measured again; ordinary groups stay whole.
  */
-export async function measureA4Copy(model, copy, { doc = document } = {}) {
+export async function measureA4Copy(model, copy, { doc = document, tier = '' } = {}) {
   if (!COPIES.includes(copy)) throw new Error('Copy must be buyer or driver.');
   await invoiceFontsReady(doc);
-  let result = measurePass(doc, model, copy, wholeGroupUnits(model));
+  let result = measurePass(doc, model, copy, wholeGroupUnits(model), tier);
   const tooTall = ({ heights, normalCapacity }) => heights.some(height => height > normalCapacity + 0.01);
   if (tooTall(result)) {
     const units = splitOversizedUnits(result.units, result.heights, result.rowLayouts, result.normalCapacity);
-    result = measurePass(doc, model, copy, units);
+    result = measurePass(doc, model, copy, units, tier);
     if (tooTall(result)) throw new Error(OVERSIZED);
   }
-  const { rowLayouts: _rowLayouts, ...measurements } = result;
-  return measurements;
+  return result;
 }
 
-/** The measured page plan of one copy, shared by preview, print and PDF. */
+/** The measured page plan of one copy, shared by preview, print and PDF. Uses controlled multi-pass single-page fitting. */
 export async function planA4CopyMeasured(model, copy, opts) {
-  const measured = await measureA4Copy(model, copy, opts);
-  return planFromMeasurements(model, measured.units, measured);
+  const TIERS = ['', 'pass2', 'pass3', 'pass4'];
+  let lastPlan = null;
+  for (const tier of TIERS) {
+    const measured = await measureA4Copy(model, copy, { ...opts, tier });
+    const plan = planFromMeasurements(model, measured.units, measured);
+    if (tier) plan.forEach(page => { page.tier = tier; });
+    if (plan.length === 1) return plan;
+    lastPlan = plan;
+  }
+  return lastPlan;
 }

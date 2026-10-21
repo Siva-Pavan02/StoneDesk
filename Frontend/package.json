@@ -31,6 +31,6 @@
     "@vitejs/plugin-react": "^6.1.1",
     "oxlint": "^1.81.0",
     "pdfjs-dist": "^6.4.299",
-    "vite": "^8.3.0"
+    "vite": "^8.3.5"
   }
 }

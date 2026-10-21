@@ -64,10 +64,10 @@ export default function InvoiceTable({ record }) {
           <tr>
             <th scope="col">{"Type"}</th>
             <th scope="col" className="numeric">
-              {"L (ft)"}
+              {"L"}
             </th>
             <th scope="col" className="numeric">
-              {"W (ft)"}
+              {"W"}
             </th>
             <th scope="col" className="numeric">
               {"Qty"}

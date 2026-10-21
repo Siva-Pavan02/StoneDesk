@@ -237,7 +237,11 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
 .a4-invoice .sample-sheet .logo-placeholder { flex-basis: 36px; inline-size: 36px; block-size: 36px; font-size: 7px; }
 .a4-invoice .sample-sheet .business-panel { gap: 8px; }
 .a4-invoice .sample-sheet .invoice-header { flex: 0 0 auto; }
-.a4-invoice .detail-columns { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 3mm; align-items: start; }
+.a4-invoice .detail-columns { display: grid; grid-template-columns: repeat(var(--invoice-columns, 4),minmax(0,1fr)); gap: 3mm; align-items: start; }
+.a4-invoice .detail-columns.cols-2, .a4-invoice .detail-columns[data-columns="2"], .a4-invoice .sample-sheet[data-columns="2"] .detail-columns { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.a4-invoice .detail-columns.cols-3, .a4-invoice .detail-columns[data-columns="3"], .a4-invoice .sample-sheet[data-columns="3"] .detail-columns { grid-template-columns: repeat(3,minmax(0,1fr)); }
+.a4-invoice .detail-columns.cols-4, .a4-invoice .detail-columns[data-columns="4"], .a4-invoice .sample-sheet[data-columns="4"] .detail-columns { grid-template-columns: repeat(4,minmax(0,1fr)); }
+.a4-invoice .detail-columns.cols-5, .a4-invoice .detail-columns[data-columns="5"], .a4-invoice .sample-sheet[data-columns="5"] .detail-columns { grid-template-columns: repeat(5,minmax(0,1fr)); gap: 2.2mm; }
 .a4-invoice .detail-column { min-inline-size: 0; }
 .a4-invoice .sample-sheet .row-block { display: block; margin-block-end: 12px; }
 .a4-invoice .sample-sheet .row-block h3 { margin-block-end: 5px; font-size: 8.5pt; }
@@ -250,7 +254,11 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   .a4-invoice .sample-sheet .business-name { font-size: 13pt; }
   .a4-invoice .sample-sheet .business-contact { font-size: 7pt; }
   .a4-invoice .sample-sheet .logo-placeholder { font-size: 6pt; }
-  .a4-invoice .detail-columns { grid-template-columns: repeat(4,minmax(0,1fr)); gap: 3mm; }
+  .a4-invoice .detail-columns { grid-template-columns: repeat(var(--invoice-columns, 4),minmax(0,1fr)); gap: 3mm; }
+  .a4-invoice .detail-columns.cols-2, .a4-invoice .detail-columns[data-columns="2"], .a4-invoice .sample-sheet[data-columns="2"] .detail-columns { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .a4-invoice .detail-columns.cols-3, .a4-invoice .detail-columns[data-columns="3"], .a4-invoice .sample-sheet[data-columns="3"] .detail-columns { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .a4-invoice .detail-columns.cols-4, .a4-invoice .detail-columns[data-columns="4"], .a4-invoice .sample-sheet[data-columns="4"] .detail-columns { grid-template-columns: repeat(4,minmax(0,1fr)); }
+  .a4-invoice .detail-columns.cols-5, .a4-invoice .detail-columns[data-columns="5"], .a4-invoice .sample-sheet[data-columns="5"] .detail-columns { grid-template-columns: repeat(5,minmax(0,1fr)); gap: 2.2mm; }
   .a4-invoice .detail-column, .a4-invoice .row-block { break-inside: avoid; page-break-inside: avoid; }
   .a4-invoice .continuation { font-size: 6.5pt; }
 }
@@ -523,11 +531,16 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
 }
 .a4-invoice .sample-sheet .detail-columns {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--invoice-columns, 4), minmax(0, 1fr));
   gap: 3mm;
   align-items: stretch;
   margin: 0;
 }
+.a4-invoice .sample-sheet .detail-columns.cols-2, .a4-invoice .sample-sheet[data-columns="2"] .detail-columns, .a4-invoice .sample-sheet .detail-columns[data-columns="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.a4-invoice .sample-sheet .detail-columns.cols-3, .a4-invoice .sample-sheet[data-columns="3"] .detail-columns, .a4-invoice .sample-sheet .detail-columns[data-columns="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.a4-invoice .sample-sheet .detail-columns.cols-4, .a4-invoice .sample-sheet[data-columns="4"] .detail-columns, .a4-invoice .sample-sheet .detail-columns[data-columns="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.a4-invoice .sample-sheet .detail-columns.cols-5, .a4-invoice .sample-sheet[data-columns="5"] .detail-columns, .a4-invoice .sample-sheet .detail-columns[data-columns="5"] { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2.2mm; }
+
 .a4-invoice .sample-sheet .detail-column { position: relative; min-inline-size: 0; }
 /* The | separators are real, fine vertical rules centred in the column gaps. */
 .a4-invoice .sample-sheet .column-rule {
@@ -537,6 +550,24 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   inline-size: 0;
   border-inline-start: 1px solid var(--column-rule);
   pointer-events: none;
+}
+.a4-invoice .sample-sheet[data-columns="5"] .column-rule,
+.a4-invoice .sample-sheet .detail-columns.cols-5 .column-rule {
+  inset-inline-start: calc(-1.1mm - .5px);
+}
+.a4-invoice .sample-sheet[data-columns="2"] {
+  --cell-x: 4px;
+}
+.a4-invoice .sample-sheet[data-columns="5"] {
+  --cell-x: 1.5px;
+}
+.a4-invoice .sample-sheet[data-columns="5"] .row-table {
+  font-size: 7.5pt;
+  line-height: 1.15;
+}
+.a4-invoice .sample-sheet[data-columns="5"] .row-table th,
+.a4-invoice .sample-sheet[data-columns="5"] .row-table td {
+  padding-inline: 1.5px;
 }
 .a4-invoice .sample-sheet .row-block {
   display: block;

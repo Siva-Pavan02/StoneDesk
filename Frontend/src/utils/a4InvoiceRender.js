@@ -26,7 +26,7 @@ const money = value => escapeA4Text(formatA4Money(value));
 const TIMES = '<td aria-hidden="true" class="operator-cell times-cell">×</td>';
 const EQUALS = '<td aria-hidden="true" class="operator-cell equals-cell">=</td>';
 const COLGROUP = '<colgroup><col class="col-type"><col class="col-l"><col class="col-times"><col class="col-w"><col class="col-equals"><col class="col-qty"><col class="col-area"></colgroup>';
-const THEAD = '<thead><tr><th scope="col">Type</th><th class="dim" scope="col">L (ft)</th><th aria-hidden="true" class="operator-cell times-cell"></th><th class="dim" scope="col">W (ft)</th><th aria-hidden="true" class="operator-cell equals-cell"></th><th class="qty" scope="col">Qty</th><th class="num" scope="col">Sq ft</th></tr></thead>';
+const THEAD = '<thead><tr><th scope="col">Type</th><th class="dim" scope="col">L</th><th aria-hidden="true" class="operator-cell times-cell"></th><th class="dim" scope="col">W</th><th aria-hidden="true" class="operator-cell equals-cell"></th><th class="qty" scope="col">Qty</th><th class="num" scope="col">Sq ft</th></tr></thead>';
 
 export function continuationText(copy) {
   assertCopy(copy);
@@ -145,23 +145,24 @@ function renderFinal(model, copy, prefix) {
 
 const RULE = '<span class="column-rule" aria-hidden="true"></span>';
 
-function renderColumns(columns, copy, prefix) {
-  return `<section aria-label="Invoice measurement columns" class="detail-columns">${columns.map((column, index) => `<div class="detail-column">${index ? RULE : ''}${column.map(({ group, from, to }) => renderA4Group(group, from, to, copy, prefix)).join('')}</div>`).join('')}</section>`;
+function renderColumns(columns, copy, prefix, columnCount = columns.length) {
+  return `<section aria-label="Invoice measurement columns" class="detail-columns cols-${columnCount}" data-columns="${columnCount}" style="--invoice-columns: ${columnCount}">${columns.map((column, index) => `<div class="detail-column">${index ? RULE : ''}${column.map(({ group, from, to }) => renderA4Group(group, from, to, copy, prefix)).join('')}</div>`).join('')}</section>`;
 }
 
 export function renderA4Page(model, page, pageNumber, pageCount, copy = 'buyer', prefix = 'document') {
   assertCopy(copy);
+  const columnCount = page.columnCount || page.columns.length || COLUMNS;
   const hasRows = page.columns.some(column => column.length);
   const density = page.tier ? ` density-${page.tier}` : '';
-  return `<article aria-label="${escapeA4Text(model.title)} page ${pageNumber} of ${pageCount}" class="paper sample-sheet${density}" data-page="${pageNumber}"><div class="page-body">`
+  return `<article aria-label="${escapeA4Text(model.title)} page ${pageNumber} of ${pageCount}" class="paper sample-sheet${density}" data-page="${pageNumber}" data-columns="${columnCount}" style="--invoice-columns: ${columnCount}"><div class="page-body">`
     + (pageNumber === 1 ? renderA4Header(model) : renderA4ContinuedHeader())
-    + (hasRows ? renderColumns(page.columns, copy, prefix) : '')
+    + (hasRows ? renderColumns(page.columns, copy, prefix, columnCount) : '')
     + (page.final ? renderFinal(model, copy, prefix) : `<p class="continuation">${continuationText(copy)}</p>`)
     + '</div></article>';
 }
 
 function assertPages(pages) {
-  if (!pages?.length || pages.some(page => !Array.isArray(page?.columns) || page.columns.length !== COLUMNS)) throw new Error('The invoice needs complete, paginated columns.');
+  if (!pages?.length || pages.some(page => !Array.isArray(page?.columns) || page.columns.length < 2 || page.columns.length > 5)) throw new Error('The invoice needs complete, paginated columns.');
   if (pages.filter(page => page.final).length !== 1 || !pages.at(-1).final) throw new Error('The invoice summary must appear once on the final page.');
 }
 
@@ -185,17 +186,17 @@ export function renderStandaloneA4Invoice(model, pages, css, copy = 'buyer') {
 
 /**
  * One A4 sheet for the measure host: the header, every unit in the first column
- * (columns 2..COLUMNS empty, with their rules), the final section and the
+ * (columns 2..columnCount empty, with their rules), the final section and the
  * continuation note, followed by the 272.5 mm page-height ruler.
  */
-export function renderA4MeasureSheet(model, copy, units, prefix = 'measure', tier = '') {
+export function renderA4MeasureSheet(model, copy, units, prefix = 'measure', tier = '', columnCount = COLUMNS) {
   assertCopy(copy);
   const blocks = units.map(({ group, from, to }) => renderA4Group(group, from, to, copy, prefix)).join('');
-  const emptyColumns = Array.from({ length: COLUMNS - 1 }, () => `<div class="detail-column">${RULE}</div>`).join('');
+  const emptyColumns = Array.from({ length: columnCount - 1 }, () => `<div class="detail-column">${RULE}</div>`).join('');
   const density = tier ? ` density-${tier}` : '';
-  return `<article class="paper sample-sheet${density}" data-measure="${copy}"><div class="page-body">`
+  return `<article class="paper sample-sheet${density}" data-measure="${copy}" data-columns="${columnCount}" style="--invoice-columns: ${columnCount}"><div class="page-body">`
     + renderA4Header(model)
-    + `<section aria-label="Invoice measurement columns" class="detail-columns"><div class="detail-column">${blocks}</div>${emptyColumns}</section>`
+    + `<section aria-label="Invoice measurement columns" class="detail-columns cols-${columnCount}" data-columns="${columnCount}" style="--invoice-columns: ${columnCount}"><div class="detail-column">${blocks}</div>${emptyColumns}</section>`
     + renderA4ContinuedHeader()
     + renderFinal(model, copy, prefix)
     + `<p class="continuation">${continuationText(copy)}</p>`

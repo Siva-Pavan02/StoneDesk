@@ -34,7 +34,7 @@ function checkPlan(model, copy) {
   // Flatten fragments in reading order (page → column → fragment) and check capacities.
   const fragments = [];
   pages.forEach((page, pageIndex) => {
-    assert.equal(page.columns.length, COLUMNS, `${copy}: page ${pageIndex + 1} has ${page.columns.length} columns`);
+    assert.ok(page.columns.length >= 2 && page.columns.length <= 5, `${copy}: page ${pageIndex + 1} has ${page.columns.length} columns`);
     const capacity = page.final ? finalCapacity : normalCapacity;
     page.columns.forEach((column, columnIndex) => {
       let used = 0;

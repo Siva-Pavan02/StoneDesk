@@ -14,7 +14,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { genA4Input, runProperty, syntheticGeometry } from './helpers/a4Generators.js';
 import { prepareA4Invoice, projectCopy, sampleA4Invoice } from '../src/utils/a4InvoiceModel.js';
-import { fragmentRows, planFromMeasurements } from '../src/utils/a4InvoicePagination.js';
+import { COLUMNS, calcFragmentHeight, fragmentRows, planFromMeasurements } from '../src/utils/a4InvoicePagination.js';
 
 const TOLERANCE = 0.01;
 const COPIES = ['buyer', 'driver'];
@@ -24,7 +24,7 @@ function checkPlan(model, copy) {
   const geometry = syntheticGeometry(projected, copy);
   const pages = planFromMeasurements(projected, geometry.units, geometry);
   const { gap, normalCapacity, finalCapacity } = geometry;
-  const heightOf = new Map(geometry.units.map((unit, index) => [`${unit.group.id}:${unit.from}`, geometry.heights[index]]));
+  const heightOf = new Map(geometry.units.map((unit, index) => [`${unit.group.id}:${unit.from}:${unit.to}`, geometry.heights[index]]));
   assert.ok(Array.isArray(pages) && pages.length >= 1, `${copy}: plan has no pages`);
 
   // The final section sits on the last page only.
@@ -34,12 +34,14 @@ function checkPlan(model, copy) {
   // Flatten fragments in reading order (page → column → fragment) and check capacities.
   const fragments = [];
   pages.forEach((page, pageIndex) => {
-    assert.equal(page.columns.length, 3, `${copy}: page ${pageIndex + 1} has ${page.columns.length} columns`);
+    assert.equal(page.columns.length, COLUMNS, `${copy}: page ${pageIndex + 1} has ${page.columns.length} columns`);
     const capacity = page.final ? finalCapacity : normalCapacity;
     page.columns.forEach((column, columnIndex) => {
       let used = 0;
       column.forEach((fragment, index) => {
-        const height = heightOf.get(`${fragment.group.id}:${fragment.from}`);
+        const matching = geometry.units.flatMap((unit, i) => unit.group.id === fragment.group.id ? [geometry.rowLayouts[i]] : []);
+        const layout = { head: Math.max(...matching.map(item => item.head)), rows: matching.flatMap(item => item.rows) };
+        const height = heightOf.get(`${fragment.group.id}:${fragment.from}:${fragment.to}`) ?? (layout ? calcFragmentHeight(layout, fragment.group, fragment.from, fragment.to) : undefined);
         assert.ok(Number.isFinite(height), `${copy}: group ${fragment.group.id} fragment from ${fragment.from} was not measured`);
         assert.ok(height <= capacity + TOLERANCE,
           `${copy}: fragment group ${fragment.group.id} [${fragment.from},${fragment.to}) height ${height} > page ${pageIndex + 1} capacity ${capacity}`);

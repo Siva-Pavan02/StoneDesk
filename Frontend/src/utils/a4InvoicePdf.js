@@ -114,7 +114,12 @@ const pxValue = value => Number.parseFloat(value) || 0;
 function backgroundOp(style, box) {
   const fill = parseColor(style.backgroundColor);
   if (!fill) return null;
-  return { type: 'rect', x: box.x, y: box.y, w: box.w, h: box.h, fill, radius: mm(pxValue(style.borderTopLeftRadius)) };
+  let rPx = pxValue(style.borderTopLeftRadius);
+  if (typeof style.borderTopLeftRadius === 'string' && style.borderTopLeftRadius.includes('%')) {
+    rPx = (rPx / 100) * Math.min(box.w / PX_TO_MM, box.h / PX_TO_MM);
+  }
+  const radius = Math.min(mm(rPx), box.w / 2, box.h / 2);
+  return { type: 'rect', x: box.x, y: box.y, w: box.w, h: box.h, fill, radius };
 }
 
 // Sides of the border box, as filled strips. Table cells inherit collapsed
@@ -136,7 +141,11 @@ function borderOps(style, box, collapsed) {
     color: parseColor(style[`border${side}Color`]),
   })).filter(side => side.width > 0 && side.line !== 'none' && side.line !== 'hidden' && side.color);
   if (!sides.length) return [];
-  const radius = mm(pxValue(style.borderTopLeftRadius));
+  let rPx = pxValue(style.borderTopLeftRadius);
+  if (typeof style.borderTopLeftRadius === 'string' && style.borderTopLeftRadius.includes('%')) {
+    rPx = (rPx / 100) * Math.min(box.w / PX_TO_MM, box.h / PX_TO_MM);
+  }
+  const radius = Math.min(mm(rPx), box.w / 2, box.h / 2);
   const [first] = sides;
   const uniform = sides.length === 4 && sides.every(side => side.width === first.width && side.line === first.line && String(side.color) === String(first.color));
   if (uniform && (radius > 0 || first.line === 'dashed')) {
@@ -330,7 +339,9 @@ export function collectA4PdfPages(sheets, { baselineRatio = DEFAULT_BASELINE_RAT
     const ops = [];
     walk(sheet, { view, origin: { x: rect.left, y: rect.top }, ratio: baselineRatio, collapsed: false }, ops);
     const body = sheet.querySelector('.page-body')?.getBoundingClientRect();
-    if (body && mm(body.top + body.height - rect.top) > CONTENT_BOTTOM_MM + 0.5) throw new Error(`Page ${index + 1} content is taller than an A4 page`);
+    const marginMm = mm(parseFloat(view.getComputedStyle(sheet).paddingBottom));
+    const maxBottomMm = A4.heightMm - marginMm;
+    if (body && mm(body.top + body.height - rect.top) > maxBottomMm + 0.5) throw new Error(`Page ${index + 1} content is taller than an A4 page`);
     return ops;
   });
 }

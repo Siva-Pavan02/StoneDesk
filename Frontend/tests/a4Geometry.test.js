@@ -18,23 +18,23 @@ test('A4 constants follow the reference: 12 mm margins, 186 × 272.5 mm content 
   assert.deepEqual({ ...A4 }, { widthMm: 210, heightMm: 297, marginMm: 12, contentWidthMm: 186, pageHeightMm: 272.5, safetyPx: 2 });
 });
 
-test('fillColumns fills column 1, then 2, then 3 with the gap between groups', () => {
+test('fillColumns fills column 1, then 2, then 3, then 4 with the gap between groups', () => {
   const result = fillColumns(equal(7), 0, 7, 300, 10);
-  assert.deepEqual(result.columns, [[0, 1], [2, 3], [4, 5]]);
-  assert.deepEqual(result.used, [210, 210, 210]);
-  assert.equal(result.end, 6);
+  assert.deepEqual(result.columns, [[0, 1], [2, 3], [4, 5], [6]]);
+  assert.deepEqual(result.used, [210, 210, 210, 100]);
+  assert.equal(result.end, 7);
   // +0.01 tolerance
   assert.equal(fillColumns([100, 100], 0, 2, 209.995, 10).columns[0].length, 2);
   assert.equal(fillColumns([100, 100], 0, 2, 209.98, 10).columns[0].length, 1);
-  assert.deepEqual(fillColumns(equal(3), 1, 3, 0, 8), { columns: [[], [], []], used: [0, 0, 0], end: 1 });
+  assert.deepEqual(fillColumns(equal(3), 1, 3, 0, 8), { columns: [[], [], [], []], used: [0, 0, 0, 0], end: 1 });
 });
 
 test('balancedRange balances the columns and returns null when the range does not fit', () => {
   const sizes = range => range.columns.map(column => column.length);
   assert.equal(balancedRange(equal(10), 0, 10, 300, 8), null);
-  assert.deepEqual(sizes(balancedRange(equal(7), 0, 7, 1000, 8)), [3, 3, 1]);
-  assert.deepEqual(sizes(balancedRange(equal(5), 0, 5, 1000, 8)), [2, 2, 1]);
-  assert.deepEqual(sizes(balancedRange(equal(12), 0, 12, 1000, 8)), [4, 4, 4]);
+  assert.deepEqual(sizes(balancedRange(equal(7), 0, 7, 1000, 8)), [2, 2, 2, 1]);
+  assert.deepEqual(sizes(balancedRange(equal(5), 0, 5, 1000, 8)), [2, 2, 1, 0]);
+  assert.deepEqual(sizes(balancedRange(equal(12), 0, 12, 1000, 8)), [3, 3, 3, 3]);
   assert.deepEqual(balancedRange(equal(3), 2, 2, 500, 8), fillColumns(equal(3), 2, 2, 500, 8));
 });
 
@@ -51,18 +51,17 @@ test('planPages rejects invalid input with the reference messages', () => {
 test('24 equal groups reproduce the reference distribution 4/4/4, 3/3/1, 2/2/1', () => {
   const plan = planPages(equal(24, 176), 889, 650, 8);
   assert.deepEqual(ids(plan), [
-    [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]],
-    [[12, 13, 14], [15, 16, 17], [18]],
-    [[19, 20], [21, 22], [23]],
+    [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]],
+    [[16, 17], [18, 19], [20, 21], [22, 23]],
   ]);
-  assert.deepEqual(plan.map(page => page.final), [false, false, true]);
+  assert.deepEqual(plan.map(page => page.final), [false, true]);
 });
 
 test('24 equal groups at the app metrics (6 px gap) pack 5/5/5 then 3/3/3', () => {
   const plan = planPages(equal(24, 176), 912, 724, 6);
   assert.deepEqual(ids(plan), [
-    [[0, 1, 2, 3, 4], [5, 6, 7, 8, 9], [10, 11, 12, 13, 14]],
-    [[15, 16, 17], [18, 19, 20], [21, 22, 23]],
+    [[0, 1, 2, 3, 4], [5, 6, 7, 8, 9], [10, 11, 12, 13, 14], [15, 16, 17, 18, 19]],
+    [[20], [21], [22], [23]],
   ]);
   assert.deepEqual(plan.map(page => page.final), [false, true]);
 });
@@ -72,7 +71,7 @@ test('planPages: single final page, summary-only final page, 3+ pages; used neve
   assert.equal(one.length, 1);
   assert.equal(one[0].final, true);
   const alone = planPages([500, 500], 889, 100, 8);
-  assert.deepEqual(ids(alone), [[[0], [1], []], [[], [], []]]);
+  assert.deepEqual(ids(alone), [[[0], [1], [], []], [[], [], [], []]]);
   assert.deepEqual(alone.map(page => page.final), [false, true]);
   const long = planPages(Array.from({ length: 90 }, (_, i) => 60 + (i * 37) % 120), 889, 600, 8);
   assert.ok(long.length >= 3);
@@ -114,22 +113,22 @@ test('validateA4Pages rejects missing, duplicated, out-of-order fragments and a 
   const groups = [group(1, ['regular', 'top']), group(2, ['regular'])];
   const m = model(groups);
   const f = (g, from, to) => ({ group: groups[g], from, to });
-  const ok = [{ columns: [[f(0, 0, 1)], [f(0, 1, 2)], []], final: false }, { columns: [[f(1, 0, 1)], [], []], final: true }];
+  const ok = [{ columns: [[f(0, 0, 1)], [f(0, 1, 2)], [], []], final: false }, { columns: [[f(1, 0, 1)], [], [], []], final: true }];
   assert.equal(validateA4Pages(m, ok), ok);
   const bad = [
-    [{ columns: [[f(0, 0, 2)], [], []], final: true }],
-    [{ columns: [[f(0, 0, 2), f(1, 0, 1), f(1, 0, 1)], [], []], final: true }],
-    [{ columns: [[f(1, 0, 1), f(0, 0, 2)], [], []], final: true }],
-    [{ columns: [[f(0, 0, 1)], [], []], final: false }, { columns: [[f(1, 0, 1)], [], []], final: true }],
-    [{ columns: [[f(0, 0, 2)], [], []], final: true }, { columns: [[f(1, 0, 1)], [], []], final: false }],
-    [{ columns: [[f(0, 0, 2), f(1, 0, 1)], []], final: true }],
+    [{ columns: [[f(0, 0, 2)], [], [], []], final: true }],
+    [{ columns: [[f(0, 0, 2), f(1, 0, 1), f(1, 0, 1)], [], [], []], final: true }],
+    [{ columns: [[f(1, 0, 1), f(0, 0, 2)], [], [], []], final: true }],
+    [{ columns: [[f(0, 0, 1)], [], [], []], final: false }, { columns: [[f(1, 0, 1)], [], [], []], final: true }],
+    [{ columns: [[f(0, 0, 2)], [], [], []], final: true }, { columns: [[f(1, 0, 1)], [], [], []], final: false }],
+    [{ columns: [[f(0, 0, 2), f(1, 0, 1)], [], []], final: true }],
   ];
   for (const pages of bad) assert.throws(() => validateA4Pages(m, pages), /Group ordering or completeness check failed/);
 });
 
 // The recorded Chrome geometry of the two fixed samples must keep reproducing the
 // agreed distribution (.agents/tasks/reference-invoice-format FEAT-000): two pages,
-// groups 1-15 as 5/5/5, then 16-24 as 3/3/3 with the final section.
+// groups 1-20 as 5/5/5/5, then 21-24 as 1/1/1/1 with the final section.
 test('recorded sample geometry reproduces the agreed distribution and a single landing page', () => {
   const sample = prepareA4Invoice(sampleA4Invoice());
   for (const copy of ['buyer', 'driver']) {
@@ -137,8 +136,8 @@ test('recorded sample geometry reproduces the agreed distribution and a single l
     const pages = recordedSamplePages(view, SAMPLE_24_GEOMETRY, copy);
     assert.equal(pages.length, 2, `${copy}: page count`);
     assert.deepEqual(pages.map(page => page.columns.map(column => column.map(fragment => fragment.group.id))), [
-      [[1, 2, 3, 4, 5], [6, 7, 8, 9, 10], [11, 12, 13, 14, 15]],
-      [[16, 17, 18], [19, 20, 21], [22, 23, 24]],
+      [[1, 2, 3, 4, 5], [6, 7, 8, 9, 10], [11, 12, 13, 14, 15], [16, 17, 18, 19, 20]],
+      [[21], [22], [23], [24]],
     ], `${copy}: distribution`);
     assert.deepEqual(pages.map(page => page.final), [false, true]);
     // Nothing is clipped: every column stays inside the capacity it was planned for.
@@ -152,7 +151,7 @@ test('recorded sample geometry reproduces the agreed distribution and a single l
   const landingPages = recordedSamplePages(landing, LANDING_SAMPLE_GEOMETRY);
   assert.equal(landingPages.length, 1);
   assert.equal(landingPages[0].final, true);
-  assert.deepEqual(landingPages[0].columns.map(column => column.map(fragment => fragment.group.id)), [[1], [2], [3]]);
+  assert.deepEqual(landingPages[0].columns.map(column => column.map(fragment => fragment.group.id)), [[1], [2], [3], []]);
   assert.throws(() => recordedSamplePages(landing, LANDING_SAMPLE_GEOMETRY, 'driver'), /No recorded sample geometry/);
 });
 
@@ -161,11 +160,10 @@ test('planFromMeasurements round trip on the 24-group sample', () => {
   const units = wholeGroupUnits(sample);
   const pages = planFromMeasurements(sample, units, { heights: equal(24, 176), normalCapacity: 889, finalCapacity: 650, gap: 8 });
   assert.deepEqual(pages.map(page => page.columns.map(column => column.map(fragment => fragment.group.id))), [
-    [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]],
-    [[13, 14, 15], [16, 17, 18], [19]],
-    [[20, 21], [22, 23], [24]],
+    [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16]],
+    [[17, 18], [19, 20], [21, 22], [23, 24]],
   ]);
   assert.ok(pages.flatMap(page => page.columns.flat()).every(fragment => fragment.from === 0 && fragment.to === 7));
-  assert.deepEqual(pagesFromPlan(units, [{ columns: [[0], [], []], final: true }]), [{ columns: [[units[0]], [], []], final: true }]);
+  assert.deepEqual(pagesFromPlan(units, [{ columns: [[0], [], [], []], final: true }]), [{ columns: [[units[0]], [], [], []], final: true }]);
   assert.throws(() => planFromMeasurements(sample, units, { heights: equal(23), normalCapacity: 889, finalCapacity: 650, gap: 8 }), /Invalid group measurements/);
 });

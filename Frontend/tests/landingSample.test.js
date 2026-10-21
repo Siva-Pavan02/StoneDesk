@@ -23,7 +23,7 @@ test('the recorded landing geometry keeps one final page with a group per column
   const page = landingSamplePage(landingSampleModel());
   assert.equal(page.final, true);
   assert.deepEqual(page.columns.map(column => column.map(fragment => [fragment.group.id, fragment.from, fragment.to])),
-    [[[1, 0, 3]], [[2, 0, 3]], [[3, 0, 3]]]);
+    [[[1, 0, 3]], [[2, 0, 3]], [[3, 0, 3]], []]);
 });
 
 test('landing sample renders the reference A4 buyer copy in sample mode (Req 11.1, 11.3)', () => {

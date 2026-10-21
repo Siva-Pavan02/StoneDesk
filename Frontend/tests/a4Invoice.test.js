@@ -50,17 +50,17 @@ test('approved fixture has all 168 actual entries and exact decimal-safe totals'
   assert.throws(() => prepareA4Invoice({ ...sampleA4Invoice(), supervisor: '  ' }), { message: 'Manager is required.' });
 });
 
-test('every page carries the same header with Party, Lorry no., Destination and Manager', () => {
+test('page 1 carries full header with Party, Lorry no., Destination and Manager; page 2 has minimal continued header', () => {
   const model = prepared(), pages = planOf(model);
-  assert.equal(pages.length, 3);
+  assert.equal(pages.length, 2);
   const html = renderA4Invoice(model, pages, 'buyer', 'buyer');
   const sheets = sheetsOf(html);
-  assert.equal(sheets.length, 3);
+  assert.equal(sheets.length, 2);
   const header = renderA4Header(model);
-  for (const sheet of sheets) {
-    assert.equal(hits(sheet, /class="invoice-header"/g), 1);
-    assert.ok(sheet.includes(header), 'identical header on every page');
-  }
+  assert.equal(hits(sheets[0], /class="invoice-header"/g), 1);
+  assert.ok(sheets[0].includes(header), 'full header on page 1');
+  assert.equal(hits(sheets[1], /class="invoice-continued-header"/g), 1);
+  assert.equal(hits(sheets[1], /class="invoice-header"/g), 0, 'page 2 does not repeat full header');
   assert.deepEqual([...header.matchAll(/<dt>([^<]+)<\/dt><dd[^>]*>([^<]+)<\/dd>/g)].map(([, l, v]) => [l, v]),
     [['Party', 'DEMO BUYER'], ['Lorry no.', 'DEMO-01'], ['Destination', 'DEMO CITY'], ['Manager', 'SAMPLE']]);
   assert.doesNotMatch(html, /Supervisor/i);
@@ -69,8 +69,8 @@ test('every page carries the same header with Party, Lorry no., Destination and 
   assert.match(header, /<time datetime="2026-10-11">11 Oct 2026<\/time><span class="status">SAMPLE<\/span>/);
   assert.match(header, /<div aria-label="Business logo placeholder" class="logo-placeholder" role="img">LOGO<\/div>/);
   assert.match(header, /<p class="business-contact">Demo location, India<br>Illustrative business<\/p>/);
-  assert.match(html, /aria-label="Sample invoice page 3 of 3"/);
-  assert.match(html, /^<main aria-label="Sample invoice" class="a4-invoice sample-pages" data-page-count="3" data-group-count="24">/);
+  assert.match(html, /aria-label="Sample invoice page 2 of 2"/);
+  assert.match(html, /^<main aria-label="Sample invoice" class="a4-invoice sample-pages" data-page-count="2" data-group-count="24">/);
 
   const production = a4InvoiceFromDispatch(dispatch());
   const productionHeader = renderA4Header(production);
@@ -113,7 +113,7 @@ test('measurement tables have seven columns, Reg total / Top total rows and no m
   assert.equal(rows[8], `<tr class="sub" data-subtotal="top"><th colspan="5" scope="row">Top total</th><td class="qty">${group.top.pieces}</td><td class="num">${formatA4Number(group.top.area)}</td></tr>`);
   assert.equal(rows[4], '<tr class="sub" data-subtotal="regular"><th colspan="5" scope="row">Reg total</th><td class="qty">8</td><td class="num">123.38</td></tr>');
   assert.equal(rows[1], '<tr data-kind="regular" data-entry-id="1-2"><th aria-label="Regular material" class="type" scope="row"></th><td class="dim">3½</td><td aria-hidden="true" class="operator-cell times-cell">×</td><td class="dim">4½</td><td aria-hidden="true" class="operator-cell equals-cell">=</td><td class="qty">3</td><td class="num">47.25</td></tr>');
-  assert.match(html, /^<section aria-labelledby="invoice-document-row-1-0-heading" class="row-block" id="invoice-document-row-1-0" data-group="1" data-from="0" data-to="7"><h3 id="invoice-document-row-1-0-heading">1<span class="group-rule" aria-hidden="true"><\/span><\/h3>/);
+  assert.match(html, /^<section aria-labelledby="invoice-document-row-1-0-heading" class="row-block" id="invoice-document-row-1-0" data-group="1" data-from="0" data-to="7"><h3 id="invoice-document-row-1-0-heading"><span class="serial-badge">1<\/span><span class="group-rule" aria-hidden="true"><\/span><\/h3>/);
 
   // Top-only and Regular-only groups get only their own subtotal.
   const raw = sampleA4Invoice();
@@ -133,7 +133,7 @@ test('fragments of a split group carry a continued marker and each subtotal once
   const group = prepared().groups[0];
   const parts = [[0, 3], [3, 5], [5, 7]].map(([from, to]) => renderA4Group(group, from, to));
   assert.doesNotMatch(parts[0], /continuation-marker|data-subtotal/);
-  assert.match(parts[1], /<h3 id="[^"]+">1<span class="continuation-marker">\(continued\)<\/span><span class="group-rule" aria-hidden="true"><\/span><\/h3>/);
+  assert.match(parts[1], /<h3 id="[^"]+"><span class="serial-badge">1<\/span><span class="continuation-marker">conti<\/span><span class="group-rule" aria-hidden="true"><\/span><\/h3>/);
   assert.match(parts[1], /Measurements for group 1, continued;/);
   assert.equal(hits(parts.join(''), /data-subtotal="regular"/g), 1);
   assert.match(parts[1], /data-subtotal="regular"/);
@@ -153,17 +153,17 @@ test('groups read in ascending order down columns 1, 2, 3; continuation on non-f
       assert.equal(hits(sheet, /class="continuation"/g), last ? 0 : 1, `${copy} page ${index + 1} continuation`);
       assert.equal(hits(sheet, /class="final-section"/g), last ? 1 : 0, `${copy} page ${index + 1} final`);
       if (!last) assert.ok(sheet.includes(`<p class="continuation">${continuationText(copy)}</p>`));
-      assert.equal(hits(sheet, /class="column-rule"/g), 2);
+      assert.equal(hits(sheet, /class="column-rule"/g), 3);
     });
   }
   assert.equal(continuationText('buyer'), 'Continued on the next page. Order totals and payment summary appear on the final page.');
   assert.equal(continuationText('driver'), 'Continued on the next page. Order totals appear on the final page.');
   // A summary-only final page has no measurement columns.
-  const page = renderA4Page(model, { columns: [[], [], []], final: true }, 2, 2);
+  const page = renderA4Page(model, { columns: [[], [], [], []], final: true }, 2, 2);
   assert.doesNotMatch(page, /detail-columns/);
   assert.match(page, /class="final-section"/);
-  assert.throws(() => renderA4Invoice(model, [{ columns: [[], [], []], final: false }]), /final page/);
-  assert.throws(() => renderA4Invoice(model, [{ columns: [[], []], final: true }]), /paginated columns/);
+  assert.throws(() => renderA4Invoice(model, [{ columns: [[], [], [], []], final: false }]), /final page/);
+  assert.throws(() => renderA4Invoice(model, [{ columns: [[], [], []], final: true }]), /paginated columns/);
   assert.throws(() => renderA4Invoice(model, []), /paginated columns/);
 });
 
@@ -253,8 +253,8 @@ test('measure sheet: header, every unit in column 1, final section, continuation
   const model = prepared();
   const html = renderA4MeasureSheet(model, 'buyer', wholeGroupUnits(model));
   assert.equal(hits(html, /class="invoice-header"/g), 1);
-  const columns = html.match(/<div class="detail-column">[^]*?(?=<div class="detail-column">|<\/section><div class="final-section">)/g);
-  assert.equal(columns.length, 3);
+  const columns = html.match(/<div class="detail-column">[^]*?(?=<div class="detail-column">|<\/section><header class="invoice-continued-header">)/g);
+  assert.equal(columns.length, 4);
   assert.equal(hits(columns[0], /class="row-block"/g), 24);
   assert.equal(columns[1], '<div class="detail-column"><span class="column-rule" aria-hidden="true"></span></div>');
   assert.match(html, /<\/div><p class="continuation">Continued on the next page\. Order totals and payment summary appear on the final page\.<\/p><\/div><\/article><div class="page-height-ruler"><\/div>$/);
@@ -266,7 +266,8 @@ test('standalone HTML keeps the en-IN language tag and inlines the stylesheet', 
   const html = renderStandaloneA4Invoice(model, planOf(model), '.a4-invoice{}', 'buyer');
   assert.match(html, /^<!doctype html><html lang="en-IN" dir="ltr">/);
   assert.match(html, /<title>Sample invoice — SAMPLE-024<\/title><style>\.a4-invoice\{\}<\/style><\/head><body class="a4-body"><main /);
-  assert.equal(hits(html, /class="invoice-header"/g), 3);
+  assert.equal(hits(html, /class="invoice-header"/g), 1);
+  assert.equal(hits(html, /class="invoice-continued-header"/g), 1);
   assert.throws(() => renderStandaloneA4Invoice(model, planOf(model), '</style>'), /safe inline/);
 });
 

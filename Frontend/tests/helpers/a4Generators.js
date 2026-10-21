@@ -152,7 +152,7 @@ export function syntheticGeometry(model, copy = 'buyer', options = {}) {
     units = splitOversizedUnits(units, measured.heights, measured.rowLayouts, capacities.normalCapacity);
     measured = measureUnits(units, settings);
   }
-  return { units, heights: measured.heights, gap: settings.gap, ...capacities };
+  return { units, heights: measured.heights, rowLayouts: measured.rowLayouts, gap: settings.gap, ...capacities };
 }
 
 /** The page plan of `model` (already projected to `copy`) from synthetic measurements. */

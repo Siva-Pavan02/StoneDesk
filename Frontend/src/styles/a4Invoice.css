@@ -148,6 +148,8 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
 
 /* A4 print settings are explicit. */
 @page { size: A4 portrait; margin: 12mm; }
+@page density-pass3 { size: A4 portrait; margin: 8mm; }
+@page density-pass4 { size: A4 portrait; margin: 8mm; }
 @media print {
   .a4-invoice, body.a4-body { --table-font: 8pt; --cell-y: 2.4px; --cell-x: 3px; }
   body.a4-body { padding: 0; background: var(--paper); }
@@ -235,7 +237,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
 .a4-invoice .sample-sheet .logo-placeholder { flex-basis: 36px; inline-size: 36px; block-size: 36px; font-size: 7px; }
 .a4-invoice .sample-sheet .business-panel { gap: 8px; }
 .a4-invoice .sample-sheet .invoice-header { flex: 0 0 auto; }
-.a4-invoice .detail-columns { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 4mm; align-items: start; }
+.a4-invoice .detail-columns { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 3mm; align-items: start; }
 .a4-invoice .detail-column { min-inline-size: 0; }
 .a4-invoice .sample-sheet .row-block { display: block; margin-block-end: 12px; }
 .a4-invoice .sample-sheet .row-block h3 { margin-block-end: 5px; font-size: 8.5pt; }
@@ -248,7 +250,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   .a4-invoice .sample-sheet .business-name { font-size: 13pt; }
   .a4-invoice .sample-sheet .business-contact { font-size: 7pt; }
   .a4-invoice .sample-sheet .logo-placeholder { font-size: 6pt; }
-  .a4-invoice .detail-columns { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 4mm; }
+  .a4-invoice .detail-columns { grid-template-columns: repeat(4,minmax(0,1fr)); gap: 3mm; }
   .a4-invoice .detail-column, .a4-invoice .row-block { break-inside: avoid; page-break-inside: avoid; }
   .a4-invoice .continuation { font-size: 6.5pt; }
 }
@@ -473,11 +475,14 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   display: block;
   inline-size: 210mm;
   min-block-size: 297mm;
+  block-size: 297mm;
   max-inline-size: 100%;
   padding: 12mm;
   font-size: 9pt;
 }
-.a4-invoice .sample-sheet .page-body { display: flow-root; inline-size: 100%; }
+.a4-invoice .sample-sheet .page-body { display: flex; flex-direction: column; inline-size: 100%; min-block-size: 100%; block-size: 100%; }
+.a4-invoice .sample-sheet .detail-columns { flex: 1 1 auto; }
+.a4-invoice .sample-sheet .final-section { flex: 0 0 auto; margin-block-start: auto; }
 .a4-invoice .sample-sheet .invoice-header {
   grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   border-block-start: 0;
@@ -503,10 +508,23 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
 .a4-invoice .sample-sheet .invoice-facts { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-block-start: 7px; }
 .a4-invoice .sample-sheet .invoice-facts dt { font-size: 6pt; }
 .a4-invoice .sample-sheet .invoice-facts dd { font-size: 7.5pt; margin-block-start: 2px; }
+.a4-invoice .sample-sheet .invoice-continued-header {
+  display: block;
+  margin-block-end: 12px;
+  padding-block-end: 4px;
+  border-block-end: 1px solid var(--border);
+}
+.a4-invoice .sample-sheet .invoice-continued-header .continued-label {
+  font-size: 8pt;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
 .a4-invoice .sample-sheet .detail-columns {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4mm;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 3mm;
   align-items: stretch;
   margin: 0;
 }
@@ -515,7 +533,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
 .a4-invoice .sample-sheet .column-rule {
   position: absolute;
   inset-block: 0;
-  inset-inline-start: calc(-2mm - .5px);
+  inset-inline-start: calc(-1.5mm - .5px);
   inline-size: 0;
   border-inline-start: 1px solid var(--column-rule);
   pointer-events: none;
@@ -564,8 +582,126 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
 .a4-invoice .sample-sheet .sign strong { font-size: 8pt; }
 .a4-invoice .sample-sheet .sign span { font-size: 6.5pt; }
 .a4-invoice .sample-sheet .continuation { margin-block-start: 8px; font-size: 6.5pt; line-height: 1.3; }
-.a4-invoice .continuation-marker { margin-inline-start: -3px; color: var(--muted); font-size: 6.5pt; font-weight: 400; }
+.a4-invoice .serial-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 15px;
+  block-size: 15px;
+  border-radius: 50%;
+  background-color: var(--ink);
+  color: #ffffff;
+  font-size: 7.5pt;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  flex: 0 0 15px;
+}
+.a4-invoice .continuation-marker { margin-inline-start: 2px; color: var(--muted); font-size: 5.5pt; font-weight: 500; letter-spacing: 0; text-transform: lowercase; }
 .a4-invoice .bank-text { font-size: 7.25pt; line-height: 1.3; font-weight: 500; overflow-wrap: anywhere; }
+
+/* Multi-pass density tiers for fitting on one A4 page */
+/* Pass 2: Reduced unnecessary padding and spacing */
+.a4-invoice .sample-sheet.density-pass2,
+.a4-invoice .sample-sheet.density-pass3,
+.a4-invoice .sample-sheet.density-pass4 {
+  --cell-y: 1px;
+  --cell-x: 2.5px;
+  --group-gap: 4px;
+}
+.a4-invoice .sample-sheet.density-pass2 .invoice-header,
+.a4-invoice .sample-sheet.density-pass3 .invoice-header,
+.a4-invoice .sample-sheet.density-pass4 .invoice-header {
+  margin-block-end: 6px;
+}
+.a4-invoice .sample-sheet.density-pass2 .business-panel,
+.a4-invoice .sample-sheet.density-pass3 .business-panel,
+.a4-invoice .sample-sheet.density-pass4 .business-panel {
+  margin-block: 4px;
+  padding-block: 0;
+  gap: 6px;
+}
+.a4-invoice .sample-sheet.density-pass2 .invoice-panel,
+.a4-invoice .sample-sheet.density-pass3 .invoice-panel,
+.a4-invoice .sample-sheet.density-pass4 .invoice-panel {
+  padding-block: 4px 6px;
+}
+.a4-invoice .sample-sheet.density-pass2 .row-block h3,
+.a4-invoice .sample-sheet.density-pass3 .row-block h3,
+.a4-invoice .sample-sheet.density-pass4 .row-block h3 {
+  margin-block-end: 2px;
+  font-size: 8pt;
+}
+.a4-invoice .sample-sheet.density-pass2 .serial-badge,
+.a4-invoice .sample-sheet.density-pass3 .serial-badge,
+.a4-invoice .sample-sheet.density-pass4 .serial-badge {
+  inline-size: 13.5px;
+  block-size: 13.5px;
+  font-size: 7pt;
+  flex: 0 0 13.5px;
+}
+.a4-invoice .sample-sheet.density-pass2 .invoice-summary,
+.a4-invoice .sample-sheet.density-pass3 .invoice-summary,
+.a4-invoice .sample-sheet.density-pass4 .invoice-summary {
+  gap: 6px;
+  padding-block-start: 6px;
+  margin-block-start: 2px;
+}
+.a4-invoice .sample-sheet.density-pass2 .settlement-row,
+.a4-invoice .sample-sheet.density-pass3 .settlement-row,
+.a4-invoice .sample-sheet.density-pass4 .settlement-row {
+  padding-block: 2px;
+}
+.a4-invoice .sample-sheet.density-pass2 .closing,
+.a4-invoice .sample-sheet.density-pass3 .closing,
+.a4-invoice .sample-sheet.density-pass4 .closing {
+  margin-block-start: 4px;
+}
+
+/* Pass 3: Margin reduced to 8mm (the minimum allowed page margin) */
+.a4-invoice .sample-sheet.density-pass3,
+.a4-invoice .sample-sheet.density-pass4 {
+  padding: 8mm;
+}
+@media print {
+  .a4-invoice .sample-sheet.density-pass3 {
+    padding: 0;
+    page: density-pass3;
+    min-block-size: 281mm;
+    block-size: 281mm;
+  }
+  .a4-invoice .sample-sheet.density-pass4 {
+    padding: 0;
+    page: density-pass4;
+    min-block-size: 281mm;
+    block-size: 281mm;
+  }
+}
+.a4-invoice.a4-measure-host .sample-sheet.density-pass3,
+.a4-invoice.a4-measure-host .sample-sheet.density-pass4 {
+  padding: 8mm;
+}
+.a4-invoice.a4-measure-host .sample-sheet.density-pass3 + .page-height-ruler,
+.a4-invoice.a4-measure-host .sample-sheet.density-pass4 + .page-height-ruler {
+  inline-size: 194mm;
+  block-size: 281mm; /* 297mm - 16mm = 281mm */
+}
+
+/* Pass 4: Measurement typography down to 7.5pt (the absolute minimum floor) */
+.a4-invoice .sample-sheet.density-pass4 {
+  --table-font: 7.5pt;
+  --cell-y: 0.8px;
+  --cell-x: 2px;
+}
+.a4-invoice .sample-sheet.density-pass4 .row-table {
+  font-size: 7.5pt;
+  line-height: 1.2;
+}
+.a4-invoice .sample-sheet.density-pass4 .row-table th,
+.a4-invoice .sample-sheet.density-pass4 .row-table td {
+  padding-block: 0.8px;
+  padding-inline: 2px;
+}
 
 /* Offscreen measure/export host: real A4 print geometry, even when the live
    preview stacks on a narrow screen. */
@@ -582,29 +718,15 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
 .a4-invoice.a4-measure-host .sample-sheet { inline-size: 210mm; max-inline-size: none; padding: 12mm; box-shadow: none; }
 .a4-invoice.a4-measure-host .page-height-ruler { position: absolute; inline-size: 186mm; block-size: 272.5mm; }
 
-/* Preview: A4 sheets centred in the bill screen; they stack when the preview
-   container is narrower than one sheet (screen only, never in print). */
-.a4-invoice.sample-pages { display: grid; justify-items: center; gap: 20px; inline-size: 100%; min-inline-size: 0; container: a4-preview / inline-size; }
+/* Keep the printable canvas intact; narrow screens scroll inside the preview. */
+.a4-invoice.sample-pages { display: grid; justify-items: center; gap: 20px; inline-size: 100%; min-inline-size: 0; }
 @media screen {
-  @container a4-preview (max-width: 793px) {
-    .a4-invoice.sample-pages .sample-sheet { inline-size: 100%; min-block-size: 0; padding: 18px; }
-    .a4-invoice.sample-pages .sample-sheet .detail-columns { grid-template-columns: minmax(0, 1fr); gap: 0; }
-    .a4-invoice.sample-pages .sample-sheet .detail-column + .detail-column { margin-block-start: 8px; }
-    .a4-invoice.sample-pages .sample-sheet .column-rule { display: none; }
-    .a4-invoice.sample-pages .sample-sheet .invoice-header { grid-template-columns: minmax(0, 1fr); }
-    .a4-invoice.sample-pages .sample-sheet .business-panel { padding-inline-end: 0; border-inline-end: 0; }
-    .a4-invoice.sample-pages .sample-sheet .invoice-panel { padding-inline-start: 0; border-block-start: 1px solid var(--line); }
-    .a4-invoice.sample-pages .sample-sheet .invoice-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .a4-invoice.sample-pages .sample-sheet .invoice-summary { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-    .a4-invoice.sample-pages .sample-sheet .settlement-overview { padding-inline-start: 0; padding-block-start: 8px; border-inline-start: 0; border-block-start: 1px solid var(--border); }
-    .a4-invoice.sample-pages .sample-sheet .footer-details { grid-template-columns: minmax(0, 1fr); }
-    .a4-invoice.sample-pages .sample-sheet .sign { max-inline-size: 150px; }
-    .a4-invoice.sample-pages .sample-sheet .bank-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  }
+  .a4-invoice.sample-pages { overflow-x: auto; grid-template-columns: minmax(210mm, 1fr); }
+  .a4-invoice.sample-pages .sample-sheet { max-inline-size: none; }
 }
 @media print {
   .a4-invoice.sample-pages { display: block; }
-  .a4-invoice .sample-sheet { inline-size: auto; max-inline-size: none; min-block-size: 272.5mm; padding: 0; margin: 0; border: 0; box-shadow: none; break-after: page; page-break-after: always; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .a4-invoice .sample-sheet { inline-size: auto; max-inline-size: none; min-block-size: 272.5mm; block-size: 272.5mm; padding: 0; margin: 0; border: 0; box-shadow: none; break-after: page; page-break-after: always; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .a4-invoice .sample-sheet:last-child { break-after: auto; page-break-after: auto; }
   .a4-invoice .sample-sheet .detail-column { break-inside: avoid; page-break-inside: avoid; }
   .a4-invoice.a4-measure-host .sample-sheet { inline-size: 210mm; padding: 12mm; }

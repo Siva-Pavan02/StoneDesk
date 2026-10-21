@@ -49,8 +49,9 @@ test('the per-copy plan feeds the preview with the reference page structure', ()
     const html = renderA4Invoice(copyModel, pages, copy, `t-${copy}`);
     assert.equal((html.match(/class="paper sample-sheet"/g) || []).length, pages.length, `${copy} preview pages`);
     assert.equal((html.match(/data-page="/g) || []).length, pages.length, `${copy} numbered pages`);
-    // The reference format: a header on every page, the note on every page but the last.
-    assert.equal((html.match(/<header class="invoice-header">/g) || []).length, pages.length, `${copy} headers`);
+    // The reference format: full header on page 1, minimal continued header on subsequent pages, note on non-final pages.
+    assert.equal((html.match(/<header class="invoice-header">/g) || []).length, 1, `${copy} main header`);
+    assert.equal((html.match(/<header class="invoice-continued-header">/g) || []).length, pages.length - 1, `${copy} continued headers`);
     assert.equal((html.match(/class="continuation"/g) || []).length, pages.length - 1, `${copy} continuation notes`);
     assert.equal((html.match(/class="final-section"/g) || []).length, 1, `${copy} final section`);
     // Every group of the plan is rendered in its planned column, in order.

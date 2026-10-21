@@ -31,13 +31,11 @@ test('three @font-face rules point at bundled Noto Sans files with the OFL licen
   assert.match(css, /font-synthesis: none/);
 });
 
-test('no generated content, no invoice container queries; narrow stacking is screen-only on the preview', () => {
+test('narrow previews scroll the fixed four-column A4 canvas without stacking', () => {
   assert.doesNotMatch(css, /(?<![\w-])content\s*:/);
-  assert.doesNotMatch(css, /@container invoice/);
-  const screen = css.match(/@media screen \{\s*@container a4-preview \(max-width: 793px\) \{([\s\S]*?)\r?\n  \}\r?\n\}/);
-  assert.ok(screen, 'stacking block');
-  for (const line of screen[1].trim().split(/\r?\n/)) assert.match(line.trim(), /^\.a4-invoice\.sample-pages /);
-  assert.match(css, /\.a4-invoice\.sample-pages \{[^}]*container: a4-preview \/ inline-size/);
+  assert.doesNotMatch(css, /@container/);
+  assert.match(css, /@media screen \{\s*\.a4-invoice\.sample-pages \{[^}]*overflow-x: auto;[^}]*minmax\(210mm, 1fr\)/);
+  assert.match(css, /grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
 });
 
 test('measure host and bill-screen export rules are present', () => {

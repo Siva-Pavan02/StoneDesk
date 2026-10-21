@@ -25,14 +25,15 @@ const shape = pages => pages.map(page => ({
 
 // Each page is one <article class="paper sample-sheet" data-page="n">, each measurement column a
 // <div class="detail-column">, each fragment a <section class="row-block" data-group data-from data-to>.
-function htmlShape(html) {
+function htmlShape(html, plan = null) {
   const pages = html.split('<article ').slice(1);
-  return pages.map(page => {
+  return pages.map((page, i) => {
+    const colCount = plan ? plan[i].columns.length : (page.match(/data-columns="(\d+)"/) ? Number(page.match(/data-columns="(\d+)"/)[1]) : COLUMNS);
     const columns = page.split('<div class="detail-column">').slice(1).map(column =>
       [...column.matchAll(/data-group="([^"]+)" data-from="(\d+)" data-to="(\d+)"/g)]
         .map(([, id, from, to]) => ({ id, from: Number(from), to: Number(to) })));
-    // A page with no measurement rows renders no columns at all; the plan still has four.
-    while (columns.length < COLUMNS) columns.push([]);
+    // A page with no measurement rows renders no columns at all; pad to column count.
+    while (columns.length < colCount) columns.push([]);
     return { columns, final: page.includes('class="final-section"') };
   });
 }
@@ -48,13 +49,13 @@ function checkParity(model, copy) {
 
   // HTML preview.
   const html = renderA4Invoice(copyModel, plan, copy);
-  const fromHtml = htmlShape(html);
+  const fromHtml = htmlShape(html, plan);
   assert.deepEqual(fromHtml, expected, `${copy}: HTML preview structure differs from the plan`);
 
   // Print document: the same invoice markup inside the standalone page.
   const standalone = renderStandaloneA4Invoice(copyModel, plan, CSS, copy);
   assert.ok(standalone.includes(html), `${copy}: print document does not embed the preview markup`);
-  assert.deepEqual(htmlShape(standalone), fromHtml, `${copy}: print structure differs from the preview`);
+  assert.deepEqual(htmlShape(standalone, plan), fromHtml, `${copy}: print structure differs from the preview`);
 
   // Page numbering and counts come from the same plan.
   assert.equal(Number(html.match(/data-page-count="(\d+)"/)[1]), plan.length, `${copy}: data-page-count`);

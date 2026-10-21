@@ -50,14 +50,14 @@ for (const copy of ['buyer', 'driver']) {
     const model = { groups: [group(1, 3), group(2, 2)] }, units = wholeGroupUnits(model);
     const pages = planFromMeasurements(model, units, { normalCapacity: 100, finalCapacity: 100, gap: 5, rowLayouts: units.map(u => layout(u)) });
     assert.equal(pages.length, 1);
-    assert.deepEqual(pages[0].columns.map(c => c.map(f => [f.group.id, f.from, f.to])), [[[1, 0, 3], [2, 0, 2]], [], [], []]);
+    assert.deepEqual(pages[0].columns.map(c => c.map(f => [f.group.id, f.from, f.to])), [[[1, 0, 3], [2, 0, 2]], []]);
     assert.ok(pages[0].columns.flat().every(f => f.from === 0), 'No continuation for fitting serials');
   });
 
   test(`${copy}: oversized serial fills each column before continuing, keeping its subtotal with its last row`, () => {
     const model = { groups: [group(1, 12), group(2, 2)] }, units = wholeGroupUnits(model);
     const pages = planFromMeasurements(model, units, { normalCapacity: 100, finalCapacity: 100, gap: 5, rowLayouts: units.map(u => layout(u)) });
-    assert.deepEqual(pages[0].columns.map(c => c.map(f => [f.group.id, f.from, f.to])), [[[1, 0, 9]], [[1, 9, 12], [2, 0, 2]], [], []]);
+    assert.deepEqual(pages[0].columns.map(c => c.map(f => [f.group.id, f.from, f.to])), [[[1, 0, 9]], [[1, 9, 12], [2, 0, 2]]]);
     const first = pages[0].columns[0][0];
     assert.ok(calcFragmentHeight(layout(units[0]), first.group, first.from, first.to + 1) > 100);
     const rows = pages[0].columns.flat().filter(f => f.group.id === 1).flatMap(f => fragmentRows(f.group, f.from, f.to));

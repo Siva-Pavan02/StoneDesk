@@ -93,7 +93,7 @@ test('measurement tables have seven columns, Reg total / Top total rows and no m
     assert.equal(tables.length, 24);
     for (const table of tables) {
       assert.deepEqual([...table.match(/<thead>[^]*?<\/thead>/)[0].matchAll(/<th[^>]*>([^<]*)<\/th>/g)].map(([, text]) => text),
-        ['Type', 'L (ft)', '', 'W (ft)', '', 'Qty', 'Sq ft']);
+        ['Type', 'L', '', 'W', '', 'Qty', 'Sq ft']);
       assert.equal(hits(table, /<col class=/g), 7);
       assert.doesNotMatch(table, /₹|Rs\.|Rate|Amount|data-money/);
       for (const row of table.match(/<tr data-kind=[^]*?<\/tr>/g)) assert.equal(hits(row, /<t[hd][\s>]/g), 7);
@@ -163,7 +163,7 @@ test('groups read in ascending order down columns 1, 2, 3; continuation on non-f
   assert.doesNotMatch(page, /detail-columns/);
   assert.match(page, /class="final-section"/);
   assert.throws(() => renderA4Invoice(model, [{ columns: [[], [], [], []], final: false }]), /final page/);
-  assert.throws(() => renderA4Invoice(model, [{ columns: [[], [], []], final: true }]), /paginated columns/);
+  assert.throws(() => renderA4Invoice(model, [{ columns: [[]], final: true }]), /paginated columns/);
   assert.throws(() => renderA4Invoice(model, []), /paginated columns/);
 });
 
@@ -416,8 +416,9 @@ test('buyer and driver headings omit operators without changing measurement rows
     for (const [, heading] of headings) {
       const text = heading.replace(/<[^>]*>/g, '');
       assert.doesNotMatch(text, /[X\u00d7=]/);
-      assert.match(text, /L \(ft\)/);
-      assert.match(text, /W \(ft\)/);
+      assert.match(text, /L/);
+      assert.match(text, /W/);
+      assert.doesNotMatch(text, /\(ft\)/);
     }
     assert.match(html, /class="operator-cell times-cell">\u00d7<\/td>/);
     assert.match(html, /class="operator-cell equals-cell">=<\/td>/);

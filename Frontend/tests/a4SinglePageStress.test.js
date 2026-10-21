@@ -20,9 +20,9 @@ function assertLayoutInvariants(copyModel, pages, geometry, copy, { expectedPage
     assert.equal(pages.length, expectedPages, `${copy}: Expected exactly ${expectedPages} page(s)`);
   }
 
-  // 1. Structural invariants: exactly 4 columns per page, final page is last
+  // 1. Structural invariants: between 2 and 5 columns per page, final page is last
   pages.forEach((page, pIdx) => {
-    assert.equal(page.columns.length, COLUMNS, `${copy}: Page ${pIdx + 1} must have ${COLUMNS} columns`);
+    assert.ok(page.columns.length >= 2 && page.columns.length <= 5, `${copy}: Page ${pIdx + 1} columns (${page.columns.length}) must be between 2 and 5`);
     assert.equal(page.final, pIdx === pages.length - 1, `${copy}: Page ${pIdx + 1} final flag should be ${pIdx === pages.length - 1}`);
   });
 
@@ -231,9 +231,7 @@ test('Fixture B: Dense 8-S.No invoice with tall groups exercises conti and fits 
         `${copy}: Serial order preserved down columns`
       );
     }
-    // A continuation marker appears only when a serial genuinely crosses a
-    // column boundary; with all serials fitting, none is expected here.
-    assert.equal(pages[0].columns.length, 4, `${copy}: Page has 4 columns`);
+    assert.ok(pages[0].columns.length >= 2 && pages[0].columns.length <= 5, `${copy}: Page has 2-5 columns`);
   }
 });
 
@@ -322,7 +320,7 @@ test('Fixture E: Extreme overflow fixture triggers 2 pages and fulfills multi-pa
 
     // Assert Page 2 follows strict column-major flow.
     assert.equal(pages[1].final, true, `${copy}: Page 2 has final=true`);
-    assert.equal(pages[1].columns.length, 4, `${copy}: Page 2 has 4 columns`);
+    assert.ok(pages[1].columns.length >= 2 && pages[1].columns.length <= 5, `${copy}: Page 2 has 2-5 columns`);
     // Strict vertical flow: no later column is used while valid content could
     // still fit in the previous column. Columns 2-4 may remain empty when all
     // remaining content fits in Column 1.
@@ -361,9 +359,9 @@ for (const sNoCount of STRESS_COUNTS) {
       const pages = planFromMeasurements(copyModel, geometry.units, geometry);
       assert.ok(pages.length >= 1, `${copy}: ${sNoCount} S.No plans at least 1 page`);
 
-      // All pages have 4 columns
+      // All pages have between 2 and 5 columns
       for (const page of pages) {
-        assert.equal(page.columns.length, COLUMNS, `${copy}: Each page has 4 columns`);
+        assert.ok(page.columns.length >= 2 && page.columns.length <= 5, `${copy}: Each page has 2-5 columns (got ${page.columns.length})`);
       }
 
       // Final section on the last page only
@@ -582,7 +580,7 @@ test('ACCEPTANCE TEST — 8 S.No fixture single-page attempt & two-page vertical
   });
   const pagesA = planFromMeasurements(copyModelA, geomA.units, geomA);
   assert.equal(pagesA.length, 1, 'Realistic 8 S.No fixture must fit on ONE single page');
-  assert.equal(pagesA[0].columns.length, 4, 'Page 1 has 4 columns');
+  assert.ok(pagesA[0].columns.length >= 2 && pagesA[0].columns.length <= 5, 'Page 1 has 2-5 columns');
   assert.equal(pagesA[0].final, true, 'Page 1 is final page with bottom-anchored closing');
 
   // Case B: Heavy 8 S.No fixture where 1 page is physically impossible at 8mm + 7.5pt
@@ -626,7 +624,7 @@ test('ACCEPTANCE TEST — 8 S.No fixture single-page attempt & two-page vertical
 
   // Page 1: MUST NOT reserve footer/final-section height. Uses normalCapacity.
   assert.equal(pagesB[0].final, false, 'Page 1 has final=false (no footer reserved)');
-  assert.equal(pagesB[0].columns.length, 4, 'Page 1 has 4 columns');
+  assert.ok(pagesB[0].columns.length >= 2 && pagesB[0].columns.length <= 5, 'Page 1 has 2-5 columns');
 
   // Assert Page 1 uses nearly the entire remaining page height
   pagesB[0].columns.forEach((col, idx) => {
@@ -643,7 +641,7 @@ test('ACCEPTANCE TEST — 8 S.No fixture single-page attempt & two-page vertical
   // Page 2: serial order preserved down columns; continuation only when
   // required; empty trailing columns are valid under strict column-major flow.
   assert.equal(pagesB[1].final, true, 'Page 2 is final page');
-  assert.equal(pagesB[1].columns.length, 4, 'Page 2 uses 4 columns');
+  assert.ok(pagesB[1].columns.length >= 2 && pagesB[1].columns.length <= 5, 'Page 2 uses 2-5 columns');
   const flattenedB = pagesB[1].columns.flat();
   for (let i = 1; i < flattenedB.length; i++) {
     assert.ok(

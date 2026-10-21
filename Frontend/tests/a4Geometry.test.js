@@ -121,7 +121,7 @@ test('validateA4Pages rejects missing, duplicated, out-of-order fragments and a 
     [{ columns: [[f(1, 0, 1), f(0, 0, 2)], [], [], []], final: true }],
     [{ columns: [[f(0, 0, 1)], [], [], []], final: false }, { columns: [[f(1, 0, 1)], [], [], []], final: true }],
     [{ columns: [[f(0, 0, 2)], [], [], []], final: true }, { columns: [[f(1, 0, 1)], [], [], []], final: false }],
-    [{ columns: [[f(0, 0, 2), f(1, 0, 1)], [], []], final: true }],
+    [{ columns: [[f(0, 0, 2), f(1, 0, 1)]], final: true }],
   ];
   for (const pages of bad) assert.throws(() => validateA4Pages(m, pages), /Group ordering or completeness check failed/);
 });

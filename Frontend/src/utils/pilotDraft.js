@@ -90,7 +90,14 @@ export function hasDraftContent(draft) {
 }
 function validDraft(value) {
   if (!value || !Array.isArray(value.rows) || typeof value.clientRequestId !== 'string') return null;
-  if (!value.rows.every(row => row && typeof row.stoneType === 'string' && typeof row.finish === 'string' && Number.isFinite(row.lengthFt) && row.lengthFt > 0 && Number.isFinite(row.widthFt) && row.widthFt > 0 && Number.isSafeInteger(row.quantity) && row.quantity > 0 && Number.isFinite(row.ratePerSqFt) && row.ratePerSqFt >= 0)) return null;
+  if (!value.rows.every(row => {
+    if (!row || typeof row.stoneType !== 'string' || typeof row.finish !== 'string') return false;
+    if (!Number.isSafeInteger(row.quantity) || row.quantity <= 0) return false;
+    const rate = Number(row.rate ?? row.ratePerSqFt);
+    if (!Number.isFinite(rate) || rate < 0) return false;
+    if (row.rateUnit === 'UNIT') return true;
+    return Number.isFinite(row.lengthFt) && row.lengthFt > 0 && Number.isFinite(row.widthFt) && row.widthFt > 0;
+  })) return null;
   // Drafts saved before row numbers existed continue under row 1.
   return { ...value, rows: value.rows.map(row => ({ ...row, rowNo: row.rowNo ?? 1 })) };
 }
@@ -152,20 +159,28 @@ export async function readDraft(storage = localStorage, organizationId, clientRe
   return entry?.draft || null;
 }
 export function previewRows(rows) {
-  return rows.map(row => ({ ...row, sqFt: round2(rawArea(row)), lineTotal: round2(rawAmount(row)) }));
+  return rows.map(row => ({
+    ...row,
+    sqFt: row.rateUnit === 'UNIT' ? 0 : round2(rawArea(row)),
+    lineTotal: row.rateUnit === 'UNIT' ? round2((row.quantity ?? 1) * Number(row.rate ?? row.ratePerSqFt ?? 0)) : round2(rawAmount(row)),
+  }));
 }
 export function makeRow(entry, product) {
-  const lengthFt = parseFraction(entry.length)?.numeric;
-  const widthFt = parseFraction(entry.width)?.numeric;
+  const isUnit = product?.rateUnit === 'UNIT';
+  const lengthFt = isUnit ? undefined : parseFraction(entry.length)?.numeric;
+  const widthFt = isUnit ? undefined : parseFraction(entry.width)?.numeric;
   const quantity = Number(entry.quantity);
-  const ratePerSqFt = Number(entry.rate);
+  const rate = Number(entry.rate);
   const rowNo = Number(entry.rowNo ?? 1);
   if (!product) throw new Error('Select a product');
   if (!Number.isSafeInteger(rowNo) || rowNo < 1 || rowNo > 20) throw new Error('Enter a row number from 1 to 20');
-  if (!(lengthFt > 0) || !Number.isFinite(lengthFt) || !(widthFt > 0) || !Number.isFinite(widthFt)) throw new Error('Enter positive lengths and widths');
+  if (!isUnit && (!(lengthFt > 0) || !Number.isFinite(lengthFt) || !(widthFt > 0) || !Number.isFinite(widthFt))) throw new Error('Enter positive lengths and widths');
   if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 100000) throw new Error('Enter a whole quantity from 1 to 100000');
-  if (entry.rate === '' || !Number.isFinite(ratePerSqFt) || ratePerSqFt < 0) throw new Error('Enter a valid rate');
-  return { stoneType: product.stoneType, finish: product.finish, rowNo, lengthFt, widthFt, quantity, ratePerSqFt, category: entry.category };
+  if (entry.rate === '' || !Number.isFinite(rate) || rate < 0) throw new Error('Enter a valid rate');
+  if (isUnit) {
+    return { stoneType: product.stoneType, finish: product.finish, rowNo, quantity, rate, ratePerSqFt: rate, category: entry.category, rateUnit: 'UNIT' };
+  }
+  return { stoneType: product.stoneType, finish: product.finish, rowNo, lengthFt, widthFt, quantity, ratePerSqFt: rate, category: entry.category };
 }
 // Per-field versions of the checks in makeRow/payload, so the load screen can show
 // each message under its input. Keys match the draft/entry field names.
@@ -187,12 +202,15 @@ export function detailErrors(draft) {
 }
 export function entryErrors(entry, product) {
   const errors = {};
+  const isUnit = product?.rateUnit === 'UNIT';
   const positive = text => { const value = parseFraction(text)?.numeric; return value > 0 && Number.isFinite(value); };
   const quantity = Number(entry.quantity);
   const rate = Number(entry.rate);
   if (!product) errors.productId = 'Select a product';
-  if (!positive(entry.length)) errors.length = 'Enter a length greater than 0';
-  if (!positive(entry.width)) errors.width = 'Enter a width greater than 0';
+  if (!isUnit) {
+    if (!positive(entry.length)) errors.length = 'Enter a length greater than 0';
+    if (!positive(entry.width)) errors.width = 'Enter a width greater than 0';
+  }
   if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 100000) errors.quantity = 'Enter a whole quantity from 1 to 100000';
   if (entry.rate === '' || !Number.isFinite(rate) || rate < 0) errors.rate = 'Enter a valid rate';
   return errors;
@@ -206,9 +224,17 @@ export function payload(draft) {
   if (draft.fee === '' || !Number.isFinite(fee) || fee < 0) throw new Error('Enter valid loading/royalty charges');
   const groups = new Map();
   for (const row of draft.rows) {
-    const key = JSON.stringify([row.stoneType, row.finish, row.ratePerSqFt]);
-    if (!groups.has(key)) groups.set(key, { stoneType: row.stoneType, finish: row.finish, ratePerSqFt: row.ratePerSqFt, measurementRows: [] });
-    groups.get(key).measurementRows.push({ rowNo: row.rowNo ?? 1, lengthFt: row.lengthFt, widthFt: row.widthFt, quantity: row.quantity, category: row.category });
+    const rateUnit = row.rateUnit === 'UNIT' ? 'UNIT' : 'SQ_FT';
+    const key = JSON.stringify([row.stoneType, row.finish, row.ratePerSqFt, rateUnit]);
+    if (!groups.has(key)) groups.set(key, { stoneType: row.stoneType, finish: row.finish, ratePerSqFt: row.ratePerSqFt, ...(rateUnit === 'UNIT' ? { rateUnit: 'UNIT' } : {}), measurementRows: [] });
+    const rowPayload = { rowNo: row.rowNo ?? 1, quantity: row.quantity, category: row.category };
+    if (rateUnit === 'UNIT') {
+      rowPayload.rateUnit = 'UNIT';
+    } else {
+      rowPayload.lengthFt = row.lengthFt;
+      rowPayload.widthFt = row.widthFt;
+    }
+    groups.get(key).measurementRows.push(rowPayload);
   }
   return { clientRequestId: draft.clientRequestId, partyName: draft.partyName.trim(), supervisor: draft.supervisor.trim(), date: draft.date,
     logistics: { truckNumber: draft.truckNumber.trim(), buyerDestination: draft.buyerDestination.trim() }, loadingAndRoyaltyFees: fee, inventory: [...groups.values()] };
@@ -217,5 +243,5 @@ export function fromDispatch(dispatch) {
   return { clientRequestId: dispatch.clientRequestId || crypto.randomUUID(), serverId: dispatch.id, partyName: dispatch.partyName || '',
     truckNumber: dispatch.logistics.truckNumber, buyerDestination: dispatch.logistics.buyerDestination,
     supervisor: dispatch.supervisor, date: new Date(dispatch.date).toISOString().slice(0, 10), fee: String(dispatch.summary.loadingAndRoyaltyFees),
-    rows: dispatch.inventory.flatMap((g, groupIndex) => (g.measurementRows?.length ? g.measurementRows : g.pieces.map(p => ({ ...p, quantity: 1, category: 'Regular' }))).map(r => ({ ...r, rowNo: r.rowNo ?? groupIndex + 1, stoneType: g.stoneType, finish: g.finish, ratePerSqFt: g.ratePerSqFt }))) };
+    rows: dispatch.inventory.flatMap((g, groupIndex) => (g.measurementRows?.length ? g.measurementRows : g.pieces.map(p => ({ ...p, quantity: 1, category: 'Regular' }))).map(r => ({ ...r, rowNo: r.rowNo ?? groupIndex + 1, stoneType: g.stoneType, finish: g.finish, ratePerSqFt: g.ratePerSqFt, rate: g.ratePerSqFt, ...(r.rateUnit === 'UNIT' || g.rateUnit === 'UNIT' ? { rateUnit: 'UNIT' } : {}) }))) };
 }

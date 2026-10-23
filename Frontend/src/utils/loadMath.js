@@ -9,8 +9,8 @@ export function round2(value) {
   return (value < 0 ? -cents : cents) / 100 || 0;
 }
 export const fixed2 = value => round2(Number(value) || 0).toFixed(2);
-export const rawArea = row => row.lengthFt * row.widthFt * (row.quantity ?? 1);
-export const rawAmount = row => rawArea(row) * (row.ratePerSqFt || 0);
+export const rawArea = row => (row.rateUnit === 'UNIT' ? 0 : row.lengthFt * row.widthFt * (row.quantity ?? 1));
+export const rawAmount = row => (row.rateUnit === 'UNIT' ? (row.quantity ?? 1) * (row.rate ?? row.ratePerSqFt ?? 0) : rawArea(row) * (row.ratePerSqFt || 0));
 
 // Returns the same summary the server computes for these rows.
 export function summarize(rows, fee) {
@@ -19,7 +19,7 @@ export function summarize(rows, fee) {
   // Match payload grouping and server summation order for an identical raw net.
   const amounts = new Map();
   for (const row of rows) {
-    const key = JSON.stringify([row.stoneType, row.finish, row.ratePerSqFt]);
+    const key = JSON.stringify([row.stoneType, row.finish, row.ratePerSqFt, row.rateUnit || 'SQ_FT']);
     amounts.set(key, (amounts.get(key) || 0) + rawAmount(row));
   }
   const rawNet = [...amounts.values()].reduce((sum, value) => sum + value, 0) + round2(Number(fee) || 0);

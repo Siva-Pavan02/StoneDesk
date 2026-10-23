@@ -3,6 +3,7 @@ const { text, number, bad } = require('../utils/pilotCalculations');
 const { storeLogo } = require('../utils/businessBranding');
 const { randomUUID } = require('crypto');
 const { referenceKey, removeReference, MAX_SAVED_REFERENCES } = require('../utils/savedReferences');
+const { productFinish, validateRateUnit, publicSettings } = require('../utils/productRates');
 
 const getOrCreateSettings = async (organizationId) => {
   if (!organizationId) throw new Error('Missing organizationId');
@@ -41,7 +42,7 @@ exports.updateProfile = async (req, res, next) => {
     const feeChange = req.body.defaultRoyaltyFee === undefined ? {} : { defaultRoyaltyFee: number(req.body.defaultRoyaltyFee, 'charges') };
 
     settings = await updateWithVersion(settings, { businessName, address, phone, bankDetails, gstNumber, tradeLicense, ...logoChange, ...feeChange });
-    res.json(settings);
+    res.json(publicSettings(settings));
   } catch (err) { next(err); }
 };
 
@@ -50,7 +51,7 @@ exports.uploadLogo = async (req, res, next) => {
     const logoPath = await storeLogo(req.body, req.get('Content-Type'), req.user.organizationId);
     let settings = await getOrCreateSettings(req.user.organizationId);
     settings = await updateWithVersion(settings, { logoPath });
-    res.json(settings);
+    res.json(publicSettings(settings));
   } catch (err) { next(err); }
 };
 
@@ -63,7 +64,7 @@ exports.getSettings = async (req, res, next) => {
       return res.status(404).json({ error: 'Not found' });
     }
     if (!Array.isArray(settings.stoneRates)) settings.stoneRates = [];
-    res.json(settings);
+    res.json(publicSettings(settings));
   } catch (error) { next(error); }
 };
 
@@ -79,7 +80,13 @@ exports.updateSettings = async (req, res, next) => {
     if (data.stoneRates !== undefined) {
       if (!Array.isArray(data.stoneRates)) return res.status(400).json({ error: 'Invalid products' });
       const ids = new Set(), products = new Set();
-      data.stoneRates = data.stoneRates.map(r => ({ id: r?.id === undefined ? randomUUID() : text(r.id, 'product ID', 80), stoneType: text(r?.stoneType, 'product'), finish: text(r?.finish, 'finish'), defaultRate: number(r?.defaultRate, 'rate') }));
+      data.stoneRates = data.stoneRates.map(r => ({
+        id: r?.id === undefined ? randomUUID() : text(r.id, 'product ID', 80),
+        stoneType: text(r?.stoneType, 'product'),
+        finish: productFinish(r?.finish, r?.rateUnit),
+        defaultRate: number(r?.defaultRate, 'rate'),
+        rateUnit: validateRateUnit(r?.rateUnit),
+      }));
       for (const rate of data.stoneRates) {
         const key = JSON.stringify([rate.stoneType, rate.finish]);
         if (ids.has(rate.id) || products.has(key)) bad('Duplicate product or product ID');
@@ -88,7 +95,7 @@ exports.updateSettings = async (req, res, next) => {
     }
     let settings = await getOrCreateSettings(req.user.organizationId);
     settings = await updateWithVersion(settings, data);
-    res.json(settings);
+    res.json(publicSettings(settings));
   } catch (error) {
     if (error.code === 'P2025') return res.status(404).json({ error: 'Not found' });
     next(error);
@@ -110,7 +117,7 @@ async function mutateSettings(organizationId, change) {
 function conflict(message) { throw Object.assign(new Error(message), { status: 409 }); }
 function missing() { throw Object.assign(new Error('Not found'), { status: 404 }); }
 const mutate = change => async (req, res, next) => {
-  try { res.json(await mutateSettings(req.user.organizationId, settings => change(settings, req))); }
+  try { res.json(publicSettings(await mutateSettings(req.user.organizationId, settings => change(settings, req)))); }
   catch (error) { next(error); }
 };
 exports.addTruck = mutate((settings, req) => {
@@ -127,18 +134,19 @@ exports.addDestination = mutate((settings, req) => {
 });
 exports.deleteDestination = mutate((settings, req) => ({ savedDestinations: { set: removeReference(settings.savedDestinations, req.params.destination, 'destinations') } }));
 exports.addStoneRate = mutate((settings, req) => {
-  const stoneType = text(req.body.stoneType, 'product'), finish = text(req.body.finish, 'finish'), defaultRate = number(req.body.defaultRate, 'rate');
+  const stoneType = text(req.body.stoneType, 'product'), finish = productFinish(req.body.finish, req.body.rateUnit), defaultRate = number(req.body.defaultRate, 'rate'), rateUnit = validateRateUnit(req.body.rateUnit);
   if (settings.stoneRates.some(r => r.stoneType === stoneType && r.finish === finish)) conflict('Duplicate stone-rate combination');
-  return { stoneRates: [...settings.stoneRates, { id: randomUUID(), stoneType, finish, defaultRate }] };
+  return { stoneRates: [...settings.stoneRates, { id: randomUUID(), stoneType, finish, defaultRate, rateUnit }] };
 });
 exports.updateStoneRate = mutate((settings, req) => {
   const rate = settings.stoneRates.find(r => r.id === req.params.rateId);
   if (!rate) missing();
   const stoneType = req.body.stoneType === undefined ? rate.stoneType : text(req.body.stoneType, 'product');
-  const finish = req.body.finish === undefined ? rate.finish : text(req.body.finish, 'finish');
+  const finish = productFinish(req.body.finish === undefined ? rate.finish : req.body.finish, req.body.rateUnit ?? rate.rateUnit);
   const defaultRate = number(req.body.defaultRate, 'rate');
+  const rateUnit = req.body.rateUnit === undefined ? (rate.rateUnit ?? 'SQ_FT') : validateRateUnit(req.body.rateUnit);
   if (settings.stoneRates.some(r => r.id !== rate.id && r.stoneType === stoneType && r.finish === finish)) conflict('Duplicate stone-rate combination');
-  return { stoneRates: settings.stoneRates.map(r => r.id === rate.id ? { ...r, stoneType, finish, defaultRate } : r) };
+  return { stoneRates: settings.stoneRates.map(r => r.id === rate.id ? { ...r, stoneType, finish, defaultRate, rateUnit } : r) };
 });
 exports.deleteStoneRate = mutate((settings, req) => {
   if (!settings.stoneRates.some(r => r.id === req.params.rateId)) missing();
@@ -149,6 +157,6 @@ exports.updateRoyalty = async (req, res, next) => {
     const defaultRoyaltyFee = number(req.body.defaultRoyaltyFee, 'charges');
     let settings = await getOrCreateSettings(req.user.organizationId);
     settings = await updateWithVersion(settings, { defaultRoyaltyFee });
-    res.json(settings);
+    res.json(publicSettings(settings));
   } catch (error) { next(error); }
 };

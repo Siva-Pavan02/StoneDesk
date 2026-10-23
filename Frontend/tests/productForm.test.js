@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { productFormErrors, productPayload, shouldRefreshEntryRate } from '../src/utils/productForm.js';
+import {
+  productFormErrors,
+  productPayload,
+  productRateUnit,
+  productRateSuffix,
+  shouldRefreshEntryRate,
+} from '../src/utils/productForm.js';
 
 test('entry rate is not refreshed when the default rate is unchanged (name / finish edit)', () => {
   assert.equal(shouldRefreshEntryRate('64', 64, 64), false);
@@ -64,6 +70,36 @@ test('editing skips the edited product in the duplicate check', () => {
   assert.equal(productFormErrors({ stoneType: 'Marble', finish: 'Honed', defaultRate: '45' }, rates, 'p1').stoneType, 'This product and finish are already saved.');
 });
 
-test('productPayload trims strings and converts the rate', () => {
-  assert.deepEqual(productPayload({ stoneType: ' Granite ', finish: ' Polished', defaultRate: ' 42.50 ' }), { stoneType: 'Granite', finish: 'Polished', defaultRate: 42.5 });
+test('productRateUnit returns UNIT for UNIT products and SQ_FT for everything else', () => {
+  assert.equal(productRateUnit({ rateUnit: 'UNIT' }), 'UNIT');
+  assert.equal(productRateUnit({ rateUnit: 'SQ_FT' }), 'SQ_FT');
+  assert.equal(productRateUnit({}), 'SQ_FT');
+  assert.equal(productRateUnit(null), 'SQ_FT');
+  assert.equal(productRateUnit(undefined), 'SQ_FT');
+});
+
+test('productRateSuffix formats / unit and / sq ft', () => {
+  assert.equal(productRateSuffix({ rateUnit: 'UNIT' }), '/ unit');
+  assert.equal(productRateSuffix({ rateUnit: 'SQ_FT' }), '/ sq ft');
+  assert.equal(productRateSuffix({}), '/ sq ft');
+  assert.equal(productRateSuffix(null), '/ sq ft');
+});
+
+test('productPayload trims strings, converts the rate, and defaults rateUnit to SQ_FT', () => {
+  assert.deepEqual(
+    productPayload({ stoneType: ' Granite ', finish: ' Polished', defaultRate: ' 42.50 ' }),
+    { stoneType: 'Granite', finish: 'Polished', defaultRate: 42.5, rateUnit: 'SQ_FT' }
+  );
+  assert.deepEqual(
+    productPayload({ stoneType: 'Sink', finish: 'Polished', defaultRate: '470', rateUnit: 'UNIT' }),
+    { stoneType: 'Sink', finish: 'Polished', defaultRate: 470, rateUnit: 'UNIT' }
+  );
+});
+
+test('productFormErrors validates rateUnit when provided', () => {
+  const form = { stoneType: 'Granite', finish: 'Polished', defaultRate: '40', rateUnit: 'INVALID' };
+  assert.equal(productFormErrors(form).rateUnit, 'Select a valid rate unit');
+  assert.equal(productFormErrors({ ...form, rateUnit: 'SQ_FT' }).rateUnit, undefined);
+  assert.equal(productFormErrors({ ...form, rateUnit: 'UNIT' }).rateUnit, undefined);
+  assert.equal(productFormErrors({ ...form, rateUnit: undefined }).rateUnit, undefined);
 });

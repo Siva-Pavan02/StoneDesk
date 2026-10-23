@@ -37,7 +37,10 @@ export function continuationText(copy) {
 
 function entryRow(entry) {
   const type = entry.type === 'top' ? '<th class="type top" scope="row">Top</th>' : '<th aria-label="Regular material" class="type" scope="row"></th>';
-  return `<tr data-kind="${entry.type === 'top' ? 'top' : 'regular'}" data-entry-id="${escapeA4Text(entry.id)}">${type}<td class="dim">${escapeA4Text(formatA4Dimension(entry.lengthFt))}</td>${TIMES}<td class="dim">${escapeA4Text(formatA4Dimension(entry.widthFt))}</td>${EQUALS}<td class="qty">${entry.quantity}</td><td class="num">${number(entry.area)}</td></tr>`;
+  const len = escapeA4Text(formatA4Dimension(entry.lengthFt));
+  const wid = escapeA4Text(formatA4Dimension(entry.widthFt));
+  const ar = number(entry.area);
+  return `<tr data-kind="${entry.type === 'top' ? 'top' : 'regular'}" data-entry-id="${escapeA4Text(entry.id)}">${type}<td class="dim">${len}</td>${TIMES}<td class="dim">${wid}</td>${EQUALS}<td class="qty">${entry.quantity}</td><td class="num">${ar}</td></tr>`;
 }
 
 function subtotalRow(group, of) {
@@ -85,9 +88,15 @@ export function renderA4ContinuedHeader() {
 // Pieces and area only: shared by both copies.
 function orderOverview(model, id, withMaterial) {
   const totals = model.totals;
-  return `<div class="order-overview"><h2 class="summary-title" id="${id}-order-heading">Order summary</h2>`
-    + `<dl aria-labelledby="${id}-order-heading" class="headline-totals"><div class="headline-stat"><dt>Total pieces</dt><dd data-total="pieces">${totals.pieces}</dd></div><div class="headline-stat area-stat"><dt>Total area · sq ft</dt><dd data-total="area">${number(totals.area)}</dd></div></dl>`
-    + (withMaterial ? `<dl class="material-total"><div><dt>Material total</dt><dd data-total="material">${money(totals.materialTotal)}</dd></div></dl>` : '')
+  const hasUnits = (totals.totalUnits ?? 0) > 0;
+  return `<div class="order-overview"><div class="section-header"><h2 class="summary-title" id="${id}-order-heading">Order summary</h2></div>`
+    + `<dl aria-labelledby="${id}-order-heading" class="headline-totals">`
+    + `<div class="headline-stat"><dt>Stone pieces</dt><dd data-total="pieces">${totals.pieces}</dd></div>`
+    + `<span class="kpi-divider" aria-hidden="true">|</span>`
+    + `<div class="headline-stat area-stat"><dt>Area · sq ft</dt><dd data-total="area">${number(totals.area)}</dd></div>`
+    + (hasUnits ? `<span class="kpi-divider" aria-hidden="true">|</span><div class="headline-stat"><dt>Units</dt><dd data-total="units">${totals.totalUnits}</dd></div>` : '')
+    + `</dl>`
+    + (withMaterial ? `<div class="subtotal-box"><dl class="material-total"><div class="subtotal-row"><dt>${hasUnits ? 'Stone total' : 'Material total'}</dt><dd data-total="${hasUnits ? 'stone-material' : 'material'}">${money(hasUnits ? totals.stoneMaterialTotal : totals.materialTotal)}</dd></div>${hasUnits ? `<div class="subtotal-row"><dt>Unit total</dt><dd data-total="unit-material">${money(totals.unitProductTotal)}</dd></div>` : ''}</dl></div>` : '')
     + '</div>';
 }
 
@@ -116,9 +125,24 @@ function renderBank(model, id) {
 
 function renderProducts(model, id) {
   if (!model.products?.length) return '';
-  return `<section class="product-summary" aria-labelledby="${id}-products-heading"><h2 class="summary-title" id="${id}-products-heading">Product Summary</h2>`
-    + model.products.map(product => `<div class="product-summary-row"><span class="product-summary-name">${escapeA4Text([product.stoneType, product.finish].filter(Boolean).join(' · '))}</span><span class="product-summary-quantity">${product.quantity} pcs</span><span class="product-summary-rate">${product.ratePerSqFt == null ? '—' : `${formatA4Rate(product.ratePerSqFt).replace(/\.00$/, '')}/sq ft`}</span></div>`).join('')
-    + '</section>';
+  return `<section class="product-summary" aria-labelledby="${id}-products-heading">`
+    + `<div class="section-header"><h2 class="summary-title" id="${id}-products-heading">Product summary</h2></div>`
+    + `<div class="product-summary-grid">`
+    + model.products.map(product => {
+      const isUnit = product.rateUnit === 'UNIT';
+      const unitLabel = isUnit ? 'units' : 'pcs';
+      const unitSuffix = isUnit ? 'unit' : 'sq ft';
+      const rateVal = product.ratePerSqFt == null ? '—' : formatA4Rate(product.ratePerSqFt).replace(/\.00$/, '');
+      const rateSuffixText = product.ratePerSqFt == null ? '' : ` / ${unitSuffix}`;
+      return `<div class="product-summary-card product-summary-row">`
+        + `<div class="product-summary-name">${escapeA4Text([product.stoneType, product.finish].filter(Boolean).join(' · '))}</div>`
+        + `<div class="product-summary-bottom">`
+        + `<div class="product-summary-quantity"><span class="qty-num">${product.quantity}</span> <span class="qty-unit">${unitLabel}</span></div>`
+        + `<span class="metric-divider" aria-hidden="true">|</span>`
+        + `<div class="product-summary-rate"><span class="rate-num">${rateVal}</span><span class="rate-unit">${rateSuffixText}</span></div>`
+        + `</div></div>`;
+    }).join('')
+    + `</div></section>`;
 }
 
 // Buyer: order and payment summary, amount in words, bank details and signature.
@@ -127,19 +151,21 @@ function renderFinal(model, copy, prefix) {
   const id = idPrefix(prefix);
   if (copy === 'driver') {
     return '<div class="final-section">'
-      + `<section aria-label="Order summary" class="invoice-summary driver-summary">${orderOverview(model, id, false)}</section>`
+      + `<div class="summary-card">${model.unitProducts?.length ? `<section class="unit-products"><h2 class="summary-title">Products</h2>${model.unitProducts.map(p => `<p>${escapeA4Text([p.stoneType, p.finish].filter(Boolean).join(' · '))} — ${escapeA4Text(p.quantity)} units</p>`).join('')}</section>` : ''}<section aria-label="Order summary" class="invoice-summary driver-summary">${orderOverview(model, id, false)}</section>`
       + `<section aria-label="Authorization" class="closing"><div class="footer-details">${renderSign(model)}</div></section>`
-      + '</div>';
+      + '</div></div>';
   }
   const totals = model.totals;
   return '<div class="final-section">'
+    + '<div class="summary-card">'
     + renderProducts(model, id)
     + `<section aria-label="Order and payment summary" class="invoice-summary">${orderOverview(model, id, true)}`
-    + `<div class="settlement-overview"><h2 class="summary-title" id="${id}-payment-heading">Payment summary</h2>`
+    + `<div class="settlement-overview"><div class="section-header"><h2 class="summary-title" id="${id}-payment-heading">Payment summary</h2></div>`
     + `<dl aria-labelledby="${id}-payment-heading" class="settlement"><div class="settlement-row"><dt>Material total</dt><dd data-amount="material">${money(totals.materialTotal)}</dd></div><div class="settlement-row"><dt>Loading / royalty</dt><dd data-amount="loading">${money(model.loadingRoyalty)}</dd></div><div class="settlement-net"><dt>Net payable</dt><dd data-total="net">${money(totals.netPayable)}</dd></div></dl></div>`
     + '</section>'
-    + `<section aria-label="Amount in words, optional bank details and authorization" class="closing"><div class="closing-notes"><div class="words-line"><p class="label">Amount in words</p><p class="amount-in-words">${escapeA4Text(model.amountWords)}</p></div></div>`
-    + `<div class="footer-details">${renderBank(model, id)}${renderSign(model)}</div></section>`
+    + `<section aria-label="Amount in words" class="words-bar"><div class="words-line"><p class="label">Amount in words</p><p class="amount-in-words">${escapeA4Text(model.amountWords)}</p></div></section>`
+    + `<section aria-label="Authorization" class="closing"><div class="footer-details">${renderBank(model, id)}${renderSign(model)}</div></section>`
+    + '</div>'
     + '</div>';
 }
 

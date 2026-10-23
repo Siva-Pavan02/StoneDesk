@@ -285,7 +285,7 @@ export default function NewLoad({
   }, [removed]);
   const focusLength = () =>
     requestAnimationFrame(() =>
-      root.current?.querySelector('input[name="length"]')?.focus(),
+      (root.current?.querySelector('input[name="length"]') || root.current?.querySelector('input[name="quantity"]'))?.focus(),
     );
   // Move focus to the first field with an inline error (the browser scrolls it
   // into view). With no invalid field, bring the measurements message into view.
@@ -678,13 +678,19 @@ export default function NewLoad({
                     {position}. {r.stoneType} · {r.finish}
                     {r.category === "TOP" ? ` · ${"Top"}` : ""}
                   </strong>
-                  <p>
-                    {decimalToFraction(r.lengthFt)} ×{" "}
-                    {decimalToFraction(r.widthFt)}{"\u00A0"}{"ft"} ×{" "}
-                    {countFormat.format(r.quantity)}{"\u00A0"}{"pieces"}
-                  </p>
+                  {r.rateUnit === "UNIT" ? (
+                    <p>
+                      {countFormat.format(r.quantity)}{"\u00A0"}{r.quantity === 1 ? "unit" : "units"}
+                    </p>
+                  ) : (
+                    <p>
+                      {decimalToFraction(r.lengthFt)} ×{" "}
+                      {decimalToFraction(r.widthFt)}{"\u00A0"}{"ft"} ×{" "}
+                      {countFormat.format(r.quantity)}{"\u00A0"}{"pieces"}
+                    </p>
+                  )}
                   <p className="font-semibold">
-                    {areaFormat.format(r.sqFt)}{"\u00A0"}{"sq\u00A0ft"} ·{" "}
+                    {r.rateUnit === "UNIT" ? "" : `${areaFormat.format(r.sqFt)}\u00A0sq\u00A0ft · `}
                     {money(r.lineTotal)}
                   </p>
                   {!review && (
@@ -709,12 +715,12 @@ export default function NewLoad({
                           );
                           setEntry({
                             productId: product?.id || "",
-                            length: String(r.lengthFt),
-                            width: String(r.widthFt),
+                            length: String(r.lengthFt ?? ""),
+                            width: String(r.widthFt ?? ""),
                             quantity: String(r.quantity),
                             category: r.category,
                             rowNo: String(r.rowNo),
-                            rate: String(r.ratePerSqFt),
+                            rate: String(r.rate ?? r.ratePerSqFt ?? ""),
                           });
                           setDraft({
                             ...draft,

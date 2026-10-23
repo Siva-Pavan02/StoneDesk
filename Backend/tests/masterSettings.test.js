@@ -76,6 +76,7 @@ test('MasterSettings API', async (t) => {
     const { status, data } = await request('POST', '/stone-rates', { stoneType: 'Galaxy', finish: 'Slabs', defaultRate: 35 });
     assert.equal(status, 200);
     assert.equal(data.stoneRates[0].defaultRate, 35);
+    assert.equal(data.stoneRates[0].rateUnit, 'SQ_FT');
     rateId = data.stoneRates[0].id;
   });
 
@@ -89,6 +90,32 @@ test('MasterSettings API', async (t) => {
     assert.equal(status, 200);
     const rate = data.stoneRates.find(r => r.id === rateId);
     assert.equal(rate.defaultRate, 38);
+    assert.equal(rate.rateUnit, 'SQ_FT');
+  });
+
+  await t.test('Product rateUnit lifecycle and validation', async () => {
+    const unitRes = await request('POST', '/stone-rates', { stoneType: 'Sink', finish: 'Polished', defaultRate: 450, rateUnit: 'UNIT' });
+    assert.equal(unitRes.status, 200);
+    const sink = unitRes.data.stoneRates.find(r => r.stoneType === 'Sink');
+    assert.equal(sink.rateUnit, 'UNIT');
+    assert.equal(sink.defaultRate, 450);
+
+    assert.equal((await request('POST', '/stone-rates', { stoneType: 'Invalid1', finish: 'X', defaultRate: 10, rateUnit: 'PIECE' })).status, 400);
+    assert.equal((await request('POST', '/stone-rates', { stoneType: 'Invalid2', finish: 'X', defaultRate: 10, rateUnit: null })).status, 400);
+    assert.equal((await request('POST', '/stone-rates', { stoneType: 'Invalid3', finish: 'X', defaultRate: 10, rateUnit: 123 })).status, 400);
+
+    const toUnit = await request('PUT', `/stone-rates/${rateId}`, { defaultRate: 38, rateUnit: 'UNIT' });
+    assert.equal(toUnit.status, 200);
+    assert.equal(toUnit.data.stoneRates.find(r => r.id === rateId).rateUnit, 'UNIT');
+
+    const toSqFt = await request('PUT', `/stone-rates/${rateId}`, { defaultRate: 38, rateUnit: 'SQ_FT' });
+    assert.equal(toSqFt.status, 200);
+    assert.equal(toSqFt.data.stoneRates.find(r => r.id === rateId).rateUnit, 'SQ_FT');
+
+    assert.equal((await request('PUT', `/stone-rates/${rateId}`, { defaultRate: 38, rateUnit: 'SINK' })).status, 400);
+    assert.equal((await request('PUT', `/stone-rates/${rateId}`, { defaultRate: 38, rateUnit: null })).status, 400);
+
+    await request('DELETE', `/stone-rates/${sink.id}`);
   });
 
   await t.test('13. Reject negative rate', async () => {

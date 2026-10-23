@@ -18,6 +18,7 @@ const { authFlags, requiresCurrentPassword, buildResetUrl } = require("../utils/
 const { STATUS_TARGETS, statusTransitionError } = require("../utils/dispatchStatus");
 const { canAddProduct } = require("../utils/roles");
 const { MAX_SAVED_REFERENCES, referenceKey, removeReference, rememberReference } = require("../utils/savedReferences");
+const { productFinish, validateRateUnit, normalizeStoneRates, publicSettings } = require("../utils/productRates");
 
 const PORT = process.env.MOCK_PORT || 5001;
 const DATA_FILE = path.join(__dirname, "mock-data.json");
@@ -145,6 +146,8 @@ db.payments ||= [];
 for (const d of db.dispatches) if (!Array.isArray(d.revisions)) d.revisions = [];
 // Older mock-data.json files predate the bankDetails column (default '' in Postgres).
 db.settings.bankDetails ??= "";
+// Older mock-data.json files predate the rateUnit field (default SQ_FT).
+db.settings.stoneRates = normalizeStoneRates(db.settings.stoneRates);
 db.googleUserSeeded ||= (db.users.some(u => u.id === "user_003") || db.users.push(googleSeedUser()), true);
 const inviteHash = token => createHash("sha256").update(token).digest("hex");
 // Reset tokens live only in memory for the mock process: never persisted to
@@ -523,7 +526,7 @@ const settingsRoute = (method, route, fn) =>
       fn(db.settings, req);
       bump(db.settings);
       save();
-      res.json(db.settings);
+      res.json(publicSettings(db.settings));
     }),
   );
 settingsRouter.get(
@@ -535,7 +538,7 @@ settingsRouter.get(
       )
     )
       fail(404, "Not found");
-    res.json(db.settings);
+    res.json(publicSettings(db.settings));
   }),
 );
 // Mirrors masterSettingsRoutes: creating a product is Admin + Manager, everything below stays Admin-only.
@@ -546,13 +549,14 @@ settingsRouter.post("/stone-rates", (req, res, next) =>
 );
 settingsRoute("post", "/stone-rates", (s, req) => {
   const stoneType = calc.text(req.body.stoneType, "product"),
-    finish = calc.text(req.body.finish, "finish"),
-    defaultRate = calc.number(req.body.defaultRate, "rate");
+    finish = productFinish(req.body.finish, req.body.rateUnit),
+    defaultRate = calc.number(req.body.defaultRate, "rate"),
+    rateUnit = validateRateUnit(req.body.rateUnit);
   if (
     s.stoneRates.some((r) => r.stoneType === stoneType && r.finish === finish)
   )
     fail(409, "Duplicate stone-rate combination");
-  s.stoneRates.push({ id: randomUUID(), stoneType, finish, defaultRate });
+  s.stoneRates.push({ id: randomUUID(), stoneType, finish, defaultRate, rateUnit });
 });
 settingsRouter.use(requireAdmin);
 settingsRoute("put", "/", (s, req) => {
@@ -569,8 +573,9 @@ settingsRoute("put", "/", (s, req) => {
         s[key] = req.body[key].map((r) => ({
           id: r.id || randomUUID(),
           stoneType: calc.text(r.stoneType, "product"),
-          finish: calc.text(r.finish, "finish"),
+          finish: productFinish(r.finish, r.rateUnit),
           defaultRate: calc.number(r.defaultRate, "rate"),
+          rateUnit: validateRateUnit(r.rateUnit),
         }));
       else s[key] = [...new Set(req.body[key].map((v) => calc.text(v, key)))].slice(0, MAX_SAVED_REFERENCES);
     }
@@ -641,11 +646,12 @@ settingsRoute("put", "/stone-rates/:rateId", (s, req) => {
     req.body.stoneType === undefined
       ? rate.stoneType
       : calc.text(req.body.stoneType, "product");
-  const finish =
-    req.body.finish === undefined
-      ? rate.finish
-      : calc.text(req.body.finish, "finish");
+  const finish = productFinish(req.body.finish === undefined ? rate.finish : req.body.finish, req.body.rateUnit ?? rate.rateUnit);
   const defaultRate = calc.number(req.body.defaultRate, "rate");
+  const rateUnit =
+    req.body.rateUnit === undefined
+      ? (rate.rateUnit ?? "SQ_FT")
+      : validateRateUnit(req.body.rateUnit);
   if (
     s.stoneRates.some(
       (r) =>
@@ -653,7 +659,7 @@ settingsRoute("put", "/stone-rates/:rateId", (s, req) => {
     )
   )
     fail(409, "Duplicate stone-rate combination");
-  Object.assign(rate, { stoneType, finish, defaultRate });
+  Object.assign(rate, { stoneType, finish, defaultRate, rateUnit });
 });
 settingsRoute("delete", "/stone-rates/:rateId", (s, req) => {
   s.stoneRates = s.stoneRates.filter((r) => r.id !== req.params.rateId);

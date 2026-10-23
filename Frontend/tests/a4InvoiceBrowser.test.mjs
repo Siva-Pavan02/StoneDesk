@@ -139,9 +139,9 @@ async function renderProductionCase(page, base, name, input, options = {}) {
         const closingElem = sheet.querySelector('.closing');
         const contentBottom = Math.max(detail ? detail.getBoundingClientRect().bottom : 0, closingElem ? closingElem.getBoundingClientRect().bottom : 0);
         const blocks = [...sheet.querySelectorAll('.row-block')];
-        const overflowedCells = [...sheet.querySelectorAll('.row-table .num, .settlement dd, .headline-stat dd')]
+        const overflowedCells = [...sheet.querySelectorAll('.row-table .num, .settlement dd, .headline-stat dd, .business-name')]
           .filter(cell => cell.scrollWidth > cell.clientWidth + 1).map(cell => cell.textContent.trim()).slice(0, 4);
-        const clippedGlyphs = [...sheet.querySelectorAll('.row-table .num, .settlement dd, .headline-stat dd')]
+        const clippedGlyphs = [...sheet.querySelectorAll('.row-table .num, .settlement dd, .headline-stat dd, .business-name')]
           .filter(cell => {
             const range = document.createRange(); range.selectNodeContents(cell);
             const text = range.getBoundingClientRect(), box = cell.getBoundingClientRect();
@@ -259,8 +259,8 @@ async function main() {
     const sampleText = await inspectPdf(pdfBytes, 'sample', SAMPLE_PAGES);
     // Letter-spaced uppercase headings extract as split glyphs ("PAY M E N T"), so compare without spaces.
     assert.equal(sampleText.filter(text => text.replace(/\s+/g, '').includes('PAYMENTSUMMARY')).length, 1);
-    assert.equal(sampleText.filter(text => text.includes('Rupees Two Lakh')).length, 1);
-    assert.equal(sampleText.filter(text => text.includes('Not valid for payment')).length, 1);
+    assert.equal(sampleText.filter(text => text.toUpperCase().includes('RUPEES TWO LAKH')).length, 1);
+    assert.equal(sampleText.filter(text => text.toUpperCase().replace(/\s+/g, '').includes('NOTVALIDFORPAYMENT')).length, 1);
     // Unified summary: one Material total and Net payable (no Regular/Top amount split).
     assert.ok(['₹221,515.00', '₹222,015.00'].every(amount => sampleText.at(-1).includes(amount)),
       'All final payment amounts must remain selectable and legible in the PDF');
@@ -284,14 +284,14 @@ async function main() {
         const { renderA4Pages, renderA4MeasureSheet, renderA4Invoice } = await import('/src/utils/a4InvoiceRender.js');
         const { a4InvoicePdf } = await import('/src/utils/a4InvoicePdf.js');
         const model = projectCopy(prepareA4Invoice(input), copy);
-        const measured = await measureA4Copy(model, copy, { tier });
-        const pages = planFromMeasurements(model, measured.units, measured).map(p => ({ ...p, tier }));
+        const measured = await measureA4Copy(model, copy, { tier, columnCount: 4 });
+        const pages = planFromMeasurements(model, measured.units, { ...measured, singlePageOnly: true }, { columns: 4 }).map(p => ({ ...p, tier }));
         const geometry = host => {
           const sheet = host.querySelector('.sample-sheet');
           return { padding: parseFloat(getComputedStyle(sheet).paddingLeft), width: sheet.querySelector('.detail-columns').getBoundingClientRect().width,
             font: parseFloat(getComputedStyle(sheet.querySelector('.row-table')).fontSize) };
         };
-        const planning = mountA4Host(document, renderA4MeasureSheet(model, copy, measured.units, 'probe', tier));
+        const planning = mountA4Host(document, renderA4MeasureSheet(model, copy, measured.units, 'probe', tier, 4));
         const planningGeometry = geometry(planning); planning.remove();
         document.body.innerHTML = renderA4Invoice(model, pages, copy);
         const previewGeometry = geometry(document);
@@ -309,7 +309,7 @@ async function main() {
           reclaimed: measured.continuationFinalCapacity > measured.finalCapacity,
           finalRows: pages.at(-1).columns.flat().length,
           bytes: Array.from(new Uint8Array(await pdf.blob.arrayBuffer())) };
-      }, { input: oversizedFixture(220, 30), copy, tier });
+      }, { input: oversizedFixture(80, 20), copy, tier });
       assert.deepEqual(probe.exportGeometry, probe.planningGeometry, `${copy}/${tier}: PDF/planning geometry`);
       assert.deepEqual(probe.previewGeometry, probe.planningGeometry, `${copy}/${tier}: preview/planning geometry`);
       assert.ok(Math.abs(probe.exportGeometry.padding - 8 * 96 / 25.4) < .1);
@@ -326,6 +326,43 @@ async function main() {
       const glyphs = value => [...value.replace(/\s/g, '')].sort().join('');
       assert.deepEqual(text.map(glyphs), printText.map(glyphs), `${copy}/${tier}: identical text on each generated/printed page`);
       console.log('VECTOR', copy, tier, probe.pages, JSON.stringify(probe.exportGeometry));
+    }
+
+    // Exercise saved unit/mixed inventory through the same model, preview and real PDF exporter.
+    for (const kind of ['unit', 'mixed']) for (const copy of ['buyer', 'driver']) {
+      const result = await page.evaluate(async ({ kind, copy }) => {
+        const { a4InvoiceFromDispatch, projectCopy } = await import('/src/utils/a4InvoiceModel.js');
+        const { planA4CopyMeasured } = await import('/src/utils/a4InvoiceMeasure.js');
+        const { renderA4Invoice } = await import('/src/utils/a4InvoiceRender.js');
+        const { a4InvoicePdf } = await import('/src/utils/a4InvoicePdf.js');
+        const inventory = [{ stoneType: 'Ceramic basin', finish: '', rateUnit: 'UNIT', ratePerSqFt: 2500, measurementRows: [{ rowNo: 1, quantity: 5, category: 'Regular', lineTotal: 12500 }] }];
+        if (kind === 'mixed') inventory.push({ stoneType: 'Granite', finish: 'Polished', ratePerSqFt: 40, measurementRows: [{ rowNo: 2, lengthFt: 3, widthFt: 2, quantity: 19, category: 'Regular', lineTotal: 4560 }] });
+        const model = projectCopy(a4InvoiceFromDispatch({ inventory, status: 'Dispatched', date: '2026-10-22', dispatchSlipNumber: 'AUDIT-UNIT', partyName: 'Test buyer', supervisor: 'Manager', logistics: { truckNumber: 'TEST', buyerDestination: 'Yard' }, businessSnapshot: { businessName: 'Test supplier' }, summary: { loadingAndRoyaltyFees: 0 } }), copy);
+        const before = JSON.stringify(model);
+        const pages = await planA4CopyMeasured(model, copy);
+        document.body.innerHTML = renderA4Invoice(model, pages, copy);
+        const sheet = document.querySelector('.sample-sheet');
+        const pdf = await a4InvoicePdf(model, pages, copy);
+        return { anchored: Math.abs(sheet.querySelector('.final-section').getBoundingClientRect().bottom - sheet.querySelector('.page-body').getBoundingClientRect().bottom) < 1, pages: pages.length, text: document.body.innerText, unchanged: before === JSON.stringify(model), fits: sheet.querySelector('.page-body').getBoundingClientRect().bottom <= sheet.getBoundingClientRect().bottom + 1, bytes: Array.from(new Uint8Array(await pdf.blob.arrayBuffer())) };
+      }, { kind, copy });
+      assert.equal(result.pages, 1); assert.ok(result.fits && result.unchanged && result.anchored);
+      assert.match(result.text, /Ceramic basin/);
+      assert.equal(result.text.includes('₹'), copy === 'buyer');
+      const bytes = new Uint8Array(result.bytes);
+      await writeFile(path.join(out, `${kind}-${copy}.pdf`), bytes);
+      const text = await inspectPdf(bytes, `${kind}-${copy}`, 1);
+      const print = await inspectPdf(await page.pdf({ format: 'A4', preferCSSPageSize: true, printBackground: true }), `${kind}-${copy}-print`, 1);
+      const glyphs = values => [...values.join('').replace(/\s/g, '')].sort().join('');
+      assert.equal(glyphs(text), glyphs(print));
+    }
+    for (const copy of ['buyer', 'driver']) {
+      const message = await page.evaluate(async ({ input, copy }) => {
+        const { prepareA4Invoice, projectCopy } = await import('/src/utils/a4InvoiceModel.js');
+        const { planA4CopyMeasured } = await import('/src/utils/a4InvoiceMeasure.js');
+        try { await planA4CopyMeasured(projectCopy(prepareA4Invoice(input), copy), copy); return ''; }
+        catch (error) { return error.message; }
+      }, { input: oversizedFixture(600, 0), copy });
+      assert.match(message, /cannot fit on one A4 page/);
     }
 
     const one = browserFixture(); one.groups = one.groups.slice(0, 1);
@@ -352,6 +389,29 @@ async function main() {
     const unreadableLogo = varyingFixture(1);
     unreadableLogo.seller.logo = 'data:image/png;base64,AAAA';
     await renderProductionCase(page, base, 'unreadable-saved-logo', unreadableLogo, { logoFallback: true });
+
+    await page.route('**/api/**', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [], nextCursor: null }) }));
+    await page.goto(`${base}/sample_invoice_24_rows.html`);
+    await page.evaluate(async () => {
+      const { default: RefreshRuntime } = await import('/@react-refresh');
+      RefreshRuntime.injectIntoGlobalHook(window); window.$RefreshReg$ = () => {}; window.$RefreshSig$ = () => type => type; window.__vite_plugin_react_preamble_installed__ = true;
+      const { default: React } = await import('/node_modules/.vite/deps/react.js'); const { default: ReactDOM } = await import('/node_modules/.vite/deps/react-dom_client.js');
+      const { default: LoadingListScreen } = await import('/src/components/LoadingListScreen.jsx');
+      document.body.innerHTML = '<div id="loading-audit"></div>';
+      ReactDOM.createRoot(document.getElementById('loading-audit')).render(React.createElement(LoadingListScreen, { onClose() {}, settings: { stoneRates: [], savedDestinations: [] } }));
+    });
+    await page.getByLabel('Product type', { exact: true }).selectOption('UNIT');
+    assert.equal(await page.locator('#requirement-length').count(), 0);
+    await page.locator('#requirement-quantity').fill('2');
+    await page.getByRole('button', { name: 'Add Requirement', exact: true }).click();
+    for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Load unit', exact: true }).click();
+    await page.getByText('1 Excess', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Custom', exact: true }).count(), 0);
+    await page.getByRole('button', { name: /^Edit .*units$/ }).click();
+    await page.locator('#requirement-quantity').fill('5');
+    await page.getByRole('button', { name: 'Update requirement', exact: true }).click();
+    await page.getByText('2 items', { exact: true }).waitFor();
+    await page.unroute('**/api/**');
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${base}/sample_invoice_24_rows.html`, { waitUntil: 'domcontentloaded' });

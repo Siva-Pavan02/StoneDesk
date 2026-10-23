@@ -3,7 +3,7 @@ import { request, settingsPath } from '../../lib/pilotApi.js';
 import { updateStoneRate } from '../../lib/api.js';
 import { Button, Field, ErrorMessage } from './Controls.jsx';
 import { productFormErrors, productPayload } from '../../utils/productForm.js';
-const empty = { stoneType: '', finish: '', defaultRate: '' };
+const empty = { stoneType: '', finish: '', defaultRate: '', rateUnit: 'SQ_FT' };
 // Compact add / edit product form shown inside the Measurements card of New load.
 // Add (Admin and Manager): POSTs a new product. first: the organization has no products yet,
 // so the form cannot be cancelled.
@@ -18,7 +18,7 @@ const empty = { stoneType: '', finish: '', defaultRate: '' };
 export default function QuickAddProduct({ organizationId, stoneRates = [], first = false, product: editProduct, onSaved, onSettingsSaved, onBusyChange, onCancel }) {
   const editing = Boolean(editProduct);
   const [form, setForm] = useState(() => editing
-    ? { stoneType: editProduct.stoneType ?? '', finish: editProduct.finish ?? '', defaultRate: String(editProduct.defaultRate ?? '') }
+    ? { stoneType: editProduct.stoneType ?? '', finish: editProduct.finish ?? '', defaultRate: String(editProduct.defaultRate ?? ''), rateUnit: editProduct.rateUnit ?? 'SQ_FT' }
     : empty);
   const [errors, setErrors] = useState({});
   const [error, setError] = useState('');
@@ -90,8 +90,29 @@ export default function QuickAddProduct({ organizationId, stoneRates = [], first
     <ErrorMessage error={error} />
     <div className="quick-product-fields">
       <Field label="Tile / stone name" name="stoneType" required maxLength={120} autoComplete="off" value={form.stoneType} onChange={change('stoneType')} error={errors.stoneType} />
-      <Field label="Finish" name="finish" required maxLength={120} autoComplete="off" placeholder="e.g. Polished" value={form.finish} onChange={change('finish')} error={errors.finish} />
-      <Field label="Rate per sq ft (₹)" name="defaultRate" required type="number" min="0" step="0.01" value={form.defaultRate} onChange={change('defaultRate')} error={errors.defaultRate} />
+      <Field label={form.rateUnit === 'UNIT' ? 'Variant / finish (optional)' : 'Finish'} name="finish" required={form.rateUnit !== 'UNIT'} maxLength={120} autoComplete="off" placeholder="e.g. Polished" value={form.finish} onChange={change('finish')} error={errors.finish} />
+      <div className="control-field quick-product-rate-unit">
+        <span className="control-label" id={`${titleId}-rate-unit-label`}>Rate unit</span>
+        <div className="placement-switch" role="group" aria-labelledby={`${titleId}-rate-unit-label`}>
+          {[
+            ['SQ_FT', 'Per sq ft'],
+            ['UNIT', 'Per unit'],
+          ].map(([unit, label]) => (
+            <button
+              key={unit}
+              type="button"
+              aria-pressed={form.rateUnit === unit}
+              onClick={() => {
+                setForm(current => ({ ...current, rateUnit: unit }));
+                if (errors.rateUnit) setErrors(({ rateUnit: _cleared, ...rest }) => rest);
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <Field label={form.rateUnit === 'UNIT' ? 'Rate per unit (₹)' : 'Rate per sq ft (₹)'} name="defaultRate" required type="number" min="0" step="0.01" value={form.defaultRate} onChange={change('defaultRate')} error={errors.defaultRate} />
     </div>
     <div className="quick-product-actions">
       <Button type="submit" primary disabled={busy} label={busy ? 'Saving…' : editing ? 'Save changes' : 'Save product'} />

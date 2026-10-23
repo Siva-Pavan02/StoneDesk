@@ -2,6 +2,7 @@ import React, { forwardRef, useEffect, useId, useImperativeHandle, useRef, useSt
 import { FieldError } from './Controls.jsx';
 import Icon from './Icon.jsx';
 import { money } from '../../utils/pilotDraft.js';
+import { productRateSuffix } from '../../utils/productForm.js';
 
 // Select-only combobox (WAI-ARIA APG pattern) for the product / finish list.
 // Keyboard: Enter/Space/ArrowDown open; ArrowUp/Down, Home/End move; Enter/Space pick;
@@ -105,7 +106,7 @@ const ProductPicker = forwardRef(function ProductPicker({ products, value, onSel
             ? <><span className="product-picker-name">{selected.stoneType}</span><span className="product-picker-finish">{selected.finish}</span></>
             : <span className="product-picker-placeholder">Select product</span>}
         </span>
-        {selected && <span className="product-picker-rate">{money(selected.defaultRate)}<small>/ sq ft</small></span>}
+        {selected && <span className="product-picker-rate">{money(selected.defaultRate)}<small>{productRateSuffix(selected)}</small></span>}
         <span className="product-picker-chevron" aria-hidden="true"><Icon name="down" className="h-4 w-4" /></span>
       </button>
       {open && <ul ref={list} id={listId} role="listbox" aria-labelledby={labelId} className="product-picker-list" tabIndex={-1}>
@@ -119,7 +120,7 @@ const ProductPicker = forwardRef(function ProductPicker({ products, value, onSel
               ? <><Icon name="plus" className="h-4 w-4" /><span>Add new product…</span></>
               : <>
                 <span className="product-picker-option-text"><span className="product-picker-name">{option.product.stoneType}</span><span className="product-picker-finish">{option.product.finish}</span></span>
-                <span className="product-picker-rate">{money(option.product.defaultRate)}<small>/ sq ft</small></span>
+                <span className="product-picker-rate">{money(option.product.defaultRate)}<small>{productRateSuffix(option.product)}</small></span>
                 <span className="product-picker-check" aria-hidden="true">{isSelected && <Icon name="check" className="h-4 w-4" />}</span>
                 {canEdit && <button type="button" className="product-picker-action product-picker-edit" tabIndex={-1} disabled={actionsDisabled} aria-label={`Edit ${option.product.stoneType} ${option.product.finish}`}
                   onMouseDown={event => event.preventDefault()} onClick={event => { event.stopPropagation(); edit(option.product); }}><Icon name="edit" className="h-4 w-4" /></button>}

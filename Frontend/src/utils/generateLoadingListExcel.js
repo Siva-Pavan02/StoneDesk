@@ -29,8 +29,8 @@ export function generateLoadingListExcel(listData) {
   listData.requirements.forEach((req, idx) => {
     ws1Data.push([
       idx + 1,
-      req.lengthDisplay || decimalToFraction(req.lengthFt),
-      req.widthDisplay || decimalToFraction(req.widthFt),
+      req.rateUnit === 'UNIT' ? 'Unit product' : req.lengthDisplay || decimalToFraction(req.lengthFt),
+      req.rateUnit === 'UNIT' ? '' : req.widthDisplay || decimalToFraction(req.widthFt),
       req.requiredQuantity,
       req.loadedQuantity,
       pending(req),
@@ -51,7 +51,7 @@ export function generateLoadingListExcel(listData) {
   ws2Data.push(["Size", "Required Quantity"]);
   
   listData.requirements.forEach(req => {
-    const size = `${req.lengthDisplay || decimalToFraction(req.lengthFt)} × ${req.widthDisplay || decimalToFraction(req.widthFt)}`;
+    const size = req.rateUnit === 'UNIT' ? `${listData.stoneType} (units)` : `${req.lengthDisplay || decimalToFraction(req.lengthFt)} × ${req.widthDisplay || decimalToFraction(req.widthFt)}`;
     ws2Data.push([size, req.requiredQuantity]);
   });
   
@@ -73,6 +73,7 @@ export function generateLoadingListExcel(listData) {
   
   let globalPieceIndex = 1;
   listData.requirements.forEach(req => {
+    if (req.rateUnit === 'UNIT') { ws3Data.push([globalPieceIndex++, `${listData.stoneType}: ${req.loadedQuantity} units`, '', '']); return; }
     const reqStr = `${req.lengthDisplay || decimalToFraction(req.lengthFt)} × ${req.widthDisplay || decimalToFraction(req.widthFt)}`;
     
     (req.loadedPieces || []).forEach(p => {

@@ -76,6 +76,7 @@ export function formatA4Rate(value) {
 }
 
 export function formatA4Dimension(value) {
+  if (value === '-' || value == null || value === '') return '-';
   const n = new D(value);
   const whole = n.floor(), fraction = n.minus(whole).toString();
   const quarter = { '0.25': '¼', '0.5': '½', '0.75': '¾' }[fraction];
@@ -141,7 +142,7 @@ export function prepareA4Invoice(input) {
   if (!Array.isArray(input.groups) || input.groups.length < 1) throw new Error('At least one measurement group is required.');
 
   const warnings = [], groupIds = new Set(), entryIds = new Set();
-  const groups = input.groups.map(group => {
+  const rawGroups = input.groups.map(group => {
     const id = Number(group.id);
     if (!Number.isSafeInteger(id) || id < 1 || groupIds.has(id)) throw new Error(`Invalid or duplicate measurement group: ${group.id}.`);
     groupIds.add(id);
@@ -151,13 +152,14 @@ export function prepareA4Invoice(input) {
       if (!entryId || entryIds.has(entryId)) throw new Error(`Duplicate or missing entry identifier: ${entryId}.`);
       entryIds.add(entryId);
       if (!['regular', 'top'].includes(entry.type)) throw new Error(`Invalid type in group ${id}, entry ${entryId}.`);
-      const length = decimal(entry.lengthFt, `Length in group ${id}`, { positive: true });
-      const width = decimal(entry.widthFt, `Width in group ${id}`, { positive: true });
+      const isUnit = entry.rateUnit === 'UNIT';
+      const length = isUnit ? null : decimal(entry.lengthFt, `Length in group ${id}`, { positive: true });
+      const width = isUnit ? null : decimal(entry.widthFt, `Width in group ${id}`, { positive: true });
       const quantity = Number(entry.quantity);
       if (!Number.isSafeInteger(quantity) || quantity < 1) throw new Error(`Quantity in group ${id} must be a positive integer.`);
-      const area = length.times(width).times(quantity);
+      const area = isUnit ? ZERO : length.times(width).times(quantity);
       const rate = entry.ratePerSqFt == null ? null : decimal(entry.ratePerSqFt, `Rate in group ${id}`);
-      const rawCharge = rate?.times(area);
+      const rawCharge = isUnit ? rate?.times(quantity) : rate?.times(area);
       const calculated = rawCharge?.toDecimalPlaces(2, MONEY_ROUNDING);
       if (calculated == null && entry.authoritativeAmount == null) throw new Error(`Group ${id}, entry ${entryId} needs a rate or stored amount.`);
       const amount = entry.authoritativeAmount == null ? calculated : decimal(entry.authoritativeAmount, `Stored amount in group ${id}`, { monetary: true });
@@ -166,7 +168,7 @@ export function prepareA4Invoice(input) {
       // Only use a rate to reconstruct that sum when it agrees with the saved line;
       // a mismatched rate must never supersede an authoritative saved amount.
       const unroundedAmount = rawCharge && calculated.equals(amount) ? rawCharge : amount;
-      return { id: entryId, type: entry.type, lengthFt: length.toString(), widthFt: width.toString(), quantity,
+      return { id: entryId, type: entry.type, lengthFt: length ? length.toString() : '-', widthFt: width ? width.toString() : '-', quantity, rateUnit: isUnit ? 'UNIT' : 'SQ_FT',
         ratePerSqFt: rate?.toString() ?? null,
         area: area.toString(), amount: amount.toFixed(2, MONEY_ROUNDING), unroundedAmount: unroundedAmount.toString() };
     });
@@ -177,14 +179,20 @@ export function prepareA4Invoice(input) {
     return { id, entries: [...regular, ...top], regular: regularTotals,
       top: { ...totals(top), amount: new D(total.amount).minus(regularTotals.amount).toFixed(2, MONEY_ROUNDING) }, total };
   }).sort((a, b) => a.id - b.id);
-  const all = groups.flatMap(group => group.entries);
-  const regular = all.filter(entry => entry.type === 'regular');
-  const top = all.filter(entry => entry.type === 'top');
+  const all = rawGroups.flatMap(group => group.entries);
+  const sqFtEntries = all.filter(entry => entry.rateUnit !== 'UNIT');
+  const unitEntries = all.filter(entry => entry.rateUnit === 'UNIT');
+  const totalStonePieces = sqFtEntries.reduce((n, entry) => n + entry.quantity, 0);
+  const totalUnits = unitEntries.reduce((n, entry) => n + entry.quantity, 0);
+  const regular = sqFtEntries.filter(entry => entry.type === 'regular');
+  const top = sqFtEntries.filter(entry => entry.type === 'top');
   const regularArea = sum(regular, 'area'), topArea = sum(top, 'area');
   const materialTotal = sum(all, 'unroundedAmount').toDecimalPlaces(2, MONEY_ROUNDING);
+  const stoneMaterialTotal = sum(sqFtEntries, 'unroundedAmount').toDecimalPlaces(2, MONEY_ROUNDING);
+  const unitProductTotal = materialTotal.minus(stoneMaterialTotal);
   const regularAmount = sum(regular, 'unroundedAmount').toDecimalPlaces(2, MONEY_ROUNDING);
   // Keep both printed category amounts reconcilable to the authoritative round-once total.
-  const topAmount = materialTotal.minus(regularAmount);
+  const topAmount = stoneMaterialTotal.minus(regularAmount);
   const loadingRoyalty = decimal(input.loadingRoyalty, 'Loading / royalty', { monetary: true });
   const calculatedNet = new D(netTotal(sum(all, 'unroundedAmount').plus(loadingRoyalty).toNumber()));
   // A saved bill keeps its authoritative payable, including historical rounding.
@@ -199,11 +207,30 @@ export function prepareA4Invoice(input) {
   ]) if (stored[key] != null && !new D(stored[key]).equals(calculated)) {
     warnings.push(`${label}: stored ${stored[key]} differs from the sum of the saved measurement lines (${calculated}).`);
   }
+  // Measurement body and pagination columns include only SQ_FT products.
+  const groups = rawGroups.map(group => {
+    const entries = group.entries.filter(entry => entry.rateUnit !== 'UNIT');
+    if (!entries.length) return null;
+    const groupRegular = entries.filter(entry => entry.type === 'regular');
+    const groupTop = entries.filter(entry => entry.type === 'top');
+    const groupTotals = list => ({ pieces: list.reduce((n, entry) => n + entry.quantity, 0), area: sum(list, 'area').toString(), amount: sum(list, 'unroundedAmount').toFixed(2, MONEY_ROUNDING) });
+    const regularTotals = groupTotals(groupRegular), total = groupTotals(entries);
+    return { id: group.id, entries: [...groupRegular, ...groupTop], regular: regularTotals,
+      top: { ...groupTotals(groupTop), amount: new D(total.amount).minus(regularTotals.amount).toFixed(2, MONEY_ROUNDING) }, total };
+  }).filter(Boolean);
+  const totals = { pieces: totalStonePieces, regularArea: regularArea.toString(), topArea: topArea.toString(),
+    area: regularArea.plus(topArea).toString(), regularAmount: regularAmount.toFixed(2), topAmount: topAmount.toFixed(2),
+    materialTotal: materialTotal.toFixed(2), netPayable: netPayable.toFixed(Math.max(2, netPayable.decimalPlaces())) };
+  if (totalUnits > 0) {
+    totals.totalStonePieces = totalStonePieces;
+    totals.totalUnits = totalUnits;
+    totals.stoneMaterialTotal = stoneMaterialTotal.toFixed(2);
+    totals.unitProductTotal = unitProductTotal.toFixed(2);
+  }
   return { ...identity, groups, loadingRoyalty: loadingRoyalty.toFixed(2),
-    totals: { pieces: all.reduce((n, entry) => n + entry.quantity, 0), regularArea: regularArea.toString(), topArea: topArea.toString(),
-      area: regularArea.plus(topArea).toString(), regularAmount: regularAmount.toFixed(2), topAmount: topAmount.toFixed(2),
-      materialTotal: materialTotal.toFixed(2), netPayable: netPayable.toFixed(Math.max(2, netPayable.decimalPlaces())) },
-    amountWords: amountInWords(netPayable), warnings };
+    totals,
+    amountWords: amountInWords(netPayable), warnings,
+    ...(input.products ? { products: input.products } : {}) };
 }
 
 // Strips every money field from a group/entry totals object, keeping pieces and area.
@@ -219,13 +246,14 @@ export function projectCopy(model, copy) {
   if (copy === 'buyer') return model;
   if (copy !== 'driver') throw new Error('Copy must be buyer or driver.');
   // Underscored names are the fields deliberately dropped from the driver copy.
-  const { materialTotal: _materialTotal, regularAmount: _regularAmount, topAmount: _topAmount, netPayable: _netPayable, ...totals } = model.totals || {};
+  const { materialTotal: _materialTotal, regularAmount: _regularAmount, topAmount: _topAmount, netPayable: _netPayable, stoneMaterialTotal: _stoneMaterialTotal, unitProductTotal: _unitProductTotal, ...totals } = model.totals || {};
   const { loadingRoyalty: _loadingRoyalty, amountWords: _amountWords, products: _products, ...rest } = model;
   const { bankDetails: _bankDetails, ...seller } = model.seller || {};
   return {
     ...rest,
     title: 'Driver slip',
     seller,
+    unitProducts: (model.products || []).filter(p => p.rateUnit === 'UNIT').map(({ stoneType, finish, quantity }) => ({ stoneType, finish, quantity })),
     groups: (model.groups || []).map(group => ({
       ...group,
       entries: group.entries.map(({ ratePerSqFt: _rate, amount: _amount, unroundedAmount: _unrounded, ...entry }) => entry),
@@ -272,7 +300,7 @@ export function a4InvoiceFromDispatch(record) {
       if (!byNumber.has(id)) byNumber.set(id, { id, entries: [] });
       byNumber.get(id).entries.push({ id: `${groupIndex + 1}-${rowIndex + 1}`, type: row.category === 'TOP' ? 'top' : row.category === 'Regular' || row.category == null ? 'regular' : row.category,
         lengthFt: row.lengthFt, widthFt: row.widthFt, quantity: row.quantity ?? 1,
-        ratePerSqFt: group.ratePerSqFt, authoritativeAmount: row.lineTotal });
+        ratePerSqFt: group.ratePerSqFt, authoritativeAmount: row.lineTotal, rateUnit: row.rateUnit || group.rateUnit || 'SQ_FT' });
     }
   }
   const model = prepareA4Invoice({ mode: 'production', currency: 'INR', invoiceNumber: record?.dispatchSlipNumber, invoiceDate: record?.date,

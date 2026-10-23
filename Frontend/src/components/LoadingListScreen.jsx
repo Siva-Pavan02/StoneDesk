@@ -31,6 +31,8 @@ export default function LoadingListScreen({ onClose, organizationId = 'unit_04',
   const [reqLen, setReqLen] = useState('');
   const [reqWid, setReqWid] = useState('');
   const [reqQty, setReqQty] = useState('');
+  const [reqUnit, setReqUnit] = useState('SQ_FT');
+  const isUnit = reqUnit === 'UNIT';
   const [editIndex, setEditIndex] = useState(null);
 
   // Custom Load State
@@ -98,8 +100,8 @@ export default function LoadingListScreen({ onClose, organizationId = 'unit_04',
     const qty = Number(reqQty);
 
     const errors = {
-      ...(!pLen && { length: 'Enter a length like 4 1/2' }),
-      ...(!pWid && { width: 'Enter a width like 2' }),
+      ...(!isUnit && !pLen && { length: 'Enter a length like 4 1/2' }),
+      ...(!isUnit && !pWid && { width: 'Enter a width like 2' }),
       ...((!Number.isSafeInteger(qty) || qty <= 0) && { quantity: 'Enter a whole number of pieces, like 10' }),
     };
     setReqErrors(errors);
@@ -109,30 +111,15 @@ export default function LoadingListScreen({ onClose, organizationId = 'unit_04',
       return;
     }
 
-    if (editIndex !== null) {
-      const updated = [...requirements];
-      const existing = updated[editIndex];
-      existing.lengthDisplay = pLen.display;
-      existing.widthDisplay = pWid.display;
-      existing.lengthFt = pLen.numeric;
-      existing.widthFt = pWid.numeric;
-      existing.requiredQuantity = qty;
-      existing.balance = qty - existing.loadedQuantity;
-      
-      setRequirements(updated);
-      setEditIndex(null);
-    } else {
-      setRequirements([...requirements, {
-        lengthDisplay: pLen.display,
-        widthDisplay: pWid.display,
-        lengthFt: pLen.numeric,
-        widthFt: pWid.numeric,
-        requiredQuantity: qty,
-        loadedQuantity: 0,
-        balance: qty,
-        loadedPieces: []
-      }]);
-    }
+    const existing = editIndex === null ? null : requirements[editIndex];
+    const item = {
+      ...(existing?.id ? { id: existing.id } : {}),
+      ...(isUnit ? { rateUnit: 'UNIT' } : { lengthDisplay: pLen.display, widthDisplay: pWid.display, lengthFt: pLen.numeric, widthFt: pWid.numeric }),
+      requiredQuantity: qty, loadedQuantity: existing?.loadedQuantity || 0,
+      balance: qty - (existing?.loadedQuantity || 0), loadedPieces: existing?.loadedPieces || [],
+    };
+    setRequirements(editIndex === null ? [...requirements, item] : requirements.map((r, i) => i === editIndex ? item : r));
+    setEditIndex(null);
 
     setReqLen('');
     setReqWid('');
@@ -141,6 +128,7 @@ export default function LoadingListScreen({ onClose, organizationId = 'unit_04',
 
   const handleEditRequirement = (index) => {
     const req = requirements[index];
+    setReqUnit(req.rateUnit || 'SQ_FT');
     setReqLen(req.lengthDisplay || decimalToFraction(req.lengthFt));
     setReqWid(req.widthDisplay || decimalToFraction(req.widthFt));
     setReqQty(req.requiredQuantity);
@@ -171,6 +159,10 @@ export default function LoadingListScreen({ onClose, organizationId = 'unit_04',
     const updated = [...requirements];
     const req = updated[index];
     
+    if (req.rateUnit === 'UNIT') {
+      req.loadedQuantity += 1; req.balance = req.requiredQuantity - req.loadedQuantity;
+      setRequirements(updated); return;
+    }
     let lDisplay = overrideLenDisplay || req.lengthDisplay || decimalToFraction(req.lengthFt);
     let wDisplay = overrideWidDisplay || req.widthDisplay || decimalToFraction(req.widthFt);
     let pLen = parseFraction(lDisplay);
@@ -222,7 +214,7 @@ export default function LoadingListScreen({ onClose, organizationId = 'unit_04',
 
   const handleSaveList = async () => {
     if (savingLock.current || opening) return;
-    const missing = [['supervisor', supervisor], ['destination', buyerDestination], ['stone-type', stoneType], ['finish', finish]].find(([, value]) => !value);
+    const missing = [['supervisor', supervisor], ['destination', buyerDestination], ['stone-type', stoneType], ['finish', requirements.length && requirements.every(r => r.rateUnit === 'UNIT') ? 'optional' : finish]].find(([, value]) => !value);
     if (missing) {
       setNotice('');
       setError('Fill manager, destination, stone type and finish before saving.');
@@ -358,7 +350,8 @@ export default function LoadingListScreen({ onClose, organizationId = 'unit_04',
             <h2 className="section-heading text-sm font-semibold text-on-surface">{editIndex !== null ? 'Edit requirement' : 'Add Requirement'}</h2>
             {editIndex !== null && <Button onClick={handleCancelEdit} label="Cancel" />}
           </div>
-          <div className="grid grid-cols-2 gap-4 mb-4">
+          <Field label="Product type"><select className="input" value={reqUnit} disabled={editIndex !== null} onChange={e => setReqUnit(e.target.value)}><option value="SQ_FT">Stone (sq ft)</option><option value="UNIT">Unit product</option></select></Field>
+          {!isUnit && <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
               <Field label="Length (ft)" type="text" id="requirement-length" name="length" autoComplete="off" spellCheck={false} placeholder="e.g. 4 1/2…" error={reqErrors.length} value={reqLen} onChange={(e)=>setReqLen(e.target.value)} />
               <FractionChips value={reqLen} setValue={setReqLen} label="Length (ft)" />
@@ -367,9 +360,9 @@ export default function LoadingListScreen({ onClose, organizationId = 'unit_04',
               <Field label="Width (ft)" type="text" id="requirement-width" name="width" autoComplete="off" spellCheck={false} placeholder="e.g. 2…" error={reqErrors.width} value={reqWid} onChange={(e)=>setReqWid(e.target.value)} />
               <FractionChips value={reqWid} setValue={setReqWid} label="Width (ft)" />
             </div>
-          </div>
+          </div>}
           <div className="mb-4">
-            <Field label="Pieces" type="number" id="requirement-quantity" name="quantity" placeholder="e.g. 10…" error={reqErrors.quantity} value={reqQty} onChange={(e)=>setReqQty(e.target.value)} />
+            <Field label={isUnit ? "Units" : "Pieces"} type="number" id="requirement-quantity" name="quantity" placeholder="e.g. 10…" error={reqErrors.quantity} value={reqQty} onChange={(e)=>setReqQty(e.target.value)} />
           </div>
           <Button className="w-full" onClick={handleAddRequirement} label={editIndex !== null ? 'Update requirement' : 'Add Requirement'} />
         </Card>
@@ -383,7 +376,7 @@ export default function LoadingListScreen({ onClose, organizationId = 'unit_04',
           
           <div className="space-y-3">
             {requirements.map((req, idx) => {
-              const size = `${req.lengthDisplay || decimalToFraction(req.lengthFt)} × ${req.widthDisplay || decimalToFraction(req.widthFt)}`;
+              const size = req.rateUnit === 'UNIT' ? `${stoneType} units` : `${req.lengthDisplay || decimalToFraction(req.lengthFt)} × ${req.widthDisplay || decimalToFraction(req.widthFt)}`;
               return (
               <Card key={idx} className={editIndex === idx ? 'ring-2 ring-primary-container' : ''}>
                 {confirmRemove === idx ? (
@@ -398,7 +391,7 @@ export default function LoadingListScreen({ onClose, organizationId = 'unit_04',
                 </div>}
                 
                 <div className="flex items-center gap-2 mb-3">
-                  <div className="text-lg font-semibold text-on-surface">{req.lengthDisplay || decimalToFraction(req.lengthFt)} <span className="text-on-surface-variant">×</span> {req.widthDisplay || decimalToFraction(req.widthFt)}</div>
+                  <div className="text-lg font-semibold text-on-surface">{size}</div>
                   {req.balance === 0 && <span className="ml-auto bg-success-container text-success text-xs font-medium px-2 py-1 rounded">Complete</span>}
                   {req.balance < 0 && <span className="ml-auto bg-warning-container text-warning text-xs font-medium px-2 py-1 rounded">{Math.abs(req.balance)} Excess</span>}
                 </div>
@@ -442,8 +435,8 @@ export default function LoadingListScreen({ onClose, organizationId = 'unit_04',
                   ) : (
                     <div className="action-row flex flex-wrap gap-2">
                       <Button label="−" aria-label="Remove last loaded piece" onClick={() => handleRemovePiece(idx)} disabled={req.loadedQuantity === 0} />
-                      <Button primary className="flex-1" label="Load piece" onClick={() => handleLoadPiece(idx)} />
-                      <Button label="Custom" aria-label={`Custom piece for ${size}`} onClick={() => handleOpenCustom(idx)} />
+                      <Button primary className="flex-1" label={req.rateUnit === 'UNIT' ? 'Load unit' : 'Load piece'} onClick={() => handleLoadPiece(idx)} />
+                      {req.rateUnit !== 'UNIT' && <Button label="Custom" aria-label={`Custom piece for ${size}`} onClick={() => handleOpenCustom(idx)} />}
                     </div>
                   )}
                 </div>
@@ -460,23 +453,23 @@ export default function LoadingListScreen({ onClose, organizationId = 'unit_04',
             <div className="flex justify-between items-end">
               <div>
                 <div className="text-sm text-on-surface-variant">Total required</div>
-                <div className="text-xl font-semibold tabular-nums">{totalRequired} Pieces</div>
+                <div className="text-xl font-semibold tabular-nums">{totalRequired} items</div>
               </div>
               <div className="text-right">
                 <div className="text-sm text-on-surface-variant">Total loaded</div>
-                <div className="text-xl font-semibold tabular-nums">{totalLoaded} Pieces</div>
+                <div className="text-xl font-semibold tabular-nums">{totalLoaded} items</div>
               </div>
             </div>
             {totalPending > 0 && (
               <div className="mt-3 pt-3 border-t border-outline-variant text-sm text-on-surface-variant flex justify-between">
                 <span>Remaining:</span>
-                <span className="font-semibold text-on-surface tabular-nums">{totalPending} Pieces</span>
+                <span className="font-semibold text-on-surface tabular-nums">{totalPending} items</span>
               </div>
             )}
             {totalExcess > 0 && (
               <div className="mt-3 pt-3 border-t border-outline-variant text-sm text-on-surface-variant flex justify-between">
                 <span>Excess:</span>
-                <span className="font-semibold text-warning tabular-nums">{totalExcess} Pieces</span>
+                <span className="font-semibold text-warning tabular-nums">{totalExcess} items</span>
               </div>
             )}
             

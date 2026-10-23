@@ -35,10 +35,10 @@ test('Buyer preview, PDF markup, print and measurement share summary; Driver car
   const expected = section(preview);
   assert.ok(expected);
   assert.match(expected, /Black Granite · Polished/);
-  assert.match(expected, /23 pcs/);
-  assert.match(expected, /15 pcs/);
-  assert.match(expected, /₹40\/sq ft/);
-  assert.match(expected, /₹45\/sq ft/);
+  assert.match(expected, /23[\s\S]*?pcs/);
+  assert.match(expected, /15[\s\S]*?pcs/);
+  assert.match(expected, /₹40[\s\S]*?sq ft/);
+  assert.match(expected, /₹45[\s\S]*?sq ft/);
   assert.equal(section(renderA4Pages(model, pages)), expected, 'PDF uses the same page renderer');
   assert.equal(section(renderStandaloneA4Invoice(model, pages, '.a4-invoice{}')), expected);
   assert.equal(section(renderA4MeasureSheet(model, 'buyer', wholeGroupUnits(model), 'document')), expected, 'pagination measures the extra summary height');

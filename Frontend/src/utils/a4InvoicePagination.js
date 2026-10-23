@@ -319,7 +319,7 @@ export function planFragmentPages(model, measurements, units = measurements.unit
     });
   });
 
-  const { normalCapacity, finalCapacity, gap, rowLayouts, heights } = measurements;
+  const { finalCapacity, gap, rowLayouts, heights } = measurements;
 
   const layoutsByGroup = new Map();
   units.forEach((unit, i) => {
@@ -349,10 +349,11 @@ export function planFragmentPages(model, measurements, units = measurements.unit
   const targetCol = explicitColumns ?? measurements.columns;
 
   if (targetCol != null) {
-    const single = fillFragmentRange(allEntries, 0, allEntries.length, finalCapacity, gap, getLayout, targetCol);
+    const single = finalCapacity >= 0 && fillFragmentRange(allEntries, 0, allEntries.length, finalCapacity, gap, getLayout, targetCol);
     if (single) {
       return validateA4Pages(model, [{ columns: single.columns, used: single.used, final: true, columnCount: targetCol }], targetCol);
     }
+    if (measurements.singlePageOnly) return null;
     return planMultiPageFragments(model, allEntries, measurements, getLayout, targetCol);
   }
 

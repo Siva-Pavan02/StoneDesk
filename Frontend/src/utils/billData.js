@@ -20,7 +20,7 @@ export function billRows(dispatch, financial = true) {
     const rows = group.measurementRows?.length ? group.measurementRows : (group.pieces || []).map(p => ({ ...p, quantity: 1, category: 'Regular' }));
     // Records saved before row numbers existed used the old group position as the row.
     return rows.map(row => ({ rowNo: row.rowNo ?? groupIndex + 1, stoneType: group.stoneType, finish: group.finish, lengthFt: row.lengthFt, widthFt: row.widthFt,
-      quantity: row.quantity, category: row.category || 'Regular', sqFt: row.sqFt,
+      quantity: row.quantity, category: row.category || 'Regular', sqFt: row.sqFt, rateUnit: row.rateUnit || group.rateUnit || 'SQ_FT',
       ...(financial ? { ratePerSqFt: group.ratePerSqFt, lineTotal: row.lineTotal } : {}) }));
   });
 }
@@ -44,7 +44,7 @@ export function rowOverview(groups) {
 export function subtotals(rows) {
   const groups = new Map();
   for (const r of rows) {
-    const key = JSON.stringify([r.stoneType, r.finish, r.category, r.ratePerSqFt]);
+    const key = JSON.stringify([r.stoneType, r.finish, r.category, r.ratePerSqFt, r.rateUnit || 'SQ_FT']);
     if (!groups.has(key)) groups.set(key, { ...r, quantity: 0, sqFt: 0, lineTotal: 0 });
     const g = groups.get(key);
     g.quantity += r.quantity; g.sqFt += rawArea(r); g.lineTotal += rawAmount(r);

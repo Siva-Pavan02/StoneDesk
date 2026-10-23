@@ -281,9 +281,9 @@
   .pilot.workspace .quick-product-fields {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .pilot.workspace .quick-product-fields > :last-child {
-    grid-column: 1 / -1;
-  }
+}
+.pilot.workspace .quick-product-rate-unit .placement-switch {
+  width: 100%;
 }
 .pilot.workspace .product-hint {
   margin: 0;

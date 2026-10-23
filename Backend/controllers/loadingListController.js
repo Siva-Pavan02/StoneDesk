@@ -1,11 +1,13 @@
 const prisma = require('../utils/prisma');
+const { validateRateUnit } = require('../utils/productRates');
 const { randomUUID } = require('node:crypto');
 const { text, number, bad } = require('../utils/pilotCalculations');
 const { round2 } = require('../utils/dispatchCalculations');
 const { loadingListQuery, summaryFields } = require('../utils/loadingListQuery');
 function fields(body) {
   const data = {};
-  for (const key of ['supervisor', 'buyerDestination', 'stoneType', 'finish']) data[key] = text(body[key], key === 'supervisor' ? 'manager' : key);
+  for (const key of ['supervisor', 'buyerDestination', 'stoneType']) data[key] = text(body[key], key === 'supervisor' ? 'manager' : key);
+  data.finish = Array.isArray(body.requirements) && body.requirements.length && body.requirements.every(r => r?.rateUnit === 'UNIT') && (body.finish === undefined || body.finish === '') ? '' : text(body.finish, 'finish');
   data.date = body.date === undefined ? new Date() : new Date(body.date);
   if (!Number.isFinite(data.date.getTime())) bad('Invalid date');
   data.status = body.status || 'Draft';
@@ -13,6 +15,13 @@ function fields(body) {
   if (!Array.isArray(body.requirements)) bad('Requirements must be a list');
   data.requirements = body.requirements.map(row => {
     if (!row || typeof row !== "object" || (row.loadedPieces !== undefined && !Array.isArray(row.loadedPieces))) bad("Invalid requirement");
+    const rateUnit = validateRateUnit(row.rateUnit);
+    if (rateUnit === 'UNIT') {
+      const requiredQuantity = number(row.requiredQuantity, 'quantity');
+      const loadedQuantity = number(row.loadedQuantity ?? 0, 'loaded quantity');
+      if (!Number.isSafeInteger(requiredQuantity) || requiredQuantity < 1 || !Number.isSafeInteger(loadedQuantity) || row.loadedPieces?.length || row.lengthFt !== undefined || row.widthFt !== undefined) bad('Invalid unit requirement');
+      return { id: typeof row.id === 'string' ? row.id : randomUUID(), rateUnit, requiredQuantity, loadedQuantity, balance: requiredQuantity - loadedQuantity, loadedPieces: [] };
+    }
     const lengthFt = number(row.lengthFt, 'length'), widthFt = number(row.widthFt, 'width');
     const requiredQuantity = number(row.requiredQuantity, 'quantity');
     if (lengthFt <= 0 || widthFt <= 0 || !Number.isSafeInteger(requiredQuantity)) bad('Invalid dimensions or quantity');

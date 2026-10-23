@@ -57,6 +57,11 @@ function measurePass(doc, model, copy, units, tier = '', columnCount = COLUMNS) 
   try {
     const blocks = [...host.querySelectorAll('.row-block')];
     if (blocks.length !== units.length) throw new Error('Invalid group measurements');
+    const widthFits = [...host.querySelectorAll('.row-table th, .row-table td, .product-summary-quantity, .product-summary-rate')].every(cell => {
+      const range = doc.createRange(); range.selectNodeContents(cell);
+      const text = range.getBoundingClientRect(), box = cell.getBoundingClientRect();
+      return !cell.textContent.trim() || (text.left >= box.left - 1 && text.right <= box.right + 1);
+    });
     const heights = blocks.map(block => block.getBoundingClientRect().height);
     const gap = blocks.length > 1 ? parseFloat(view.getComputedStyle(blocks[0]).marginBlockEnd) || 0 : 8;
     const pageHeight = host.querySelector('.page-height-ruler').getBoundingClientRect().height;
@@ -67,7 +72,7 @@ function measurePass(doc, model, copy, units, tier = '', columnCount = COLUMNS) 
     const { normalCapacity, finalCapacity } = capacitiesFrom({ pageHeight, headerHeight, noticeHeight, finalHeight });
     const continued = capacitiesFrom({ pageHeight, headerHeight: continuationHeaderHeight, noticeHeight, finalHeight });
     const rowLayouts = blocks.map((block, i) => rowLayout(block, units[i]));
-    return { continuationHeaderHeight, continuationNormalCapacity: continued.normalCapacity, continuationFinalCapacity: continued.finalCapacity, units, heights, gap, normalCapacity, finalCapacity, pageHeight, headerHeight, noticeHeight, finalHeight, rowLayouts, tier, columnCount };
+    return { widthFits, continuationHeaderHeight, continuationNormalCapacity: continued.normalCapacity, continuationFinalCapacity: continued.finalCapacity, units, heights, gap, normalCapacity, finalCapacity, pageHeight, headerHeight, noticeHeight, finalHeight, rowLayouts, tier, columnCount };
   } finally {
     host.remove();
   }
@@ -94,13 +99,17 @@ export async function measureA4Copy(model, copy, { doc = document, tier = '', co
 /** The measured page plan of one copy, shared by preview, print and PDF. Uses controlled multi-pass single-page fitting. */
 export async function planA4CopyMeasured(model, copy, opts) {
   const TIERS = ['', 'pass2', 'pass3', 'pass4'];
-  let lastPlan = null;
-  for (const tier of TIERS) {
-    const measured = await measureA4Copy(model, copy, { ...opts, tier });
-    const plan = planFromMeasurements(model, measured.units, measured);
-    if (tier) plan.forEach(page => { page.tier = tier; });
-    if (plan.length === 1) return plan;
-    lastPlan = plan;
+  for (const columnCount of [2, 3, 4, 5]) {
+    for (const tier of TIERS) {
+      let measured;
+      try { measured = await measureA4Copy(model, copy, { ...opts, tier, columnCount }); }
+      catch (error) { if (error.message === OVERSIZED) continue; throw error; }
+      if (!measured.widthFits) continue;
+      const plan = planFromMeasurements(model, measured.units, { ...measured, singlePageOnly: true }, { columns: columnCount });
+      if (!plan) continue;
+      if (tier) plan.forEach(page => { page.tier = tier; });
+      return plan;
+    }
   }
-  return lastPlan;
+  throw new Error('Invoice cannot fit on one A4 page within 5 columns, 8 mm margins and 7.5 pt text. No rows were omitted.');
 }

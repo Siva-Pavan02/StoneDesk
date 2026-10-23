@@ -49,7 +49,7 @@ export async function generateLoadingListPdf(listData) {
   y += 4;
 
   const reqTableBody = listData.requirements.map(r => {
-    const size = `${r.lengthDisplay || decimalToFraction(r.lengthFt)} × ${r.widthDisplay || decimalToFraction(r.widthFt)}`;
+    const size = r.rateUnit === 'UNIT' ? `${listData.stoneType} (units)` : `${r.lengthDisplay || decimalToFraction(r.lengthFt)} × ${r.widthDisplay || decimalToFraction(r.widthFt)}`;
     return [size, r.requiredQuantity, r.loadedQuantity, pending(r), excess(r)];
   });
 
@@ -72,6 +72,7 @@ export async function generateLoadingListPdf(listData) {
 
   const loadedGroups = {};
   listData.requirements.forEach(req => {
+    if (req.rateUnit === 'UNIT') { loadedGroups[`${listData.stoneType} (units)`] = (loadedGroups[`${listData.stoneType} (units)`] || 0) + req.loadedQuantity; return; }
     (req.loadedPieces || []).forEach(p => {
       const pLen = p.lengthDisplay || decimalToFraction(p.lengthFt);
       const pWid = p.widthDisplay || decimalToFraction(p.widthFt);

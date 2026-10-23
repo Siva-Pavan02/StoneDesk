@@ -236,7 +236,7 @@ test('Dispatch API', async (t) => {
     assert.equal(draft.status, 200);
     const removed = await asStaff('DELETE', `/${draft.data.id}`);
     assert.equal(removed.status, 200);
-    assert.deepEqual(removed.data, { ok: true, id: draft.data.id });
+    assert.deepEqual(removed.data, { ok: true, id: draft.data.id, paymentsRemoved: 0 });
     assert.equal((await request('GET', `/${draft.data.id}`)).status, 404);
 
     const finalized = await request('POST', '', validPayload);

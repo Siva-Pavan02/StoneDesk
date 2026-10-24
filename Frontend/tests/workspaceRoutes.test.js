@@ -57,8 +57,8 @@ test('other legacy hashes are unchanged and current routes are not replaced', ()
 });
 
 test('sidebar navigation order and labels', () => {
-  assert.deepEqual(NAVIGATION.map(([, , label]) => label), ['Profile', 'Dashboard', 'Loading entries', 'Settings']);
-  assert.deepEqual(NAVIGATION.map(([key]) => key), ['profile', 'home', 'entries', 'settings']);
+  assert.deepEqual(NAVIGATION.map(([, , label]) => label), ['Dashboard', 'Loading entries', 'Profile', 'Settings']);
+  assert.deepEqual(NAVIGATION.map(([key]) => key), ['home', 'entries', 'profile', 'settings']);
 });
 
 test('New load is not a menu item (the header button opens it)', () => {

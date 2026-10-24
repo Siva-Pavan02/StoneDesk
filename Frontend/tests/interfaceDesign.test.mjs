@@ -20,7 +20,7 @@ const testLogoSha = createHash('sha256').update(testLogoBytes).digest('hex');
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const base = process.env.INTERFACE_BASE_URL || 'http://localhost:5174';
-const widths = (process.env.INTERFACE_WIDTHS || '320,390,768,1024,1440').split(',').map(Number);
+const widths = (process.env.INTERFACE_WIDTHS || '320,375,768,1024,1440').split(',').map(Number);
 const languages = ['en'];
 const phases = (process.env.INTERFACE_PHASES || 'landing,workspace,motion,empty').split(',');
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -65,9 +65,10 @@ const settings = {
   stoneRates: [
     { id: 'mock-product-1', stoneType: 'Sample stone', finish: 'Polished', defaultRate: 64 },
     { id: 'mock-product-2', stoneType: 'Sample tile', finish: 'Natural', defaultRate: 52 },
+    { id: 'mock-unit', stoneType: 'Sample sink', finish: '', defaultRate: 2500, rateUnit: 'UNIT' },
   ],
 };
-const user = { id: 'mock-admin', name: 'Sample Administrator', email: 'admin@example.invalid', role: 'Admin', active: true, isOwner: true, organizationId: settings.organizationId };
+const user = { id: 'mock-admin', name: 'Sample Administrator', email: 'admin@example.invalid', role: 'Admin', active: true, hasPassword: true, hasGoogle: false, isOwner: true, organizationId: settings.organizationId };
 const members = [user, { id: 'mock-member', name: 'Sample Team Member', email: 'member@example.invalid', role: 'Dispatcher', active: true, isOwner: false }];
 const statuses = ['Draft', 'Dispatched', 'Delivered', 'Draft', 'Dispatched', 'Delivered', 'Draft', 'Delivered'];
 const records = statuses.map((status, i) => ({
@@ -89,7 +90,7 @@ const analyticsMock = empty => {
     previous: empty ? totals : { finalizedLoads: 4, billed: 73536, areaSqFt: 1074, pieces: 172, averageBilled: 18384 }, daily,
     topDestinations: empty ? [] : [{ name: 'Sample North Yard', billed: 55152, loads: 3 }, { name: 'Sample South Yard', billed: 36768, loads: 2 }], unreadable: 0 };
 };
-const navigation = [['profile', 'Profile'], ['home', 'Dashboard'], ['load', 'New load'], ['entries', 'Loading entries'], ['settings', 'Settings']];
+const navigation = [['profile', 'Profile'], ['home', 'Dashboard'], ['entries', 'Loading entries'], ['settings', 'Settings']];
 const results = { base, browser: executable, startedAt: new Date().toISOString(), cases: [], productionFilesUnchanged: null };
 let browser;
 let shotNumber = 0;
@@ -123,11 +124,20 @@ async function makeCase(kind, language, width, options = {}) {
       }
       if (apiPath === `/uploads/logos/${testLogoSha}.png`) return route.fulfill({ status: 200, headers: { ...headers, 'content-type': 'image/png', 'cache-control': 'private, max-age=31536000, immutable' }, body: testLogoBytes });
       let body;
-      if (apiPath === '/auth/me') body = { user: kind === 'landing' || kind === 'motion' ? null : user };
+      if (apiPath === '/auth/session' || apiPath === '/auth/me') {
+        const sessionUser = kind === 'landing' || kind === 'motion' ? null : user;
+        // Session discovery is public; account refresh remains protected.
+        if (apiPath === '/auth/me' && !sessionUser) return route.fulfill({ status: 401, headers, json: { error: 'Sign in required' } });
+        return route.fulfill({ status: 200, headers: { ...headers, 'cache-control': 'private, no-store' }, json: { user: sessionUser } });
+      }
       else if (apiPath === `/master-settings/${settings.organizationId}`) body = settings;
       else if (apiPath === '/dispatches') body = options.empty ? { data: [], nextCursor: null } : url.searchParams.has('cursor') ? { data: records.slice(6), nextCursor: null } : { data: records.slice(0, 6), nextCursor: 'mock-next' };
       else if (apiPath === '/dispatches/analytics') body = analyticsMock(options.empty);
-      else if (apiPath.startsWith('/dispatches/')) {
+      else if (/^\/dispatches\/[^/]+\/payments$/.test(apiPath)) {
+        const record = records.find(record => record.id === apiPath.split('/')[2]);
+        if (record) body = { invoiceTotal: record.summary.netBillableAmount, received: 0, balance: record.summary.netBillableAmount, status: 'PAYMENT_DUE', payments: [] };
+      }
+      else if (/^\/dispatches\/[^/]+$/.test(apiPath)) {
         body = records.find(record => record.id === apiPath.split('/')[2]);
         if (body && result.invoiceLogo) body = { ...body, businessSnapshot: { ...body.businessSnapshot, logoDataUrl: testLogo } };
         if (body && result.invoiceLogoRef) {
@@ -141,14 +151,15 @@ async function makeCase(kind, language, width, options = {}) {
       }
       else if (apiPath === '/auth/users') body = members;
       else if (apiPath === '/auth/invitations') body = [];
-      else if (apiPath === '/loading-lists') body = [];
+      else if (apiPath === '/loading-lists') body = { data: [], nextCursor: null };
       if (body !== undefined) return route.fulfill({ status: 200, headers, json: body });
       result.unexpectedRequests.push({ method: request.method(), path: apiPath, reason: 'Unknown API blocked' });
       return route.fulfill({ status: 501, headers, json: { error: 'No interface fixture for this endpoint' } });
     }
     const fontHost = ['fonts.googleapis.com', 'fonts.gstatic.com'].includes(url.hostname);
+    const invoiceFont = url.origin === new URL(base).origin && /^\/fonts\/NotoSans-(Regular|SemiBold|Bold)\.ttf$/.test(url.pathname);
     const staticVite = url.origin === new URL(base).origin && !['fetch', 'xhr'].includes(request.resourceType());
-    if (request.method() === 'GET' && (staticVite || fontHost)) return route.continue();
+    if (request.method() === 'GET' && (staticVite || fontHost || invoiceFont)) return route.continue();
     result.unexpectedRequests.push({ method: request.method(), path: url.pathname, reason: 'Non-static network access blocked' });
     return route.abort('blockedbyclient');
   });
@@ -212,6 +223,10 @@ async function makeCase(kind, language, width, options = {}) {
   const visibleRecords = () => width >= 1024 ? page.locator('.desktop-load-table tbody tr') : page.locator('.load-record:visible');
   async function oneCreate() { await expect(page.getByRole('button', { name: 'Create a new load', exact: true })).toHaveCount(1); }
   async function finish() {
+    await check('Startup discovers the session through the public auth contract', async () => {
+      assert.ok(result.api.some(request => request.method === 'GET' && request.path === '/auth/session'), 'App startup must reach the session fixture');
+      assert.ok(!result.unexpectedRequests.some(request => request.path.startsWith('/auth/')), 'Auth fixture drift: startup request was blocked');
+    });
     await check('No runtime errors or unmocked API traffic', async () => {
       assert.deepEqual(result.runtimeErrors, []);
       assert.deepEqual(result.consoleErrors, []);
@@ -281,15 +296,18 @@ async function landing(language, width) {
     for (let i = 0; i < 3; i++) {
       await buttons.nth(i).click(); const dialog = page.locator('.auth-screen'); await expect(dialog).toBeVisible();
       assert.equal(await dialog.evaluate(element => element.matches(':modal')), true);
+      await dialog.getByRole('button', { name: 'Use email & password', exact: true }).click();
       await expect(dialog.locator('input[name="email"]')).toHaveValue('');
       await dialog.getByRole('button', { name: 'Close', exact: true }).click(); await expect(dialog).not.toBeVisible();
     }
   });
   await check('Login, auth mode switch and Escape are local only', async () => {
     await page.locator('.mk-login').click(); const dialog = page.locator('.auth-screen'); await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Use email & password', exact: true }).click();
     await dialog.locator('input[type="checkbox"]').check(); await expect(dialog.locator('input[name="password"]')).toHaveAttribute('type', 'text');
     await dialog.locator('input[type="checkbox"]').uncheck(); await expect(dialog.locator('input[name="password"]')).toHaveValue('');
     await dialog.getByRole('button', { name: 'New here? Create an account', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Use email & password', exact: true }).click();
     await expect(dialog.locator('input[name="name"]')).toBeVisible();
     await page.keyboard.press('Escape'); await expect(dialog).not.toBeVisible();
     assert.equal(result.mutations.length, 0);
@@ -368,7 +386,7 @@ async function workspace(language, width) {
       const trigger = page.locator('.mobile-menu'), drawer = page.locator('#workspace-navigation-dialog');
       await expect(trigger).toHaveAttribute('aria-expanded', 'false'); await trigger.click(); await expect(drawer).toBeVisible(); await expect(trigger).toHaveAttribute('aria-expanded', 'true');
       assert.ok(await drawer.evaluate(element => element.matches(':modal') && element.contains(document.activeElement)));
-      await expect(drawer.locator('nav a')).toHaveCount(5); await expect(drawer.getByRole('button', { name: 'Log out', exact: true })).toBeVisible(); await capture('mobile-navigation');
+      await expect(drawer.locator('nav a')).toHaveCount(4); await expect(drawer.getByRole('button', { name: 'Log out', exact: true })).toBeVisible(); await capture('mobile-navigation');
       for (let i = 0; i < 8; i++) {
         await page.keyboard.press('Tab');
         // Chrome may focus its own browser UI at the end of a native dialog's
@@ -391,7 +409,7 @@ async function workspace(language, width) {
       assert.ok(links.every(link => link.display === 'flex' && link.width >= link.available - 2 && parseFloat(link.minHeight) >= 44), JSON.stringify(links));
     });
     if (await page.locator('#workspace-navigation-dialog').isVisible()) await page.keyboard.press('Escape');
-  } else await check('Desktop has only the five sidebar navigation actions', async () => { await expect(page.locator('.workspace-sidebar nav a:visible')).toHaveCount(5); await expect(page.locator('.mobile-menu')).not.toBeVisible(); await expect(page.locator('.bottom-nav')).toHaveCount(0); });
+  } else await check('Desktop has four sidebar actions and a separate New load action', async () => { await expect(page.locator('.workspace-sidebar nav a:visible')).toHaveCount(4); await expect(page.locator('.mobile-menu')).not.toBeVisible(); await expect(page.locator('.bottom-nav')).toHaveCount(0); });
   await check('Notifications native dialog close, Escape and task navigation', async () => {
     const trigger = page.locator('.workspace-notifications'), dialog = page.locator('dialog[aria-labelledby="attention-title"]');
     await trigger.click(); await expect(dialog).toBeVisible(); await dialog.getByRole('button', { name: 'Close', exact: true }).click(); await expect(dialog).not.toBeVisible();
@@ -510,14 +528,14 @@ async function workspace(language, width) {
     const picker = main().getByRole('combobox', { name: /Product \/ finish/ });
     await picker.click();
     const removeButtons = main().locator('.product-picker-list').getByRole('button', { name: /^Remove / });
-    await expect(removeButtons).toHaveCount(2);
+    await expect(removeButtons).toHaveCount(settings.stoneRates.length);
     await removeButtons.first().click();
     await page.getByRole('button', { name: 'Keep product', exact: true }).click();
     await picker.click();
-    await expect(main().locator('.product-picker-list [role="option"]:not(.is-add)')).toHaveCount(2);
+    await expect(main().locator('.product-picker-list [role="option"]:not(.is-add)')).toHaveCount(settings.stoneRates.length);
     // Edit: one button per product (never on the add row); opens a prefilled form, Cancel returns to the picker.
     const editButtons = main().locator('.product-picker-list').getByRole('button', { name: /^Edit / });
-    await expect(editButtons).toHaveCount(2);
+    await expect(editButtons).toHaveCount(settings.stoneRates.length);
     await expect(main().locator('.product-picker-option.is-add button')).toHaveCount(0);
     await editButtons.first().click();
     await expect(main().locator('.product-picker-list')).toHaveCount(0);
@@ -573,15 +591,59 @@ async function workspace(language, width) {
     await overflow('new-load', true); await expect(main().getByRole('button', { name: 'Save draft', exact: true })).toBeEnabled();
     await main().getByRole('button', { name: 'Back to dashboard', exact: true }).click(); await view('home'); await oneCreate();
   });
+  await check('Unit products and mixed measurement review preserve quantities and area', async () => {
+    await page.locator('.workspace-create-load').click(); await view('load');
+    await main().getByLabel('Party name', { exact: true }).fill('Mixed preview buyer');
+    await main().getByLabel('Truck number', { exact: true }).fill('MOCK-MIXED');
+    await main().getByLabel('Destination', { exact: true }).fill('Sample North Yard');
+    const picker = main().getByRole('combobox', { name: /Product \/ finish/ });
+    await picker.click(); await main().getByRole('option', { name: /Sample sink/ }).click();
+    await expect(main().getByLabel('Length (ft)', { exact: true })).toHaveCount(0);
+    await expect(main().getByLabel('Width (ft)', { exact: true })).toHaveCount(0);
+    await main().getByLabel('Quantity', { exact: true }).fill('2');
+    await main().getByRole('button', { name: 'Add entry', exact: true }).click();
+    await expect(main().locator('.measurement-record')).toHaveCount(1);
+    await expect(main().locator('.measurement-record')).toContainText('Sample sink');
+    await picker.click(); await main().getByRole('option', { name: /Sample stone/ }).click();
+    await main().getByLabel('Length (ft)', { exact: true }).fill('3');
+    await main().getByLabel('Width (ft)', { exact: true }).fill('2');
+    await main().getByLabel('Quantity', { exact: true }).fill('19');
+    await main().getByRole('button', { name: 'Add entry', exact: true }).click();
+    await expect(main().locator('.measurement-record')).toHaveCount(2);
+    await expect(main().locator('.measurement-record').filter({ hasText: 'Sample stone' })).toContainText('114');
+    await main().getByRole('button', { name: 'Review load', exact: true }).click();
+    await expect(main().getByRole('heading', { name: 'Review load', exact: true })).toBeVisible();
+    await expect(main()).toContainText('12,296');
+    const unitSummary = main().locator('.load-summary > div').filter({ hasText: 'Sample sink' });
+    await expect(unitSummary).toContainText('2 units');
+    await expect(unitSummary).toContainText('/ unit');
+    await expect(unitSummary).not.toContainText('sq ft');
+    await overflow('mixed-load-review', true);
+  });
   await check('Saved A4 bill, portable HTML, print and legacy exports use only mocked reads', async () => {
     await nav('entries'); await main().locator('.load-filter').nth(2).click(); await (width >= 1024 ? main().locator('.table-open-button').first() : main().locator('.load-record').first().getByRole('link')).click(); await view('bill');
     await expect(main().getByRole('heading', { name: 'Load bill', exact: true })).toBeVisible();
+    await expect(main().locator('.payment-panel')).toContainText('Payment Due');
+    await expect(main().locator('.payment-stats')).toContainText('18,384.00');
+    await main().getByRole('button', { name: 'Add Payment', exact: true }).click();
+    const payment = page.locator('.add-payment-dialog');
+    await payment.getByRole('button', { name: 'Save Payment', exact: true }).click();
+    await expect(payment).toContainText('Enter a valid amount greater than zero');
+    await payment.getByLabel('Amount Received (₹)', { exact: true }).fill('20000');
+    await payment.getByRole('button', { name: 'Save Payment', exact: true }).click();
+    await expect(payment).toContainText('Amount cannot exceed balance due');
+    await payment.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(main().getByRole('button', { name: 'Add Payment', exact: true })).toBeFocused();
     await expect(main().locator('.a4-invoice .sample-sheet')).toHaveCount(1);
     if (width <= 390) {
-      const { sheetWidth, tableWidth } = await main().locator('.a4-invoice .sample-sheet').evaluate(sheet => ({
-        sheetWidth: sheet.getBoundingClientRect().width, tableWidth: sheet.querySelector('.row-table').getBoundingClientRect().width,
-      }));
-      assert.ok(tableWidth >= sheetWidth - 30, 'Mobile A4 preview must use the available width rather than print gutters');
+      const geometry = await main().locator('.a4-invoice .sample-sheet').evaluate(sheet => {
+        const table = sheet.querySelector('.row-table');
+        const column = table.closest('.detail-column') || table.parentElement;
+        return { tableWidth: table.getBoundingClientRect().width, columnWidth: column.getBoundingClientRect().width,
+          documentWidth: document.documentElement.clientWidth, documentScroll: document.documentElement.scrollWidth };
+      });
+      assert.ok(geometry.tableWidth <= geometry.columnWidth + 1, 'Measurement table must fit its A4 column');
+      assert.ok(geometry.documentScroll <= geometry.documentWidth + 1, 'A4 preview must not overflow the document');
     }
     await expect(main().locator('.a4-invoice [role="img"][aria-label="Business logo placeholder"]')).toBeVisible();
     await expect(main().locator('.a4-invoice .row-table tr[data-entry-id]')).toHaveCount(2);
@@ -613,11 +675,19 @@ async function workspace(language, width) {
     await main().getByRole('button', { name: 'Not yet', exact: true }).click();
     await expect(main().getByRole('button', { name: 'Mark delivered', exact: true })).toBeVisible();
     assert.equal(result.mutations.length, 0, 'Canceled delivery confirmation must not make a request');
-    if (width === 390 || width === 1440) {
+    if (width === 375 || width === 1440) {
       const [invoiceDownload] = await Promise.all([page.waitForEvent('download'), main().getByRole('button', { name: 'Download', exact: true }).click()]);
       const invoiceFile = `${result.id}-invoice-${path.basename(invoiceDownload.suggestedFilename())}`, invoicePath = path.join(out, invoiceFile);
       await invoiceDownload.saveAs(invoicePath); const invoiceBytes = await fs.readFile(invoicePath);
-      assert.ok(invoiceFile.endsWith('.pdf') && invoiceBytes.subarray(0, 5).toString('ascii') === '%PDF-' && invoiceBytes.toString('latin1').includes('18,384.00'));
+      assert.ok(invoiceFile.endsWith('.pdf') && invoiceBytes.subarray(0, 5).toString('ascii') === '%PDF-');
+      const invoiceTask = getDocument({ data: new Uint8Array(invoiceBytes), useSystemFonts: true });
+      try {
+        const pdf = await invoiceTask.promise;
+        assert.equal(pdf.numPages, 1);
+        const text = (await (await pdf.getPage(1)).getTextContent()).items.map(item => item.str).join(' ');
+        assert.ok(text.includes('18,384.00'), 'Generated invoice must preserve the net amount');
+        assert.ok(text.includes('Sample Buyer 2'), 'Generated invoice must preserve the buyer');
+      } finally { await invoiceTask.destroy(); }
       result.downloads.push({ filename: invoiceFile, path: invoicePath, bytes: invoiceBytes.length, kind: 'buyer-invoice-pdf', pages: (invoiceBytes.toString('latin1').match(/\/Type \/Page\b/g) || []).length });
       // Only the buyer invoice PDF and the driver slip are offered for download.
       for (const removed of ['html', 'excel']) await expect(main().locator(`input[name="invoice-export-document"][value="${removed}"]`)).toHaveCount(0);
@@ -673,7 +743,7 @@ async function workspace(language, width) {
       assert.ok(await image.evaluate(element => element.complete && element.naturalWidth === 120 && element.naturalHeight === 48));
       await overflow('branded-invoice', true);
       await expect(main().locator('.a4-invoice .settlement-net dd')).toHaveText('₹18,384.00');
-      if (width === 390 || width === 1440) {
+      if (width === 375 || width === 1440) {
         // The print window carries the same self-contained A4 document the web copy used to.
         const [printPage] = await Promise.all([page.waitForEvent('popup'), main().getByRole('button', { name: 'Print / PDF', exact: true }).click()]);
         try {
@@ -735,6 +805,8 @@ async function workspace(language, width) {
     const logoutName = { name: 'Log out', exact: true };
     if (width >= 1024) await page.locator('.workspace-sidebar').getByRole('button', logoutName).click();
     else { await page.locator('.mobile-menu').click(); await page.locator('#workspace-navigation-dialog').getByRole('button', logoutName).click(); }
+    await expect(page.locator('.logout-dialog')).toBeVisible();
+    await page.locator('.logout-dialog').getByRole('button', { name: 'Log out', exact: true }).click();
     await expect(page.locator('.marketing')).toBeVisible(); await expect(page.locator('.mk-login')).toBeVisible();
     assert.ok(result.mutations.every(mutation => mutation.path === '/auth/logout' && mutation.mocked));
   });

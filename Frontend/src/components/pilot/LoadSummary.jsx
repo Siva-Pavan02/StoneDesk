@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, Label } from './Controls.jsx';
 import { rowGroups, rowOverview, subtotals } from '../../utils/billData.js';
+import { productRateSuffix } from '../../utils/productForm.js';
 import { money } from '../../utils/pilotDraft.js';
 import { fixed2, rawAmount, round2 } from '../../utils/loadMath.js';
 export default function LoadSummary({ rows, summary, groups, showGroups = true, variant = 'load' }) {
@@ -25,8 +26,8 @@ export default function LoadSummary({ rows, summary, groups, showGroups = true, 
   return <Card className="load-summary gap-4">
     <h2 className="text-lg font-bold">Load summary</h2>
     {showGroups && (groups || subtotals(rows)).map((g, i) => <div key={i} className="border-b border-outline-variant pb-3">
-      <div className="flex justify-between gap-3"><strong className="break-words">{g.stoneType} · {g.finish}{g.category === 'TOP' ? ` · Top` : ''}</strong><strong className="shrink-0">{money(g.lineTotal)}</strong></div>
-      <p className="text-sm text-on-surface mt-1">{g.quantity} {'pieces'} · {fixed2(g.sqFt)} {'sq ft'} · {money(g.ratePerSqFt)} / sq ft</p>
+      <div className="flex justify-between gap-3"><strong className="break-words">{g.stoneType}{g.finish ? ` · ${g.finish}` : ''}{g.category === 'TOP' ? ` · Top` : ''}</strong><strong className="shrink-0">{money(g.lineTotal)}</strong></div>
+      <p className="text-sm text-on-surface mt-1">{g.quantity} {g.rateUnit === 'UNIT' ? 'units' : 'pieces'}{g.rateUnit === 'UNIT' ? '' : ` · ${fixed2(g.sqFt)} sq ft`} · {money(g.ratePerSqFt)} {productRateSuffix(g)}</p>
     </div>)}
     <div className="flex justify-between gap-3"><Label label="Total pieces" /><strong>{summary.totalPieces ?? rows.reduce((sum, r) => sum + r.quantity, 0)}</strong></div>
     <div className="flex justify-between gap-3"><Label label="Total square feet" /><strong>{fixed2(summary.totalDispatchVolumeSqFt)}</strong></div>

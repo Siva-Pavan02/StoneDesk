@@ -1,16 +1,7 @@
 import { request } from './pilotApi.js';
 const settings = id => '/master-settings/' + encodeURIComponent(id);
 export const getMasterSettings = id => request(settings(id));
-export const addTruck = (id, truckNumber) => request(settings(id) + '/trucks', { method: 'POST', body: { truckNumber } });
 export const removeTruck = (id, truckNumber) => request(settings(id) + '/trucks/' + encodeURIComponent(truckNumber), { method: 'DELETE' });
-export const addDestination = (id, destination) => request(settings(id) + '/destinations', { method: 'POST', body: { destination } });
 export const removeDestination = (id, destination) => request(settings(id) + '/destinations/' + encodeURIComponent(destination), { method: 'DELETE' });
-export const addStoneRate = (id, body) => request(settings(id) + '/stone-rates', { method: 'POST', body });
 export const updateStoneRate = (id, rateId, body) => request(settings(id) + '/stone-rates/' + encodeURIComponent(rateId), { method: 'PUT', body });
 export const removeStoneRate = (id, rateId) => request(settings(id) + '/stone-rates/' + encodeURIComponent(rateId), { method: 'DELETE' });
-export const updateRoyalty = (id, defaultRoyaltyFee) => request(settings(id) + '/royalty', { method: 'PUT', body: { defaultRoyaltyFee } });
-export const getAllDispatches = () => request('/dispatches');
-export const createDispatch = body => request('/dispatches', { method: 'POST', body });
-export const updateDispatch = (id, body) => request('/dispatches/' + encodeURIComponent(id), { method: 'PUT', body });
-export const finalizeDispatch = id => request('/dispatches/' + encodeURIComponent(id) + '/finalize', { method: 'POST' });
-export const getDispatch = id => request('/dispatches/' + encodeURIComponent(id));

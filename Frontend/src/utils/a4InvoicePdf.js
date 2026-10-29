@@ -33,8 +33,6 @@ const WIDTH_TOLERANCE = 0.25;
 // Noto Sans hhea ascender (1069/1000 em); only a fallback for
 // measureBaselineRatio, which measures the real ratio in the browser.
 const DEFAULT_BASELINE_RATIO = 1.069;
-// Bottom of the printable area inside an A4 sheet: 12 mm margin + 272.5 mm body.
-const CONTENT_BOTTOM_MM = A4.marginMm + A4.pageHeightMm;
 const BORDER_SIDES = ['Top', 'Right', 'Bottom', 'Left'];
 
 const mm = value => value * PX_TO_MM;

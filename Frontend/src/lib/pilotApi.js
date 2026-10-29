@@ -45,10 +45,6 @@ export function settingsPath(organizationId) {
   return `/master-settings/${encodeURIComponent(organizationId)}`;
 }
 
-export function uploadsPath(organizationId) {
-  return `/uploads/${encodeURIComponent(organizationId)}`;
-}
-
 export function getInvoicePayments(dispatchId) {
   return request(`/dispatches/${encodeURIComponent(dispatchId)}/payments`);
 }

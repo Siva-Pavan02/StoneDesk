@@ -7,8 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
 // The marketing page keeps its own .mk-* set (same green, pill shape) and is checked separately.
-// SettingsScreen.jsx is not imported anywhere (Trucks & destinations moved into New load).
-const MARKETING = new Set(['LandingPage.jsx', 'ProductShowcase.jsx', 'MarketingMotion.jsx', 'SampleA4Invoice.jsx', 'SettingsScreen.jsx']);
+const MARKETING = new Set(['LandingPage.jsx', 'ProductShowcase.jsx', 'MarketingMotion.jsx', 'SampleA4Invoice.jsx']);
 function files(dir, ext) {
   return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
     const path = join(dir, entry.name);

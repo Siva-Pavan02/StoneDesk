@@ -801,10 +801,12 @@ dispatches.get(
       Math.max(parseInt(req.query.limit, 10) || 20, 1),
       50,
     );
-    let rows = db.dispatches.filter((d) => !status || d.status === status);
     if (req.query.q !== undefined && (typeof req.query.q !== 'string' || req.query.q.length > 120)) calc.bad('Search must be at most 120 characters');
     const search = req.query.q?.trim().toLowerCase();
-    if (search) rows = rows.filter(d => [d.partyName, d.dispatchSlipNumber, d.logistics?.truckNumber, d.logistics?.buyerDestination].some(value => value?.toLowerCase().includes(search)));
+    const matchesSearch = (d) => !search || [d.partyName, d.dispatchSlipNumber, d.logistics?.truckNumber, d.logistics?.buyerDestination].some(value => value?.toLowerCase().includes(search));
+    // Mirrors dispatchController.list: counts follow the search scope, not the status filter.
+    const searched = db.dispatches.filter(matchesSearch);
+    let rows = searched.filter((d) => !status || d.status === status);
     if (cursor) {
       const i = rows.findIndex((d) => d.id === cursor);
       rows = i >= 0 ? rows.slice(i + 1) : rows;

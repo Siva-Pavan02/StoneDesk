@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { logoUrl } from "../../lib/pilotApi.js";
 import Icon from "./Icon.jsx";
 import BrandLogo from "./BrandLogo.jsx";
@@ -17,25 +17,13 @@ export default function WorkspaceShell({
   navigate,
   onLogout,
   onNew,
-  query,
-  setQuery,
   attention,
   children,
 }) {
   const drawer = useRef(null),
     notifications = useRef(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [confirmingLogout, setConfirmingLogout] = useState(false);
-  const searchInput = useRef(null),
-    searchToggle = useRef(null);
-  useEffect(() => {
-    if (searchOpen) searchInput.current?.focus();
-  }, [searchOpen]);
-  function closeSearch() {
-    setSearchOpen(false);
-    searchToggle.current?.focus();
-  }
   const initials = user.name
     .split(/\s+/)
     .filter(Boolean)
@@ -185,69 +173,7 @@ export default function WorkspaceShell({
               </div>
             </div>
           </div>
-          <form
-            id="workspace-search-form"
-            className={`workspace-search${searchOpen ? " is-open" : ""}`}
-            role="search"
-            onSubmit={(e) => {
-              e.preventDefault();
-              navigate("entries");
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Escape" && searchOpen) closeSearch();
-            }}
-          >
-            <label className="sr-only" htmlFor="global-search">
-              {"Search lorry, party or invoice ID"}
-            </label>
-            <button
-              type="submit"
-              className="icon-button workspace-search-submit"
-              aria-label="Search"
-            >
-              <Icon name="search" />
-            </button>
-            <input
-              ref={searchInput}
-              id="global-search"
-              type="search"
-              name="q"
-              autoComplete="off"
-              spellCheck={false}
-              maxLength={120}
-              className="input"
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                if (
-                  e.target.value.trim() &&
-                    view !== "entries"
-                )
-                  navigate("entries");
-              }}
-              placeholder="Lorry, party or bill ID…"
-            />
-            <button
-              type="button"
-              className="icon-button workspace-search-close"
-              aria-label="Close search"
-              onClick={closeSearch}
-            >
-              <Icon name="close" />
-            </button>
-          </form>
           <div className="workspace-header-actions">
-            <button
-              ref={searchToggle}
-              type="button"
-              className="icon-button workspace-search-toggle"
-              aria-label="Open search"
-              aria-expanded={searchOpen}
-              aria-controls="workspace-search-form"
-              onClick={() => setSearchOpen(true)}
-            >
-              <Icon name="search" />
-            </button>
             {view !== "load" && (
               <button
                 type="button"

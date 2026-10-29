@@ -442,6 +442,8 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
             "all"
           }
           query={search}
+          searchText={query}
+          onSearchChange={setQuery}
           onFilterChange={value => navigate(value === 'all' ? 'entries' : `entries?status=${value}`)}
           onOpen={(id) => {
             // Reuse the cached full bill unless the list shows it changed since.
@@ -481,8 +483,6 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
       navigate={navigate}
       onLogout={logout}
       onNew={newLoad}
-      query={query}
-      setQuery={setQuery}
       attention={loads.filter((l) => l.status === "Draft").length}
     >
       <ErrorMessage error={error} />

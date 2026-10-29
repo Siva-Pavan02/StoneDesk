@@ -31,10 +31,10 @@
     color 200ms var(--ui-ease),
     background-color 200ms var(--ui-ease);
 }
-.pilot.workspace .workspace-search-submit {
+.pilot.workspace .load-search-submit {
   z-index: 1;
 }
-.pilot.workspace .workspace-search .input {
+.pilot.workspace .load-search .input {
   height: 44px;
   padding-inline: 48px 18px;
   border-radius: 999px;
@@ -43,15 +43,15 @@
     background-color 150ms var(--ui-ease),
     border-color 150ms var(--ui-ease);
 }
-.pilot.workspace .workspace-search .input:hover {
+.pilot.workspace .load-search .input:hover {
   border-color: var(--ui-border-strong);
 }
-.pilot.workspace .workspace-search .input:focus {
+.pilot.workspace .load-search .input:focus {
   background: var(--ui-surface);
   box-shadow: 0 0 0 3px rgb(251 71 31 / 0.14);
   outline: 0;
 }
-.pilot.workspace .workspace-search-submit {
+.pilot.workspace .load-search-submit {
   inset: 0 auto 0 4px;
   min-width: 40px;
   width: 40px;
@@ -60,26 +60,24 @@
   border-radius: 999px;
   background: transparent;
 }
-.pilot.workspace .workspace-search:focus-within .workspace-search-submit {
+.pilot.workspace .load-search:focus-within .load-search-submit {
   color: var(--ui-accent);
 }
 .pilot.workspace .workspace-header .mobile-menu,
-.pilot.workspace .workspace-header .workspace-notifications,
-.pilot.workspace .workspace-header .workspace-search-toggle {
+.pilot.workspace .workspace-header .workspace-notifications {
   border: 1px solid var(--workspace-border);
   border-radius: 999px;
   background: var(--ui-surface);
 }
 .pilot.workspace .workspace-header .mobile-menu:hover,
-.pilot.workspace .workspace-header .workspace-notifications:hover,
-.pilot.workspace .workspace-header .workspace-search-toggle:hover {
+.pilot.workspace .workspace-header .workspace-notifications:hover {
   border-color: var(--ui-border-strong);
   background: var(--ui-hover);
 }
 .pilot.workspace .workspace-header-actions {
   gap: 10px;
 }
-.pilot.workspace .workspace-search-close {
+.pilot.workspace .load-search-clear {
   position: absolute;
   inset: 2px 2px 2px auto;
   width: 40px;
@@ -88,6 +86,7 @@
   min-height: 40px;
   border-radius: 999px;
 }
+/* Used by the suggestion list and the product picker. */
 @keyframes search-reveal {
   from {
     opacity: 0;
@@ -99,25 +98,8 @@
   }
 }
 @media (max-width: 767px) {
-  .pilot.workspace .workspace-search {
-    display: none;
-    grid-column: 1 / -1;
-    grid-row: 2;
-  }
-  .pilot.workspace .workspace-search.is-open {
-    display: block;
-    animation: search-reveal 200ms var(--ui-ease) both;
-    transform-origin: top center;
-  }
-  .pilot.workspace .workspace-search .input {
+  .pilot.workspace .load-search .input {
     padding-inline: 48px 52px;
-    background: var(--ui-surface);
-  }
-}
-@media (min-width: 768px) {
-  .pilot.workspace .workspace-search-toggle,
-  .pilot.workspace .workspace-search-close {
-    display: none;
   }
 }
 .pilot.workspace .pill-button {
@@ -1597,9 +1579,6 @@ p.queue-sub {
   .pilot .product-picker-chevron,
   .pilot .product-picker-trigger {
     transition: none;
-  }
-  .pilot.workspace .workspace-search.is-open {
-    animation: none;
   }
   .records-skeleton > div::after {
     display: none;

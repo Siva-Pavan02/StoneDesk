@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { money } from "../../utils/pilotDraft.js";
+import { LOAD_FILTERS } from "../../utils/loadFilters.js";
 import { Button, Card } from "./Controls.jsx";
 import Icon from "./Icon.jsx";
 import DashboardAnalytics from "./DashboardAnalytics.jsx";
@@ -21,7 +22,10 @@ export default function LoadHub({
   loads,
   view,
   status = "all",
+  // query is the debounced term used for filtering; searchText is the raw input value.
   query,
+  searchText = "",
+  onSearchChange,
   onFilterChange,
   onOpen,
   onRefresh,
@@ -559,21 +563,13 @@ export default function LoadHub({
         </>
       )}
       {view === "entries" && (
+        <div className="load-toolbar">
         <div
           className="load-filters"
           role="group"
           aria-label="Filter loads"
         >
-          {[
-            ["all", "All", loads.length],
-            ["Draft", "Draft", drafts.length],
-            ["Dispatched", "In transit", transit.length],
-            [
-              "Delivered",
-              "Delivered",
-              loads.filter((l) => l.status === "Delivered").length,
-            ],
-          ].map(([value, label, count]) => (
+          {LOAD_FILTERS.map(([value, label]) => (
             <button
               type="button"
               key={value}
@@ -583,9 +579,47 @@ export default function LoadHub({
               className="load-filter"
             >
               {label}
-              <span className="load-filter-count">{count}</span>
             </button>
           ))}
+        </div>
+        <form
+          className="load-search"
+          role="search"
+          onSubmit={(event) => event.preventDefault()}
+        >
+          <label className="sr-only" htmlFor="global-search">
+            Search lorry, party or invoice ID
+          </label>
+          <button
+            type="submit"
+            className="icon-button load-search-submit"
+            aria-label="Search"
+          >
+            <Icon name="search" />
+          </button>
+          <input
+            id="global-search"
+            type="search"
+            name="q"
+            autoComplete="off"
+            spellCheck={false}
+            maxLength={120}
+            className="input"
+            value={searchText}
+            onChange={(event) => onSearchChange?.(event.target.value)}
+            placeholder="Lorry, party or bill ID…"
+          />
+          {searchText && (
+            <button
+              type="button"
+              className="icon-button load-search-clear"
+              aria-label="Clear search"
+              onClick={() => onSearchChange?.("")}
+            >
+              <Icon name="close" />
+            </button>
+          )}
+        </form>
         </div>
       )}
       <section

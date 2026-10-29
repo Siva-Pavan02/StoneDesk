@@ -13,6 +13,7 @@ const getOrCreateSettings = async (organizationId) => {
 async function updateWithVersion(settings, data) {
   for (let attempt = 0; attempt < 4; attempt++) {
     const current = await prisma.masterSettings.findUnique({ where: { id: settings.id }, select: { version: true } });
+    if (!current) throw Object.assign(new Error('Settings not found'), { status: 404 });
     const result = await prisma.masterSettings.updateMany({
       where: { id: settings.id, version: current.version },
       data: { ...data, version: { increment: 1 } }
@@ -124,12 +125,14 @@ exports.addTruck = mutate((settings, req) => {
   const value = text(req.body.truckNumber, 'truck number', 40).toUpperCase();
   // Same dedupe key as the remembered suggestions (utils/savedReferences.js).
   if (settings.savedTrucks.some(item => referenceKey('trucks', item) === referenceKey('trucks', value))) conflict('Duplicate truck');
+  if (settings.savedTrucks.length >= MAX_SAVED_REFERENCES) conflict('Saved truck list is full');
   return { savedTrucks: { push: value } };
 });
 exports.deleteTruck = mutate((settings, req) => ({ savedTrucks: { set: removeReference(settings.savedTrucks, req.params.truckNumber, 'trucks') } }));
 exports.addDestination = mutate((settings, req) => {
   const value = text(req.body.destination, 'destination', 200);
   if (settings.savedDestinations.some(item => referenceKey('destinations', item) === referenceKey('destinations', value))) conflict('Duplicate destination');
+  if (settings.savedDestinations.length >= MAX_SAVED_REFERENCES) conflict('Saved destination list is full');
   return { savedDestinations: { push: value } };
 });
 exports.deleteDestination = mutate((settings, req) => ({ savedDestinations: { set: removeReference(settings.savedDestinations, req.params.destination, 'destinations') } }));

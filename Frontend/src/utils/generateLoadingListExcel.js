@@ -15,8 +15,7 @@ export function generateLoadingListExcel(listData) {
   ws1Data.push(["Loading List Number", listData.loadingListNumber || 'N/A']);
   ws1Data.push(["Date", listData.date || 'N/A']);
   ws1Data.push(["Manager", listData.supervisor || 'N/A']);
-  ws1Data.push(["Buyer", listData.buyerDestination || 'N/A']);
-  ws1Data.push(["Destination", listData.buyerDestination || 'N/A']);
+  ws1Data.push(["Buyer / Destination", listData.buyerDestination || 'N/A']);
   ws1Data.push(["Truck Number", listData.truckNumber || 'N/A']);
   ws1Data.push(["Stone Type", listData.stoneType || 'N/A']);
   ws1Data.push(["Finish", listData.finish || 'N/A']);

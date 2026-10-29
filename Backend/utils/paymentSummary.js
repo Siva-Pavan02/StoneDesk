@@ -17,6 +17,8 @@ function derivePaymentSummary(rawInvoiceTotal, rawPayments = []) {
     status = 'PARTIALLY_PAID';
   } else if (received.greaterThanOrEqualTo(invoiceTotal) && invoiceTotal.greaterThan(0)) {
     status = 'PAID';
+  } else if (invoiceTotal.isZero() && balance.isZero()) {
+    status = 'PAID';
   }
 
   return {

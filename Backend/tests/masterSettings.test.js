@@ -191,6 +191,16 @@ test('MasterSettings API', async (t) => {
     assert.equal(rejected.status, 403);
     assert.deepEqual(rejected.data, { error: 'Your role does not allow this action' });
   });
+  await t.test('Saved truck and destination lists are capped at MAX_SAVED_REFERENCES', async () => {
+    const { MAX_SAVED_REFERENCES } = require('../utils/savedReferences');
+    const settings = await prisma.masterSettings.findFirst({ where: { organizationId } });
+    const trucks = Array.from({ length: MAX_SAVED_REFERENCES }, (_, i) => `TRUCK ${i}`);
+    const destinations = Array.from({ length: MAX_SAVED_REFERENCES }, (_, i) => `Place ${i}`);
+    await prisma.masterSettings.update({ where: { id: settings.id }, data: { savedTrucks: trucks, savedDestinations: destinations } });
+    assert.equal((await request('POST', '/trucks', { truckNumber: 'TN99ZZ9999' })).status, 409);
+    assert.equal((await request('POST', '/destinations', { destination: 'Overflow City' })).status, 409);
+  });
+
   await t.test('Cleanup', async () => {
     await new Promise(resolve => server.close(resolve));
 

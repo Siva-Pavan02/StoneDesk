@@ -1,11 +1,5 @@
 import { round2, rawArea, rawAmount } from './loadMath.js';
 
-export function assertBill(dispatch, kind = 'invoice') {
-  if (!dispatch) throw new Error('Missing Dispatch record');
-  if (kind !== 'transit slip' && !dispatch.summary) throw new Error('Missing financial summary in Dispatch');
-  if (kind === 'transit slip' && !dispatch.inventory?.length) throw new Error('Missing inventory');
-  if (!['Dispatched', 'Delivered'].includes(dispatch.status)) throw new Error(`Cannot generate ${kind} for an unfinalized Dispatch. Please finalize the dispatch first.`);
-}
 // Totals sum unrounded areas/amounts (from dimensions) and round once, matching the server summary.
 // Regular is derived as total - top so Regular + Top always equals the total shown.
 function totalOf(lines) {

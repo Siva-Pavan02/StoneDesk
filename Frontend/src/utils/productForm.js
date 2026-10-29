@@ -4,11 +4,6 @@
 const MAX_LENGTH = 120;
 const TOO_LONG = 'Use 120 characters or fewer';
 
-export const RATE_UNITS = Object.freeze({
-  SQ_FT: 'SQ_FT',
-  UNIT: 'UNIT',
-});
-
 export const productRateUnit = product =>
   product?.rateUnit === 'UNIT' ? 'UNIT' : 'SQ_FT';
 

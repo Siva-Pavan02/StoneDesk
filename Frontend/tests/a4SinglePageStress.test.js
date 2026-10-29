@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { prepareA4Invoice, projectCopy } from '../src/utils/a4InvoiceModel.js';
 import {
-  COLUMNS,
   calcFragmentHeight,
   fragmentRows,
   planFromMeasurements,

@@ -6,6 +6,20 @@ const http = require('node:http');
 const app = require('../app');
 const API_PREFIX = '/api';
 
+// Pure-unit coverage: runs without a test database.
+test('derivePaymentSummary: zero-total invoice is PAID', () => {
+  const { derivePaymentSummary } = require('../utils/paymentSummary');
+  const s = derivePaymentSummary(0, []);
+  assert.equal(s.invoiceTotal, 0);
+  assert.equal(s.received, 0);
+  assert.equal(s.balance, 0);
+  assert.equal(s.status, 'PAID');
+  // Positive-total behaviour unchanged.
+  assert.equal(derivePaymentSummary(100, []).status, 'PAYMENT_DUE');
+  assert.equal(derivePaymentSummary(100, [{ amount: 40 }]).status, 'PARTIALLY_PAID');
+  assert.equal(derivePaymentSummary(100, [{ amount: 100 }]).status, 'PAID');
+});
+
 test('Invoice Payments V1 API', async (t) => {
   try {
     await database.setup(t);
@@ -285,6 +299,13 @@ test('Invoice Payments V1 API', async (t) => {
     assert.equal(s3.balance, 0);
     assert.equal(s3.status, 'PAID');
     assert.equal(Number((s3.received + s3.balance).toFixed(2)), s3.invoiceTotal);
+
+    // Zero-total invoice with no payments is fully settled (PAID), not PAYMENT_DUE.
+    const s4 = derivePaymentSummary(0, []);
+    assert.equal(s4.invoiceTotal, 0);
+    assert.equal(s4.received, 0);
+    assert.equal(s4.balance, 0);
+    assert.equal(s4.status, 'PAID');
   });
 
   await t.test('14. API accepts 1.005 and rounds half-up to exact 1.01 in database', async () => {

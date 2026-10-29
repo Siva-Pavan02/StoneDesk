@@ -252,7 +252,7 @@ export default function LoadingListScreen({ onClose, organizationId = 'unit_04',
     } finally { savingLock.current = false; setSaving(false); }
   };
 
-  const handleGeneratePdf = () => {
+  const handleGeneratePdf = async () => {
     if (opening) return;
     const listData = {
       loadingListNumber: loadingListNumber || `LL-${Date.now()}`,
@@ -263,10 +263,10 @@ export default function LoadingListScreen({ onClose, organizationId = 'unit_04',
       finish,
       requirements
     };
-    generateLoadingListPdf(listData);
+    try { await generateLoadingListPdf(listData); } catch (e) { setError(e.message); }
   };
 
-  const handleGenerateExcel = () => {
+  const handleGenerateExcel = async () => {
     if (opening) return;
     const listData = {
       loadingListNumber: loadingListNumber || `LL-${Date.now()}`,
@@ -277,7 +277,7 @@ export default function LoadingListScreen({ onClose, organizationId = 'unit_04',
       finish,
       requirements
     };
-    generateLoadingListExcel(listData);
+    try { await generateLoadingListExcel(listData); } catch (e) { setError(e.message); }
   };
 
   const { required: totalRequired, loaded: totalLoaded, pending: totalPending, excess: totalExcess } = loadingTotals(requirements);

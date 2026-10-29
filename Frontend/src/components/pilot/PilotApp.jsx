@@ -62,6 +62,12 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
   const listPath = `/dispatches${listParams.size ? `?${listParams}` : ''}`;
   const admin = user.role === "Admin",
     canFinalize = user.role !== "Yard Manager";
+  // Only a missing business name blocks the workspace; New load offers to add the first product.
+  const needsSetup = settings && !settings.businessName;
+  const current =
+    needsSetup && !["settings", "profile"].includes(view)
+      ? "profile"
+      : view.split(/[/?]/)[0];
   function navigate(target) {
     const next = resolveRoute(target).route;
     window.location.hash = next;
@@ -302,12 +308,6 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
     }
     home();
   }
-  // Only a missing business name blocks the workspace; New load offers to add the first product.
-  const needsSetup = settings && !settings.businessName;
-  const current =
-    needsSetup && !["settings", "profile"].includes(view)
-      ? "profile"
-      : view.split(/[/?]/)[0];
   useEffect(() => {
     // Settings, setup and bill pages do not use dispatch lists.
     if (!settings || !['home', 'entries', 'load'].includes(current)) return;

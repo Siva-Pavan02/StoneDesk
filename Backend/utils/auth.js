@@ -30,6 +30,9 @@ async function endSession(req, res) {
 async function startSession(req, res, user) {
   if (!user.active) throw Object.assign(new Error('Your account access has been paused. Contact your administrator.'), { status: 403 });
   await endSession(req, res);
+  // Opportunistically prune only globally-expired rows. Never scope by userId:
+  // that would delete the user's still-valid sessions on their other devices.
+  await prisma.session.deleteMany({ where: { expiresAt: { lt: new Date() } } });
   const token = randomBytes(32).toString('hex');
   await prisma.session.create({ data: { tokenHash: hash(token), userId: user.id, expiresAt: new Date(Date.now() + 12 * 60 * 60 * 1000) } });
   res.cookie(cookieName, token, { ...cookieOptions(), maxAge: 12 * 60 * 60 * 1000 });

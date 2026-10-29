@@ -356,6 +356,14 @@ api.delete(
         : "";
     if (confirm !== user.email.toLowerCase())
       fail(400, "Type your email exactly to confirm deletion");
+    const activeAdmins = db.users.filter((u) => u.role === "Admin" && u.active).length;
+    // An Admin with a co-admin deletes only their own account, matching the real handler.
+    if (user.role === "Admin" && activeAdmins > 1) {
+      db.users = db.users.filter((u) => u.id !== user.id);
+      session = null;
+      save();
+      return res.json({ ok: true, deletedBusiness: false });
+    }
     const deleteBusiness = user.role === "Admin";
     // The mock holds one organization; deleting the business restores the seed data.
     if (deleteBusiness) Object.assign(db, seed());

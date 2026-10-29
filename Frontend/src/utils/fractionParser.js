@@ -83,10 +83,13 @@ export function parseFraction(input) {
 
 export function decimalToFraction(val) {
   if (val === null || val === undefined || isNaN(val)) return '0';
-  const n = Number(val);
+  const raw = Number(val);
+  // Handle the sign once so Math.floor on negatives (e.g. Math.floor(-1.5) === -2) can't drop it.
+  const sign = raw < 0 ? '-' : '';
+  const n = Math.abs(raw);
   const whole = Math.floor(n);
   let dec = n - whole;
-  if (dec < 1e-6) return whole.toString();
+  if (dec < 1e-6) return sign + whole.toString();
   
   let bestNum = 1;
   let bestDen = 1;
@@ -103,9 +106,9 @@ export function decimalToFraction(val) {
   }
 
   // Only show a fraction when it equals the value; otherwise show the decimal unchanged.
-  if (bestDiff >= 1e-6) return String(Number(n.toPrecision(12)));
-  if (bestNum === 0) return whole.toString();
-  if (bestNum === bestDen) return (whole + 1).toString();
+  if (bestDiff >= 1e-6) return sign + String(Number(n.toPrecision(12)));
+  if (bestNum === 0) return sign + whole.toString();
+  if (bestNum === bestDen) return sign + (whole + 1).toString();
 
   const fractionMap = {
     '1/2': '½', '1/3': '⅓', '2/3': '⅔', '1/4': '¼', '3/4': '¾',
@@ -117,8 +120,8 @@ export function decimalToFraction(val) {
   const unicodeChar = fractionMap[fractionKey];
   
   if (unicodeChar) {
-    return whole > 0 ? `${whole}${unicodeChar}` : unicodeChar;
+    return sign + (whole > 0 ? `${whole}${unicodeChar}` : unicodeChar);
   } else {
-    return whole > 0 ? `${whole} ${bestNum}/${bestDen}` : `${bestNum}/${bestDen}`;
+    return sign + (whole > 0 ? `${whole} ${bestNum}/${bestDen}` : `${bestNum}/${bestDen}`);
   }
 }

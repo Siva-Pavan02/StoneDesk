@@ -80,7 +80,9 @@ exports.updateLoadingList = async (req, res, next) => {
   try {
     const existing = await prisma.loadingList.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
     if (!existing) return res.status(404).json({ error: 'Not found' });
-    const list = await prisma.loadingList.update({ where: { id: req.params.id }, data: fields({ ...existing, ...req.body }) });
+    const result = await prisma.loadingList.updateMany({ where: { id: req.params.id, organizationId: req.user.organizationId, updatedAt: existing.updatedAt }, data: fields({ ...existing, ...req.body }) });
+    if (result.count === 0) return res.status(409).json({ error: 'Loading list changed. Refresh and try again.' });
+    const list = await prisma.loadingList.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
     res.status(200).json(list);
   } catch (error) {
     if (error.code === 'P2025') return res.status(404).json({ error: 'Not found' });
@@ -109,7 +111,7 @@ exports.updateStatus = async (req, res, next) => {
       data: { status }
     });
     if (result.count === 0) return res.status(404).json({ error: 'Not found' });
-    const list = await prisma.loadingList.findUnique({ where: { id: req.params.id } });
+    const list = await prisma.loadingList.findFirst({ where: { id: req.params.id, organizationId: req.user.organizationId } });
     res.status(200).json(list);
   } catch (error) {
     next(error);

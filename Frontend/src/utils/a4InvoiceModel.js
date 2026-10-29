@@ -198,6 +198,9 @@ export function prepareA4Invoice(input) {
   // A saved bill keeps its authoritative payable, including historical rounding.
   const netPayable = input.storedTotals?.netPayable == null ? calculatedNet
     : decimal(input.storedTotals.netPayable, 'Stored net payable');
+  // Net payable is printed and spoken at 2dp; round once so the total and the
+  // amount-in-words agree even when calculatedNet carries more than two decimals.
+  const netPayable2 = netPayable.toDecimalPlaces(2, MONEY_ROUNDING);
   const stored = input.storedTotals || {};
   for (const [key, calculated, label] of [
     ['totalPieces', all.reduce((n, entry) => n + entry.quantity, 0), 'Total pieces'],
@@ -220,7 +223,7 @@ export function prepareA4Invoice(input) {
   }).filter(Boolean);
   const totals = { pieces: totalStonePieces, regularArea: regularArea.toString(), topArea: topArea.toString(),
     area: regularArea.plus(topArea).toString(), regularAmount: regularAmount.toFixed(2), topAmount: topAmount.toFixed(2),
-    materialTotal: materialTotal.toFixed(2), netPayable: netPayable.toFixed(Math.max(2, netPayable.decimalPlaces())) };
+    materialTotal: materialTotal.toFixed(2), netPayable: netPayable2.toFixed(2) };
   if (totalUnits > 0) {
     totals.totalStonePieces = totalStonePieces;
     totals.totalUnits = totalUnits;
@@ -229,7 +232,7 @@ export function prepareA4Invoice(input) {
   }
   return { ...identity, groups, loadingRoyalty: loadingRoyalty.toFixed(2),
     totals,
-    amountWords: amountInWords(netPayable), warnings,
+    amountWords: amountInWords(netPayable2), warnings,
     ...(input.products ? { products: input.products } : {}) };
 }
 

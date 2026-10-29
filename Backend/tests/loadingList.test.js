@@ -24,6 +24,17 @@ test('loading lists retain IDs, validate JSON and persist updates', async t => {
   assert.equal(changed.status, 200);
   assert.equal(changed.data.requirements[0].loadedPieces[0].sqFt, 6);
   assert.equal(changed.data.requirements[0].balance, 18);
+  // Optimistic concurrency: two simultaneous updates read the same updatedAt; the first
+  // write bumps it, so the loser's updateMany matches no row and returns 409.
+  const req0 = changed.data.requirements[0];
+  const [c1, c2] = await Promise.all([
+    call('PUT', '/' + id, { requirements: [{ ...req0, loadedQuantity: 2 }] }),
+    call('PUT', '/' + id, { requirements: [{ ...req0, loadedQuantity: 3 }] })
+  ]);
+  const okCount = [c1, c2].filter(r => r.status === 200).length;
+  const conflictCount = [c1, c2].filter(r => r.status === 409).length;
+  assert.equal(okCount, 1, 'exactly one concurrent update succeeds');
+  assert.equal(conflictCount, 1, 'the stale concurrent update returns 409');
   assert.equal((await call('PUT', '/' + id, { requirements: [{ lengthFt: -1, widthFt: 2, requiredQuantity: 1 }] })).status, 400);
   assert.equal((await call('GET', '/' + id)).data.id, id);
   assert.equal((await call('DELETE', '/' + id)).status, 200);

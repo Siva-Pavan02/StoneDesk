@@ -117,7 +117,9 @@ export default function BillView({ record, onBack, onResume, onEdit, onChanged, 
   }, [invoiceSource, invoiceKey]);
   function download(output) {
     const url = URL.createObjectURL(output.blob);
-    const a = document.createElement('a'); a.href = url; a.download = output.filename; a.click();
+    const a = document.createElement('a'); a.href = url; a.download = output.filename;
+    // Firefox and some browsers ignore a click on a detached anchor; attach it first.
+    document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   }
   function resetExportFeedback() { setExportError(''); setExportNotice(''); setExportWarnings([]); setPrintFallback(false); }

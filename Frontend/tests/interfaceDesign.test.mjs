@@ -131,7 +131,11 @@ async function makeCase(kind, language, width, options = {}) {
         return route.fulfill({ status: 200, headers: { ...headers, 'cache-control': 'private, no-store' }, json: { user: sessionUser } });
       }
       else if (apiPath === `/master-settings/${settings.organizationId}`) body = settings;
-      else if (apiPath === '/dispatches') body = options.empty ? { data: [], nextCursor: null } : url.searchParams.has('cursor') ? { data: records.slice(6), nextCursor: null } : { data: records.slice(0, 6), nextCursor: 'mock-next' };
+      else if (apiPath === '/dispatches') {
+        // The list response carries per-status totals for the filter counts (see dispatchController.list).
+        const statusCounts = ['Draft', 'Dispatched', 'Delivered'].reduce((counts, status) => ({ ...counts, [status]: options.empty ? 0 : records.filter(record => record.status === status).length }), { all: options.empty ? 0 : records.length });
+        body = options.empty ? { data: [], nextCursor: null, statusCounts } : url.searchParams.has('cursor') ? { data: records.slice(6), nextCursor: null, statusCounts } : { data: records.slice(0, 6), nextCursor: 'mock-next', statusCounts };
+      }
       else if (apiPath === '/dispatches/analytics') body = analyticsMock(options.empty);
       else if (/^\/dispatches\/[^/]+\/payments$/.test(apiPath)) {
         const record = records.find(record => record.id === apiPath.split('/')[2]);
@@ -426,23 +430,28 @@ async function workspace(language, width) {
     await main().getByRole('button', { name: 'Refresh', exact: true }).click(); await expect(main().locator('.load-record')).toHaveCount(6);
   });
   await overflow('loading-entries', true);
-  await check('Global search icon can be clicked without input interception', async () => {
-    await nav('home');
-    if (width < 768) await page.locator('.workspace-search-toggle').click();
-    result.searchHitTarget = await page.locator('.workspace-search-submit').evaluate(element => {
+  // Search lives in the Loading entries toolbar, beside the filters, not in the header.
+  await check('Entries search sits with the filters and its submit is clickable', async () => {
+    await nav('entries');
+    await expect(page.locator('.workspace-header #global-search')).toHaveCount(0);
+    const [filters, form] = await Promise.all([
+      main().locator('.load-toolbar .load-filters').boundingBox(),
+      main().locator('.load-toolbar .load-search').boundingBox(),
+    ]);
+    assert.ok(filters && form, 'filters and search share the toolbar');
+    if (width >= 640) assert.ok(form.x >= filters.x + filters.width - 1, 'search sits to the right of the filters');
+    result.searchHitTarget = await main().locator('.load-search-submit').evaluate(element => {
       const rect = element.getBoundingClientRect(), hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
       return { hit: hit?.tagName, hitId: hit?.id, buttonZIndex: getComputedStyle(element).zIndex, inputPosition: getComputedStyle(document.getElementById('global-search')).position, inputZIndex: getComputedStyle(document.getElementById('global-search')).zIndex };
     });
-    await page.locator('.workspace-search-submit').click(); await view('entries');
   });
-  await check('Global search submit, no-results state and clearing', async () => {
-    const input = page.locator('#global-search'); if (width < 768 && !(await input.isVisible())) await page.locator('.workspace-search-toggle').click();
-    await input.fill('MOCK-LORRY-02'); await input.press('Enter'); await view('entries'); await expect(main().locator('.load-record')).toHaveCount(1);
+  await check('Entries search filters, shows the empty state and clears', async () => {
+    const input = main().locator('#global-search');
+    await input.fill('MOCK-LORRY-02'); await expect(main().locator('.load-record')).toHaveCount(1);
     await input.fill('no-such-sample'); await expect(main().locator('.load-record')).toHaveCount(0); await expect(main().getByRole('heading', { name: 'No matching loads', exact: true })).toBeVisible();
-    await input.fill(''); await expect(main().locator('.load-record')).toHaveCount(6);
+    await main().getByRole('button', { name: 'Clear search', exact: true }).click();
+    await expect(input).toHaveValue(''); await expect(main().locator('.load-record')).toHaveCount(6);
   });
-  if (await page.locator('#global-search').isVisible()) await page.locator('#global-search').fill('');
-  if (width < 768 && await page.locator('.workspace-search-close').isVisible()) await page.locator('.workspace-search-close').click();
   for (const name of ['entries', 'settings', 'home']) await check(`Visible ${name} navigation action and active state`, async () => {
     await nav(name); await oneCreate();
     if (width >= 1024) await expect(page.locator('.workspace-sidebar nav a[aria-current="page"]')).toHaveText(navigation.find(([key]) => key === name)[1]);

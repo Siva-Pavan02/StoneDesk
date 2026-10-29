@@ -42,7 +42,7 @@ try {
       else if (url.pathname === '/api/dispatches') {
         const q = url.searchParams.get('q') || 'recent';
         if (q === 'slow') await new Promise(resolve => setTimeout(resolve, 800));
-        body = { data: [row(q)], nextCursor: null };
+        body = { data: [row(q)], nextCursor: null, statusCounts: { all: 1, Draft: 1, Dispatched: 0, Delivered: 0 } };
       } else if (url.pathname.startsWith('/api/dispatches/')) body = row('saved');
       else throw new Error(`Unexpected request ${url.pathname}`);
       await route.fulfill({ json: body });
@@ -58,7 +58,7 @@ try {
     await expect(page.getByText('recent Party', { exact: true }).filter({ visible: true }).first()).toBeVisible();
     assert.equal(requests.filter(p => p === '/api/dispatches').length, 1);
     assert.equal(requests.filter(p => p === '/api/dispatches/analytics').length, 0);
-    if (width < 768) await page.getByRole('button', { name: 'Open search', exact: true }).click();
+    // Search is part of the Loading entries toolbar, so #entries is already open above.
     const search = page.locator('#global-search');
     await search.fill('f'); await search.fill('fa'); await search.fill('fast');
     await expect(page.getByText('fast Party', { exact: true }).filter({ visible: true }).first()).toBeVisible();

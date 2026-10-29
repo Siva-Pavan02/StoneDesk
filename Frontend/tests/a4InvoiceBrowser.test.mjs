@@ -281,7 +281,7 @@ async function main() {
         const { prepareA4Invoice, projectCopy } = await import('/src/utils/a4InvoiceModel.js');
         const { measureA4Copy, mountA4Host } = await import('/src/utils/a4InvoiceMeasure.js');
         const { planFromMeasurements } = await import('/src/utils/a4InvoicePagination.js');
-        const { renderA4Pages, renderA4MeasureSheet, renderA4Invoice } = await import('/src/utils/a4InvoiceRender.js');
+        const { renderA4MeasureSheet, renderA4Invoice } = await import('/src/utils/a4InvoiceRender.js');
         const { a4InvoicePdf } = await import('/src/utils/a4InvoicePdf.js');
         const model = projectCopy(prepareA4Invoice(input), copy);
         const measured = await measureA4Copy(model, copy, { tier, columnCount: 4 });

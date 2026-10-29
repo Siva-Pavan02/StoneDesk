@@ -102,10 +102,6 @@
     padding-inline: 48px 52px;
   }
 }
-.pilot.workspace .pill-button {
-  border-radius: 999px;
-  padding-inline: 20px;
-}
 .pilot.workspace .combo-control {
   position: relative;
 }
@@ -506,12 +502,6 @@
   transition:
     background-color 600000s 0s,
     color 600000s 0s;
-}
-.pilot.workspace .pill-button:hover {
-  border-color: var(--ui-border-strong);
-}
-.pilot.workspace .pill-button:active {
-  transform: scale(0.98);
 }
 .pilot.workspace .sidebar-link[aria-current="page"] {
   background: var(--ui-accent-soft);

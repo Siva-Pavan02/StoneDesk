@@ -14,7 +14,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { genA4Input, runProperty, syntheticGeometry } from './helpers/a4Generators.js';
 import { prepareA4Invoice, projectCopy, sampleA4Invoice } from '../src/utils/a4InvoiceModel.js';
-import { COLUMNS, calcFragmentHeight, fragmentRows, planFromMeasurements } from '../src/utils/a4InvoicePagination.js';
+import { calcFragmentHeight, fragmentRows, planFromMeasurements } from '../src/utils/a4InvoicePagination.js';
 
 const TOLERANCE = 0.01;
 const COPIES = ['buyer', 'driver'];

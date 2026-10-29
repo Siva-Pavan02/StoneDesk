@@ -48,17 +48,4 @@ async function auditLog(action, req, details = {}) {
   }
 }
 
-function auditMiddleware(action, getDetails = () => ({})) {
-  return (req, res, next) => {
-    const originalJson = res.json.bind(res);
-    res.json = (body) => {
-      if (res.statusCode < 400) {
-        auditLog(action, req, getDetails(req, body));
-      }
-      return originalJson(body);
-    };
-    next();
-  };
-}
-
-module.exports = { auditLog, auditMiddleware, SENSITIVE_ACTIONS };
+module.exports = { auditLog, SENSITIVE_ACTIONS };

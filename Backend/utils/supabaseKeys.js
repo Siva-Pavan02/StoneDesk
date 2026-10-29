@@ -12,4 +12,4 @@ function supabaseSecretKey(component) {
   return process.env[name]?.trim() || process.env.SUPABASE_SECRET_KEY?.trim() || '';
 }
 
-module.exports = { supabaseSecretKey, secretKeyVariables: variables };
+module.exports = { supabaseSecretKey };

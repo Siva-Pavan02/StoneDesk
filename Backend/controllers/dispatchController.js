@@ -7,7 +7,8 @@ const { auditLog } = require('../utils/auditLog');
 const { STATUS_TARGETS, statusTransitionError } = require('../utils/dispatchStatus');
 const { rememberDispatchReferences } = require('../utils/savedReferences');
 
-const ANALYTICS_RECORD_CAP = 20000;
+// Kept small to bound the analytics heap; the larger DB-side aggregation rewrite is deliberately deferred.
+const ANALYTICS_RECORD_CAP = 5000;
 
 function details(body) {
   const supervisor = calc.text(body.supervisor, 'manager');
@@ -74,13 +75,13 @@ exports.updateDraft = async (req, res, next) => {
     const fee = req.body.loadingAndRoyaltyFees ?? dispatch.summary.loadingAndRoyaltyFees;
 
     const updateResult = await prisma.dispatch.updateMany({
-      where: { id: dispatch.id, status: 'Draft', updatedAt: dispatch.updatedAt },
+      where: { id: dispatch.id, organizationId: req.user.organizationId, status: 'Draft', updatedAt: dispatch.updatedAt },
       data: { ...metadata, inventory, summary: calc.totals(inventory, fee) }
     });
     if (updateResult.count === 0) return res.status(409).json({ error: 'Load changed. Refresh and try again.' });
     await rememberDispatchReferences(prisma, req.user.organizationId, metadata.logistics);
 
-    res.json(await prisma.dispatch.findUnique({ where: { id: dispatch.id } }));
+    res.json(await prisma.dispatch.findFirst({ where: { id: dispatch.id, organizationId: req.user.organizationId } }));
   } catch (err) { next(err); }
 };
 
@@ -98,13 +99,13 @@ exports.finalizeDispatch = async (req, res, next) => {
     const businessSnapshot = await snapshot(settings, req.user.organizationId);
 
     const updateResult = await prisma.dispatch.updateMany({
-      where: { id: dispatch.id, status: 'Draft', updatedAt: dispatch.updatedAt },
+      where: { id: dispatch.id, organizationId: req.user.organizationId, status: 'Draft', updatedAt: dispatch.updatedAt },
       data: { inventory, summary, businessSnapshot, status: 'Dispatched' }
     });
 
     if (!updateResult.count) return res.status(409).json({ error: 'Load changed. Refresh and try again.' });
     await rememberDispatchReferences(prisma, req.user.organizationId, dispatch.logistics);
-    res.json(await prisma.dispatch.findUnique({ where: { id: dispatch.id } }));
+    res.json(await prisma.dispatch.findFirst({ where: { id: dispatch.id, organizationId: req.user.organizationId } }));
   } catch (err) { next(err); }
 };
 
@@ -282,7 +283,7 @@ exports.list = async (req, res, next) => {
     const dispatches = await prisma.dispatch.findMany({
       where: filter,
       select: LIST_FIELDS,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {})
     });

@@ -24,12 +24,32 @@ test('Feature: unified-a4-bill-format, Property 5: Net payable applies the net-o
     }
     const expectedMaterial = rawMaterial.toDecimalPlaces(2, D.ROUND_HALF_UP);
     const expectedNet = new D(netTotal(rawMaterial.plus(input.loadingRoyalty).toNumber()));
+    // Net payable is rounded once to 2dp half-up before it is printed or spoken.
+    const expectedNet2 = expectedNet.toDecimalPlaces(2, D.ROUND_HALF_UP);
     assert.equal(model.totals.materialTotal, expectedMaterial.toFixed(2), 'materialTotal matches round-once oracle');
     assert.equal(model.loadingRoyalty, new D(input.loadingRoyalty).toFixed(2), 'loadingRoyalty is carried unchanged');
-    assert.equal(model.totals.netPayable, expectedNet.toFixed(Math.max(2, expectedNet.decimalPlaces())), 'netPayable matches independent oracle');
+    assert.equal(model.totals.netPayable, expectedNet2.toFixed(2), 'netPayable is the 2dp oracle');
 
-    // Amount in words is derived from the same net payable.
+    // Amount in words is derived from the same 2dp net payable, so printed total and words agree.
     assert.equal(model.amountWords, amountInWords(model.totals.netPayable));
-    assert.equal(model.amountWords, amountInWords(expectedNet));
+    assert.equal(model.amountWords, amountInWords(expectedNet2));
   });
+});
+
+test('A third-decimal raw net payable prints and is spoken at 2 decimal places that agree', () => {
+  // rate 10.001 x 1 x 1 x 1 => raw charge 10.001; netTotal leaves it unchanged (not a .75 case),
+  // so calculatedNet carries a third decimal and must be rounded once to 2dp before both outputs.
+  const model = prepareA4Invoice({ mode: 'production', currency: 'INR', invoiceNumber: 'NET-3DP',
+    invoiceDate: '2026-10-11', status: 'Dispatched', seller: { name: 'Yard' }, party: 'Buyer',
+    lorryNumber: 'AP-01', destination: 'City', supervisor: 'Mgr', loadingRoyalty: '0',
+    groups: [{ id: 1, entries: [{ id: '1-1', type: 'regular', lengthFt: '1', widthFt: '1', quantity: 1, ratePerSqFt: '10.001' }] }] });
+
+  const rawNet = new D(netTotal(new D('10.001').toNumber()));
+  assert.ok(rawNet.decimalPlaces() > 2, 'the raw net payable carries a third decimal');
+  const expected = rawNet.toDecimalPlaces(2, D.ROUND_HALF_UP);
+  assert.equal(model.totals.netPayable, expected.toFixed(2), 'printed total is 2dp');
+  assert.equal(model.totals.netPayable, '10.00');
+  assert.match(model.totals.netPayable, /^\d+\.\d{2}$/, 'exactly two decimals printed');
+  assert.equal(model.amountWords, amountInWords(expected), 'words derived from the same 2dp net');
+  assert.equal(model.amountWords, amountInWords(model.totals.netPayable), 'printed total and words agree');
 });

@@ -239,9 +239,10 @@ export function payload(draft) {
   return { clientRequestId: draft.clientRequestId, partyName: draft.partyName.trim(), supervisor: draft.supervisor.trim(), date: draft.date,
     logistics: { truckNumber: draft.truckNumber.trim(), buyerDestination: draft.buyerDestination.trim() }, loadingAndRoyaltyFees: fee, inventory: [...groups.values()] };
 }
+const formatKolkataDate = d => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
 export function fromDispatch(dispatch) {
   return { clientRequestId: dispatch.clientRequestId || crypto.randomUUID(), serverId: dispatch.id, partyName: dispatch.partyName || '',
     truckNumber: dispatch.logistics.truckNumber, buyerDestination: dispatch.logistics.buyerDestination,
-    supervisor: dispatch.supervisor, date: new Date(dispatch.date).toISOString().slice(0, 10), fee: String(dispatch.summary.loadingAndRoyaltyFees),
+    supervisor: dispatch.supervisor, date: formatKolkataDate(new Date(dispatch.date)), fee: String(dispatch.summary.loadingAndRoyaltyFees),
     rows: dispatch.inventory.flatMap((g, groupIndex) => (g.measurementRows?.length ? g.measurementRows : g.pieces.map(p => ({ ...p, quantity: 1, category: 'Regular' }))).map(r => ({ ...r, rowNo: r.rowNo ?? groupIndex + 1, stoneType: g.stoneType, finish: g.finish, ratePerSqFt: g.ratePerSqFt, rate: g.ratePerSqFt, ...(r.rateUnit === 'UNIT' || g.rateUnit === 'UNIT' ? { rateUnit: 'UNIT' } : {}) }))) };
 }

@@ -141,7 +141,13 @@
   --bill-soft: var(--ui-canvas);
   --bill-radius: var(--ui-radius-md);
   --bill-control-radius: var(--ui-radius-sm);
+  /* The A4 sheet's own screen width (a4Invoice.css .sample-sheet inline-size).
+     Every section on this screen shares it, so the page reads as one column. */
+  --bill-column: 210mm;
 }
+/* One shared column: each section matches the A4 preview's width and centre
+   line. It is a cap only, so narrower screens keep the panels full width. */
+.bill-screen > * { max-inline-size: var(--bill-column); margin-inline: auto; }
 .bill-screen :is(.delivery-bar, .payment-panel, .invoice-export-panel, .invoice-admin-panel) {
   border: 1px solid var(--bill-line);
   border-radius: var(--bill-radius);

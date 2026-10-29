@@ -31,10 +31,9 @@ export async function generateLoadingListPdf(listData) {
   drawLabel('Date', listData.date, 110, y);
   y += 6;
   drawLabel('Manager', listData.supervisor, 14, y);
-  drawLabel('Buyer', listData.buyerDestination, 110, y);
-  y += 6;
-  drawLabel('Destination', listData.buyerDestination, 14, y);
   drawLabel('Truck', listData.truckNumber || '-', 110, y);
+  y += 6;
+  drawLabel('Buyer / Destination', listData.buyerDestination, 14, y);
   y += 6;
   drawLabel('Stone Type', listData.stoneType, 14, y);
   drawLabel('Finish', listData.finish, 110, y);

@@ -347,6 +347,24 @@ router.delete(
         return res
           .status(400)
           .json({ error: "Type your email exactly to confirm deletion" });
+      // An Admin with a co-admin deletes only their own account, so the
+      // organization and remaining admins are never destroyed by a self-delete.
+      const activeAdmins = await prisma.user.count({
+        where: {
+          organizationId: req.user.organizationId,
+          role: "Admin",
+          active: true,
+        },
+      });
+      if (req.user.role === "Admin" && activeAdmins > 1) {
+        await deleteAuthUser(req.user);
+        await auditLog("user.account_delete", req, {
+          targetUserId: req.user.id,
+        });
+        await prisma.user.delete({ where: { id: req.user.id } });
+        await auth.endSession(req, res);
+        return res.json({ ok: true, deletedBusiness: false });
+      }
       const deleteBusiness = req.user.role === "Admin";
       await deleteAuthUser(req.user);
       await auditLog(
@@ -517,6 +535,12 @@ router.post("/forgot-password", auth.authLimit, async (req, res, next) => {
 
     const token = randomBytes(32).toString("hex");
     const tokenHash = hashToken(token);
+
+    // Invalidate any still-unused tokens so only the newest link stays live.
+    await prisma.passwordResetToken.updateMany({
+      where: { userId: user.id, used: false },
+      data: { used: true },
+    });
 
     await prisma.passwordResetToken.create({
       data: {

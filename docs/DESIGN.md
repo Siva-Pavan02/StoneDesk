@@ -45,8 +45,8 @@ Numbers use tabular figures. Amounts use Indian grouping and two decimal places 
 - Inputs: labels above controls, 16px text, white fill, 1px `--workspace-border` border, 44px height, green border and soft ring on focus. Native email, password, date, number, file and select controls. Keep fractions available on dimension entry. Never use a placeholder as the only label.
 - Cards: white with a 1px border and no shadow, 16px corners (`--ui-radius-md`) and 16 to 20px padding. Use them to group a load or a task; use dividers inside groups instead of nested cards.
 - One theme on every screen. Profile, Settings and the bill panels keep their layout variables (`--mn-*`, `--bill-*`), but these alias the shared `--ui-*` role tokens (canvas, border, ink, muted, danger, success, warning), so they match the rest of the app. Tailwind utilities use the matching `@theme` colours (`text-on-surface`, `bg-surface`, `text-error` …), never raw palette classes like `text-gray-600` or `bg-teal-700`.
-- Navigation: collapsible side drawer for all five destinations; four compact bottom destinations for daily work. Settings is available in the drawer/profile area. All hit areas are at least 48px tall.
-- Dialogs: native modal dialog for sign-in, navigation and information. Browser focus containment, Escape to close, labeled title, visible close button. The scrim is 50% ink. No hand-built focus trap.
+- Navigation: one role-aware floating bar, fixed above the safe area on phones and floating near the top on larger screens. It preserves the Dashboard, Loading entries, Profile and Settings destinations; logout is confirmed in Settings. All hit areas are at least 48px tall.
+- Dialogs: native modal dialog for sign-in, logout confirmation and information. Browser focus containment, Escape to close, labeled title, visible close button. The scrim is 50% ink. No hand-built focus trap.
 - Data: load cards on phones, containing lorry number, party, date, area, amount and textual status. The generated PDF and Excel are the detailed tabular views. Right-align numerical columns, repeat headings on new PDF pages, and preserve numeric Excel cells.
 - Empty states: explain the next action. Search with no matches suggests lorry, party or bill ID. Empty invoices direct the user to create and finalize a load.
 - Errors: retain input, use an alert with a concrete message, offer retry where useful. Native field validity handles basic required fields; the server validates all financial input and access permissions.
@@ -54,9 +54,9 @@ Numbers use tabular figures. Amounts use Indian grouping and two decimal places 
 
 ## 5. Layout
 
-Use a 4px base spacing scale: 8px related controls, 12px compact groups, 16px cards/gutters, 24px sections, 32–40px landing sections. No horizontal page overflow at 320px. A two-column summary is permitted for short numbers; forms remain single column. Bottom navigation has safe-area padding and matching content clearance.
+Use a 4px base spacing scale: 8px related controls, 12px compact groups, 16px cards/gutters, 24px sections, 32–40px landing sections. No horizontal page overflow at 320px. A two-column summary is permitted for short numbers; forms remain single column. Mobile navigation clears the safe area and leaves matching content space.
 
-The utility header contains business identity, notifications and search. Search accepts lorry number, party, destination or bill ID. The adjacent plus button starts a load. The mobile drawer also provides the signed-in profile, role and logout.
+The utility header contains business identity, notifications and search. Search accepts lorry number, party, destination or bill ID. The adjacent plus button starts a load. The floating navigation stays separate from the header and keeps its labels visible on every screen size.
 
 ## 6. Motion and accessibility
 

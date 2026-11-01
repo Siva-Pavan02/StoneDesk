@@ -82,15 +82,44 @@ const records = statuses.map((status, i) => ({
   ] }],
   summary: { totalPieces: 43, totalDispatchVolumeSqFt: 268.5, baseMaterialTotal: 17184, loadingAndRoyaltyFees: 1200, netBillableAmount: 18384 },
 }));
-const analyticsMock = empty => {
+const addAnalyticsDays = (value, days) => new Date(Date.parse(`${value}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
+const analyticsMock = (empty, selectedPeriod = '3') => {
+  const allTime = selectedPeriod === 'all';
+  const days = allTime ? null : Number(selectedPeriod);
+  const to = '2026-10-09';
+  const from = allTime ? null : addAnalyticsDays(to, 1 - days);
   const totals = empty ? { finalizedLoads: 0, billed: 0, areaSqFt: 0, pieces: 0, averageBilled: 0 } : { finalizedLoads: 5, billed: 91920, areaSqFt: 1342.5, pieces: 215, averageBilled: 18384 };
-  const daily = Array.from({ length: 30 }, (_, i) => ({ date: new Date(Date.UTC(2026, 8, 10 + i)).toISOString().slice(0, 10), billed: !empty && i % 6 === 2 ? 18384 : 0, loads: !empty && i % 6 === 2 ? 1 : 0 }));
-  return { period: { from: '2026-09-10', to: '2026-10-09', days: 30, timezone: 'Asia/Kolkata', dateBasis: 'dispatchDate' }, comparison: { from: '2026-08-11', to: '2026-09-09' },
+  const dates = allTime ? ['2026-09-01', '2026-10-01'] : Array.from({ length: days }, (_, i) => addAnalyticsDays(from, i));
+  const trend = dates.map((date, i) => {
+    const active = !empty && i >= dates.length - 2;
+    return { date, billed: active ? i === dates.length - 2 ? 55152 : 36768 : 0, loads: active ? i === dates.length - 2 ? 3 : 2 : 0 };
+  });
+  const paymentTrend = dates.map((date, i) => {
+    const receipt = !empty && i === dates.length - 1 ? 30000 : !empty && i === dates.length - 2 ? 15000 : 0;
+    const completed = !empty && i >= dates.length - 2 ? 15000 : 0;
+    return { date, received: receipt, completedInvoiceTotal: completed, completedInvoices: completed ? 1 : 0 };
+  });
+  return { period: { from, to, days, granularity: allTime ? 'month' : 'day', timezone: 'Asia/Kolkata', dateBasis: 'dispatchDate' }, comparison: allTime ? null : { from: addAnalyticsDays(from, -days), to: addAnalyticsDays(from, -1) },
     statusCounts: { Draft: empty ? 0 : 2, Dispatched: empty ? 0 : 2, Delivered: empty ? 0 : 3 }, current: totals,
-    previous: empty ? totals : { finalizedLoads: 4, billed: 73536, areaSqFt: 1074, pieces: 172, averageBilled: 18384 }, daily,
-    topDestinations: empty ? [] : [{ name: 'Sample North Yard', billed: 55152, loads: 3 }, { name: 'Sample South Yard', billed: 36768, loads: 2 }], unreadable: 0 };
+    previous: empty ? totals : { finalizedLoads: 4, billed: 73536, areaSqFt: 1074, pieces: 172, averageBilled: 18384 }, trend,
+    topDestinations: empty ? [] : [{ name: 'Sample North Yard', billed: 55152, loads: 3 }, { name: 'Sample South Yard', billed: 36768, loads: 2 }], unreadable: 0,
+    paymentAnalytics: {
+      period: { from, to, days, timezone: 'Asia/Kolkata' },
+      current: empty
+        ? { received: 0, completedInvoiceTotal: 0, completedInvoices: 0, outstanding: 0, unpaidInvoices: 0, partialInvoices: 0 }
+        : { received: 45000, completedInvoiceTotal: 30000, completedInvoices: 2, outstanding: 15000, unpaidInvoices: 2, partialInvoices: 2 },
+      previous: { received: empty ? 0 : 15000 },
+      trend: paymentTrend,
+      parties: empty ? [] : [
+        { party: 'Sample Buyer 1', received: 15000, completedInvoiceTotal: 15000, completedInvoices: 1, outstanding: 6000, unpaidInvoices: 0, partialInvoices: 1 },
+        { party: 'Sample Buyer 2', received: 12000, completedInvoiceTotal: 15000, completedInvoices: 1, outstanding: 4000, unpaidInvoices: 0, partialInvoices: 1 },
+        { party: 'Sample Buyer 3', received: 10000, completedInvoiceTotal: 0, completedInvoices: 0, outstanding: 3000, unpaidInvoices: 1, partialInvoices: 0 },
+        { party: 'Sample Buyer 4', received: 8000, completedInvoiceTotal: 0, completedInvoices: 0, outstanding: 2000, unpaidInvoices: 1, partialInvoices: 0 }
+      ]
+    }
+  };
 };
-const navigation = [['profile', 'Profile'], ['home', 'Dashboard'], ['entries', 'Loading entries'], ['settings', 'Settings']];
+const navigation = [['profile', 'Profile'], ['home', 'Dashboard'], ['payments', 'Payments'], ['entries', 'Loading entries'], ['settings', 'Settings']];
 const results = { base, browser: executable, startedAt: new Date().toISOString(), cases: [], productionFilesUnchanged: null };
 let browser;
 let shotNumber = 0;
@@ -136,7 +165,7 @@ async function makeCase(kind, language, width, options = {}) {
         const statusCounts = ['Draft', 'Dispatched', 'Delivered'].reduce((counts, status) => ({ ...counts, [status]: options.empty ? 0 : records.filter(record => record.status === status).length }), { all: options.empty ? 0 : records.length });
         body = options.empty ? { data: [], nextCursor: null, statusCounts } : url.searchParams.has('cursor') ? { data: records.slice(6), nextCursor: null, statusCounts } : { data: records.slice(0, 6), nextCursor: 'mock-next', statusCounts };
       }
-      else if (apiPath === '/dispatches/analytics') body = analyticsMock(options.empty);
+      else if (apiPath === '/dispatches/analytics') body = analyticsMock(options.empty, url.searchParams.get('period') || '3');
       else if (/^\/dispatches\/[^/]+\/payments$/.test(apiPath)) {
         const record = records.find(record => record.id === apiPath.split('/')[2]);
         if (record) body = { invoiceTotal: record.summary.netBillableAmount, received: 0, balance: record.summary.netBillableAmount, status: 'PAYMENT_DUE', payments: [] };
@@ -379,6 +408,37 @@ async function workspace(language, width) {
     await expect(main().locator('.status-tag:visible:not(.status-draft)')).toHaveCount(0);
     await capture('dashboard-priority'); await trigger.click(); await expect(trigger).toHaveAttribute('aria-pressed', 'false'); await expect(visibleRecords()).toHaveCount(5);
   });
+  await check('Payments page owns finance insights without repeating them on dashboard', async () => {
+    await expect(main().locator('.analytics-domain h3')).toHaveText('Logistics');
+    await expect(main().locator('.payments-summary, .payments-trend-chart, .payments-party-bars')).toHaveCount(0);
+    await page.evaluate(() => { location.hash = 'payments'; });
+    await view('payments');
+    const payments = main().locator('.payments-analytics');
+    await expect(payments.getByRole('heading', { name: 'Payments', exact: true })).toBeVisible();
+    await expect(payments.locator('.payments-summary dt')).toHaveText(['Total billed', 'Received', 'Invoices paid in full', 'Outstanding']);
+    await expect(payments.locator('.payments-summary dd')).toHaveText(['₹91,920.00', '₹45,000.00', '2₹30,000.00 invoice value', '₹15,000.00']);
+    await expect(payments.locator('.payments-summary > div').nth(3)).toContainText('All time');
+    await expect(payments.locator('.payments-trend-bar')).toHaveCount(6);
+    await expect(payments.locator('.payments-party-bars > li')).toHaveCount(4);
+    await expect(payments.locator('.analytics-payment-status')).toHaveText(['Part-paid', 'Part-paid', 'Unpaid', 'Unpaid']);
+    await expect(payments.locator('.analytics-donut, .analytics-party-list')).toHaveCount(0);
+    await expect(payments.getByRole('button', { name: '3 days', exact: true })).toHaveCSS('min-height', '44px');
+    const size = await payments.evaluate(element => ({ client: element.clientWidth, scroll: element.scrollWidth }));
+    assert.ok(size.scroll <= size.client, `Payments analytics overflow: ${JSON.stringify(size)}`);
+    const allTime = payments.getByRole('group', { name: 'Payments period' }).getByRole('button', { name: 'All time', exact: true });
+    await Promise.all([
+      page.waitForResponse(response => {
+        const url = new URL(response.url());
+        return url.pathname.endsWith('/dispatches/analytics') && url.searchParams.get('period') === 'all';
+      }),
+      allTime.click()
+    ]);
+    await expect(allTime).toHaveAttribute('aria-pressed', 'true');
+    await expect(payments.locator('.payments-trend-chart text').last()).toContainText('Oct');
+    await overflow('payments', true);
+    await page.evaluate(() => { location.hash = 'home'; });
+    await view('home');
+  });
   await check('Refresh and both supporting metric navigation actions', async () => {
     await Promise.all([page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/dispatches')), main().getByRole('button', { name: 'Refresh', exact: true }).click()]);
     await expect(visibleRecords()).toHaveCount(5);
@@ -390,7 +450,7 @@ async function workspace(language, width) {
       const trigger = page.locator('.mobile-menu'), drawer = page.locator('#workspace-navigation-dialog');
       await expect(trigger).toHaveAttribute('aria-expanded', 'false'); await trigger.click(); await expect(drawer).toBeVisible(); await expect(trigger).toHaveAttribute('aria-expanded', 'true');
       assert.ok(await drawer.evaluate(element => element.matches(':modal') && element.contains(document.activeElement)));
-      await expect(drawer.locator('nav a')).toHaveCount(4); await expect(drawer.getByRole('button', { name: 'Log out', exact: true })).toBeVisible(); await capture('mobile-navigation');
+      await expect(drawer.locator('nav a')).toHaveCount(5); await expect(drawer.getByRole('button', { name: 'Log out', exact: true })).toBeVisible(); await capture('mobile-navigation');
       for (let i = 0; i < 8; i++) {
         await page.keyboard.press('Tab');
         // Chrome may focus its own browser UI at the end of a native dialog's
@@ -413,7 +473,7 @@ async function workspace(language, width) {
       assert.ok(links.every(link => link.display === 'flex' && link.width >= link.available - 2 && parseFloat(link.minHeight) >= 44), JSON.stringify(links));
     });
     if (await page.locator('#workspace-navigation-dialog').isVisible()) await page.keyboard.press('Escape');
-  } else await check('Desktop has four sidebar actions and a separate New load action', async () => { await expect(page.locator('.workspace-sidebar nav a:visible')).toHaveCount(4); await expect(page.locator('.mobile-menu')).not.toBeVisible(); await expect(page.locator('.bottom-nav')).toHaveCount(0); });
+  } else await check('Desktop has five sidebar actions and a separate New load action', async () => { await expect(page.locator('.workspace-sidebar nav a:visible')).toHaveCount(5); await expect(page.locator('.mobile-menu')).not.toBeVisible(); await expect(page.locator('.bottom-nav')).toHaveCount(0); });
   await check('Notifications native dialog close, Escape and task navigation', async () => {
     const trigger = page.locator('.workspace-notifications'), dialog = page.locator('dialog[aria-labelledby="attention-title"]');
     await trigger.click(); await expect(dialog).toBeVisible(); await dialog.getByRole('button', { name: 'Close', exact: true }).click(); await expect(dialog).not.toBeVisible();

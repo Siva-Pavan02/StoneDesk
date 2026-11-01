@@ -40,6 +40,8 @@ export default function LoadHub({
   onNew,
   updatedAt,
   analytics,
+  analyticsPeriod,
+  onAnalyticsPeriodChange,
   onRetryAnalytics,
   admin = false,
   onDelete,
@@ -246,32 +248,6 @@ export default function LoadHub({
     refreshPhase === "refreshing" ||
     (loading && refreshPhase === "idle" && !loads.length);
   const drafts = loads.filter((l) => l.status === "Draft");
-  const transit = loads.filter((l) => l.status === "Dispatched");
-  const invoices = loads.filter((l) => l.status !== "Draft");
-  const byOldest = (a, b) => new Date(a.date) - new Date(b.date);
-  const oldestDrafts = [...drafts].sort(byOldest).slice(0, 3);
-  const roadLoads = [...transit].sort(byOldest).slice(0, 3);
-  const dayKey = (value) =>
-    new Date(value).toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-  const daysSince = (value) =>
-    value
-      ? Math.max(
-          0,
-          Math.round((Date.parse(dayKey(now)) - Date.parse(dayKey(value))) / 864e5),
-        )
-      : 0;
-  const age = (value) => {
-    const days = daysSince(value);
-    if (days === 0) return "Today";
-    if (days === 1) return "Yesterday";
-    return `${days} days ago`;
-  };
-  const monthKey = dayKey(now).slice(0, 7);
-  const monthBills = invoices.filter(
-    (l) => l.date && dayKey(l.date).slice(0, 7) === monthKey,
-  );
-  const sumBilled = (list) =>
-    list.reduce((sum, l) => sum + (l.summary?.netBillableAmount || 0), 0);
   const search = query.trim().toLowerCase();
   const filtered = loads.filter(
     (l) =>
@@ -298,16 +274,18 @@ export default function LoadHub({
           : "In transit";
   return (
     <div className={view === "home" ? "dashboard-home" : "space-y-5"}>
-      <header className={view === "home" ? "dashboard-heading" : ""}>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            {heading}
-          </h1>
-          <p className="mt-2 text-sm text-on-surface">
-            {"From the first measurement to the final bill."}
-          </p>
-        </div>
-      </header>
+      {view !== "home" && (
+        <header>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">
+              {heading}
+            </h1>
+            <p className="mt-2 text-sm text-on-surface">
+              {"From the first measurement to the final bill."}
+            </p>
+          </div>
+        </header>
+      )}
       {view === "home" && (
         <>
           {recoveries.length > 0 && (
@@ -399,164 +377,18 @@ export default function LoadHub({
               </ul>
             </section>
           )}
-          <div className="dashboard-overview">
-            <section
-              className="dashboard-priority"
-              aria-labelledby="priority-heading"
-            >
-              <div className="dashboard-priority-top">
-                <span className="surface-kicker">
-                  {"Needs your attention"}
-                </span>
-                <span
-                  className={`priority-status ${drafts.length ? "is-pending" : "is-clear"}`}
-                >
-                  {drafts.length
-                    ? "Pending"
-                    : "Up to date"}
-                </span>
-              </div>
-              {onNew && (
-                <button
-                  type="button"
-                  className="dashboard-create-load"
-                  onClick={onNew}
-                >
-                  <Icon name="plus" />
-                  <span>{"Create load"}</span>
-                </button>
-              )}
-              <h2 id="priority-heading">
-                <strong>{drafts.length}</strong>
-                <span>
-                  {"drafts to review"}
-                </span>
-              </h2>
-              {oldestDrafts.length ? (
-                <ul className="dashboard-queue">
-                  {oldestDrafts.map((item) => (
-                    <li key={item.id}>
-                      <a
-                        className="dashboard-queue-row"
-                        {...billLink(item.id)}
-                      >
-                        <span className="queue-main">
-                          <span className="queue-lorry" translate="no">
-                            {item.logistics?.truckNumber || "—"}
-                          </span>
-                          <span className="queue-sub">
-                            {item.partyName || "No party"}
-                            {" · "}
-                            {loadArea(item.summary?.totalDispatchVolumeSqFt)}{" "}
-                            {"sq ft"}
-                          </span>
-                        </span>
-                        <span className="queue-side">
-                          <span className="queue-amount">
-                            {money(item.summary?.netBillableAmount || 0)}
-                          </span>
-                          <span className="queue-sub">{age(item.date)}</span>
-                        </span>
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="dashboard-queue-empty">
-                  {"Nothing waiting for review."}
-                </p>
-              )}
-              {(drafts.length > 0 || priorityOnly) && (
-                <button
-                  type="button"
-                  aria-pressed={priorityOnly}
-                  className="dashboard-priority-action"
-                  onClick={() => setPriorityOnly((value) => !value)}
-                >
-                  {priorityOnly
-                    ? "Show recent loads"
-                    : `Show all ${drafts.length} drafts below`}
-                  <span className="action-icon-disc">
-                    <Icon name="arrow" />
-                  </span>
-                </button>
-              )}
-            </section>
-            <div className="dashboard-supporting">
-              <section className="dashboard-support-metric" aria-labelledby="road-metric-label">
-                <div className="dashboard-metric-label">
-                  <span id="road-metric-label">
-                    {"On the road"} · {transit.length}
-                  </span>
-                  <Icon name="truck" />
-                </div>
-                {roadLoads.length ? (
-                  <ul className="dashboard-queue">
-                    {roadLoads.map((item) => {
-                      const days = daysSince(item.date);
-                      return (
-                        <li key={item.id}>
-                          <a
-                            className="dashboard-queue-row"
-                            {...billLink(item.id)}
-                          >
-                            <span className="queue-main">
-                              <span className="queue-lorry" translate="no">
-                                {item.logistics?.truckNumber || "—"}
-                              </span>
-                              <span className="queue-sub">
-                                {item.logistics?.buyerDestination ||
-                                  item.partyName ||
-                                  "—"}
-                              </span>
-                            </span>
-                            <span
-                              className={`queue-age${days >= 3 ? " is-late" : ""}`}
-                            >
-                              {age(item.date)}
-                            </span>
-                          </a>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <p className="dashboard-queue-empty">
-                    {"No lorries on the road."}
-                  </p>
-                )}
-                <a
-                  className="dashboard-metric-link"
-                  {...pageLink("entries?status=Dispatched")}
-                >
-                  {"Loads in transit"}
-                  <Icon name="arrow" />
-                </a>
-              </section>
-              <section className="dashboard-support-metric" aria-labelledby="billed-metric-label">
-                <div className="dashboard-metric-label">
-                  <span id="billed-metric-label">{"Billed this month"}</span>
-                  <Icon name="bill" />
-                </div>
-                <strong className="dashboard-metric-value">
-                  {money(sumBilled(monthBills))}
-                </strong>
-                <p className="queue-sub">
-                  {`${monthBills.length} bills · ${money(sumBilled(invoices))} all time`}
-                </p>
-                <a
-                  className="dashboard-metric-link"
-                  {...pageLink("entries")}
-                >
-                  {"All loads"}
-                  <Icon name="arrow" />
-                </a>
-              </section>
+          <header className="dashboard-priority">
+            <div className="dashboard-priority-heading">
+              <div><p className="surface-kicker">WORKSPACE</p><h1>Dashboard</h1></div>
+              {onNew && <Button primary className="dashboard-create-load" label="New load" onClick={onNew}><Icon name="plus" /></Button>}
             </div>
-          </div>
+            {drafts.length > 0 && <button type="button" aria-pressed={priorityOnly} className="dashboard-priority-action" onClick={() => setPriorityOnly(value => !value)}>{priorityOnly ? "Show recent loads" : "Review drafts"}<Icon name="arrow" /></button>}
+          </header>
           {analytics && (
             <DashboardAnalytics
               analytics={analytics}
+              selectedPeriod={analyticsPeriod}
+              onPeriodChange={onAnalyticsPeriodChange}
               onRetry={onRetryAnalytics}
             />
           )}
@@ -688,7 +520,7 @@ export default function LoadHub({
                 ? "Try another search or choose a different filter."
                 : view === "entries" && filter === "Dispatched"
                   ? "Finalize a bill to dispatch a load. It will appear here until it is delivered."
-                  : "Use New load in the header to add measurements and prepare a bill."}
+                  : "Open navigation and choose New load to add measurements and prepare a bill."}
             </p>
           </Card>
         )}

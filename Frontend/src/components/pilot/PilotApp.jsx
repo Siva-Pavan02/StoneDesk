@@ -14,6 +14,7 @@ import NewLoad from "./NewLoad.jsx";
 import WorkspaceShell from "./WorkspaceShell.jsx";
 import LoadHub from "./LoadHub.jsx";
 import AccountSettings from "./AccountSettings.jsx";
+import PaymentsAnalytics from "./PaymentsAnalytics.jsx";
 import { NEW_LOAD_ROUTE, profileSaveTarget, resolveRoute } from "../../utils/workspaceRoutes.js";
 const BillView = lazy(() => import("./BillView.jsx"));
 const LoadingRequirements = lazy(() => import("../LoadingListScreen.jsx"));
@@ -42,8 +43,9 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
     error: "",
     loading: true,
   });
+  const [analyticsPeriod, setAnalyticsPeriod] = useState("3");
   const analyticsRequest = useRef(0);
-  // Analytics only appear on the dashboard; fetch them there, and again only after loads change.
+  // Dashboard and Payments share analytics data, refreshed after loads change.
   const analyticsStale = useRef(true);
   const loadsStale = useRef(true);
   const loadsKey = useRef(null);
@@ -75,12 +77,12 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
     setError("");
     window.scrollTo(0, 0);
   }
-  const refreshAnalytics = useCallback(async () => {
+  const refreshAnalytics = useCallback(async (period = analyticsPeriod, clearData = false) => {
     const ticket = ++analyticsRequest.current;
     analyticsStale.current = false;
-    setAnalytics((prev) => ({ ...prev, error: "", loading: true }));
+    setAnalytics((prev) => ({ ...prev, data: clearData ? null : prev.data, error: "", loading: true }));
     try {
-      const data = await request("/dispatches/analytics");
+      const data = await request(`/dispatches/analytics?period=${encodeURIComponent(period)}`);
       if (ticket === analyticsRequest.current)
         setAnalytics({ data, error: "", loading: false });
     } catch (err) {
@@ -91,7 +93,12 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
           loading: false,
         }));
     }
-  }, []);
+  }, [analyticsPeriod]);
+  const changeAnalyticsPeriod = useCallback((period) => {
+    if (period === analyticsPeriod) return;
+    setAnalyticsPeriod(period);
+    refreshAnalytics(period, true);
+  }, [analyticsPeriod, refreshAnalytics]);
   const refreshLoads = useCallback(async () => {
     if (loadsInFlight.current?.path === listPath) return;
     const ticket = ++loadsRequest.current;
@@ -315,7 +322,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
       (loadsInFlight.current && loadsInFlight.current.path !== listPath)) refreshLoads();
   }, [current, settings, listPath, refreshLoads]);
   useEffect(() => {
-    if (current === "home" && settings && analyticsStale.current)
+    if (["home", "payments"].includes(current) && settings && analyticsStale.current)
       refreshAnalytics();
   }, [current, settings, refreshAnalytics]);
   let content;
@@ -408,6 +415,9 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
             onResume={resume}
             onEdit={reviseInvoice}
             onDeleted={deleted}
+            onPaymentsChanged={() => {
+              analyticsStale.current = true;
+            }}
           />
         </Suspense>
       ) : (
@@ -424,7 +434,21 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
         section={view.split("/")[1]}
         onChanged={setSettings}
         onDeleted={onLogout}
+        onLogout={logout}
         onUserChange={onUserChange}
+      />
+    );
+  else if (current === "payments")
+    content = (
+      <PaymentsAnalytics
+        analytics={analytics}
+        selectedPeriod={analyticsPeriod}
+        onPeriodChange={changeAnalyticsPeriod}
+        onRetry={() => refreshAnalytics()}
+        onViewParty={party => {
+          setQuery(party === "Unspecified party" ? "" : party);
+          navigate("entries");
+        }}
       />
     );
   else
@@ -461,7 +485,9 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
           hasMore={!!nextCursor}
           loading={refreshing}
           analytics={analytics}
-          onRetryAnalytics={refreshAnalytics}
+          analyticsPeriod={analyticsPeriod}
+          onAnalyticsPeriodChange={changeAnalyticsPeriod}
+          onRetryAnalytics={() => refreshAnalytics()}
           recoveries={recoveries}
           maxDrafts={MAX_DRAFTS}
           onContinue={(draft) => {
@@ -481,8 +507,6 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
       user={user}
       view={current}
       navigate={navigate}
-      onLogout={logout}
-      onNew={newLoad}
       attention={loads.filter((l) => l.status === "Draft").length}
     >
       <ErrorMessage error={error} />

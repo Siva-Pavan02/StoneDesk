@@ -1,78 +1,59 @@
-import { money } from '../../utils/pilotDraft.js';
-import Icon from './Icon.jsx';
+import { useId, useState } from 'react';
 
-const zone = 'Asia/Kolkata';
+const count = value => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(value);
+const dateLabel = (value, monthly = false) => new Date(`${value}T00:00:00+05:30`).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', ...(monthly ? { month: 'short', year: '2-digit' } : { day: 'numeric', month: 'short' }) });
 
-function change(current, previous) {
-  if (!previous) return null;
-  return Math.round(((current - previous) / previous) * 100);
-}
-
-export default function DashboardAnalytics({ analytics, onRetry }) {
-  const locale = 'en-IN';
-  const countFormat = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
-  const count = value => countFormat.format(Number(value));
-  const day = (value, options) => new Date(`${value}T00:00:00+05:30`).toLocaleDateString(locale, { timeZone: zone, ...options });
-  const short = value => day(value, { day: 'numeric', month: 'short' });
+export default function DashboardAnalytics({ analytics, selectedPeriod = '3', onPeriodChange, onRetry }) {
+  const id = useId();
+  const [activePoint, setActivePoint] = useState(null);
   const { data, error, loading } = analytics;
-
-  const heading = <div className="analytics-heading">
-    <div>
-      <h2 id="analytics-heading">Last 30 days</h2>
-      <p>{data ? `${short(data.period.from)} – ${short(data.period.to)}` : 'Dispatched and delivered loads'}</p>
+  const heading = <header className="analytics-heading">
+    <div><h2 id={`${id}-heading`}>Overview</h2><p>{selectedPeriod === 'all' ? 'All time' : `Last ${selectedPeriod} days`}{data?.period.from ? ` · ${dateLabel(data.period.from)} to ${dateLabel(data.period.to)}` : ''}</p></div>
+    <div className="analytics-period-filter" role="group" aria-label="Analytics period">
+      {['3', '7', '30', 'all'].map(period => <button key={period} type="button" aria-pressed={selectedPeriod === period} onClick={() => { setActivePoint(null); onPeriodChange?.(period); }}>{period === 'all' ? 'All time' : `${period} days`}</button>)}
     </div>
-    <span className="analytics-note">Billed, not cash collected</span>
-  </div>;
+  </header>;
+  if (!data) return <section className="dashboard-analytics" aria-labelledby={`${id}-heading`} aria-busy={loading}>{heading}<div className="analytics-state" role={loading ? 'status' : 'alert'}>{loading ? 'Loading overview…' : <>Analytics could not be loaded.<button type="button" onClick={onRetry}>Try again</button></>}</div></section>;
 
-  if (!data && loading) return <section className="dashboard-analytics" aria-labelledby="analytics-heading" aria-busy="true">{heading}<div className="analytics-skeleton" role="status" aria-label="Loading analytics"><div /><div /><div /><div /></div></section>;
-  if (!data) return <section className="dashboard-analytics" aria-labelledby="analytics-heading">{heading}<div className="analytics-state" role="alert"><p>Analytics could not be loaded. Your loads and bills are not affected.</p><button type="button" className="text-button flex items-center gap-2 text-sm" onClick={onRetry}><Icon name="refresh" />Try again</button></div></section>;
+  const { trend = [], statusCounts = {} } = data;
+  const monthly = data.period.granularity === 'month';
+  const maxLoads = Math.max(1, ...trend.map(point => point.loads));
+  const slotWidth = 552 / Math.max(1, trend.length);
+  const barWidth = Math.min(48, slotWidth * 0.65);
+  const x = index => 36 + (index + 0.5) * slotWidth;
+  const y = loads => 172 - loads / maxLoads * 144;
+  const point = trend[activePoint ?? trend.length - 1];
+  const statuses = [['Draft', 'Draft', 'var(--text-muted)'], ['Dispatched', 'In transit', 'var(--ui-info)'], ['Delivered', 'Delivered', 'var(--ui-success)']];
+  const statusTotal = statuses.reduce((total, [key]) => total + (statusCounts[key] || 0), 0);
 
-  const { current, previous, daily, topDestinations, statusCounts, unreadable } = data;
-  const delta = change(current.billed, previous.billed);
-  const peak = Math.max(...daily.map(point => point.billed), 0);
-  const billedDays = daily.filter(point => point.loads);
-  const empty = !current.finalizedLoads;
-  const deltaLabel = delta === null
-    ? current.billed ? 'No billing in the earlier 30 days' : ''
-    : 'vs earlier 30 days';
-  const deltaPercent = delta === null ? '' : `${delta > 0 ? '+' : ''}${delta}%`;
-  const chartLabel = `Daily billed amount for the last 30 days. Total ${money(current.billed)} across ${current.finalizedLoads} loads.`;
-
-  return <section className="dashboard-analytics" aria-labelledby="analytics-heading" aria-busy={loading}>
+  return <section className="dashboard-analytics" aria-labelledby={`${id}-heading`} aria-busy={loading}>
     {heading}
-    {error && <div className="analytics-state analytics-state-inline" role="alert"><p>Showing earlier figures. Refresh failed.</p><button type="button" className="text-button text-sm" onClick={onRetry}>Try again</button></div>}
-    {empty ? <div className="analytics-state"><p>No dispatched or delivered loads in the last 30 days yet. Totals appear here once a bill is finalized.</p></div> : <>
-      <dl className="analytics-stats">
-        <div className="analytics-stat analytics-stat-lead"><dt>Billed</dt><dd>{money(current.billed)}</dd>{deltaLabel && <span className="analytics-delta">{deltaPercent && <span className={`analytics-delta-chip ${delta > 0 ? 'is-up' : delta < 0 ? 'is-down' : ''}`}>{deltaPercent}</span>} {deltaLabel}</span>}</div>
-        <div className="analytics-stat"><dt>Finalized loads</dt><dd>{count(current.finalizedLoads)}</dd><span className="analytics-delta">{`${count(previous.finalizedLoads)} earlier`}</span></div>
-        <div className="analytics-stat"><dt>Area dispatched</dt><dd>{count(current.areaSqFt)}<small> sq ft</small></dd></div>
-        <div className="analytics-stat"><dt>Pieces</dt><dd>{count(current.pieces)}</dd></div>
-      </dl>
-      <div className="analytics-body">
-        <figure className="analytics-chart">
-          <div className="analytics-bars" role="img" aria-label={chartLabel}>
-            {daily.map(point => <span key={point.date} className={point.billed ? 'analytics-bar has-value' : 'analytics-bar'} style={{ height: point.billed && peak ? `${Math.max(6, (point.billed / peak) * 100)}%` : undefined }} title={`${short(point.date)}: ${money(point.billed)}`} />)}
-          </div>
-          <figcaption><span>{short(data.period.from)}</span><span>Peak day {money(peak)}</span><span>{short(data.period.to)}</span></figcaption>
-          <details className="analytics-table">
-            <summary>View daily values</summary>
-            <table className="business-table"><thead><tr><th scope="col">Date</th><th scope="col">Loads</th><th scope="col">Billed</th></tr></thead><tbody>{billedDays.map(point => <tr key={point.date}><th scope="row">{day(point.date, { day: 'numeric', month: 'short', year: 'numeric' })}</th><td className="numeric">{count(point.loads)}</td><td className="numeric">{money(point.billed)}</td></tr>)}</tbody></table>
-          </details>
-        </figure>
-        <div className="analytics-insights">
-          <h3>Insights</h3>
-          <ul>
-            <li><span>Average per load</span><strong>{money(current.averageBilled)}</strong></li>
-            <li><span>Drafts in this period</span><strong>{statusCounts.Draft}</strong></li>
-            <li><span>Delivered</span><strong>{statusCounts.Delivered}</strong></li>
-          </ul>
-          {!!topDestinations.length && <>
-            <h3>Top destinations</h3>
-            <ol>{topDestinations.map(item => <li key={item.name}><span>{item.name}<small>{`${item.loads} loads`}</small></span><strong>{money(item.billed)}</strong></li>)}</ol>
-          </>}
-          {unreadable > 0 && <p className="analytics-warning" role="note">{`${unreadable} loads have unreadable totals and are not included.`}</p>}
-        </div>
-      </div>
-    </>}
+    {error && <div className="analytics-state" role="alert">Showing earlier figures. Refresh failed.<button type="button" onClick={onRetry}>Try again</button></div>}
+    {!!data.unreadable && <p className="analytics-note" role="status">Some loads have incomplete totals and are excluded from dispatch volume and billing.</p>}
+    <div className="analytics-domain"><h3>Logistics</h3><span>By load date · current status</span></div>
+    <div className="analytics-grid">
+      <section className="analytics-trend" aria-labelledby={`${id}-dispatch`}>
+        <h4 id={`${id}-dispatch`}>{monthly ? 'Monthly' : 'Daily'} dispatch volume</h4>
+        <p className="analytics-note">Dispatched and delivered loads</p>
+        {trend.length ? <>
+          <p className="analytics-readout" aria-live="polite">{point ? `${dateLabel(point.date, monthly)} · ${count(point.loads)} loads` : 'No dispatches'}</p>
+          <svg className="analytics-columns" viewBox="0 0 608 208" role="group" aria-label="Dispatch volume bar chart">
+            {[0, maxLoads].map(value => <g key={value}><line x1="36" x2="588" y1={y(value)} y2={y(value)} stroke="var(--ui-border)" /><text x="24" y={y(value) + 4} textAnchor="end">{count(value)}</text></g>)}
+            {trend.map((entry, index) => <g key={entry.date} tabIndex="0" role="img" aria-label={`${dateLabel(entry.date, monthly)}: ${entry.loads} loads`} onFocus={() => setActivePoint(index)} onMouseEnter={() => setActivePoint(index)} onClick={() => setActivePoint(index)}>
+              <rect x={x(index) - slotWidth / 2} y="24" width={slotWidth} height="152" fill="transparent" />
+              <rect className="analytics-volume-bar" x={x(index) - barWidth / 2} y={y(entry.loads)} width={barWidth} height={172 - y(entry.loads)} rx="2" fill="var(--ui-accent)" opacity={activePoint === null || activePoint === index ? 1 : 0.45} />
+              <title>{dateLabel(entry.date, monthly)}: {entry.loads} loads</title>
+            </g>)}
+            <text x="36" y="202">{dateLabel(trend[0].date, monthly)}</text><text x="588" y="202" textAnchor="end">{trend.length > 1 ? dateLabel(trend.at(-1).date, monthly) : ''}</text>
+          </svg>
+        </> : <p className="analytics-empty">No dispatch history yet.</p>}
+      </section>
+      <section className="analytics-fleet" aria-labelledby={`${id}-fleet`}>
+        <h4 id={`${id}-fleet`}>Load status</h4><p className="analytics-note">Loads dated in this period, not vehicle availability</p>
+        <div className="analytics-segments" aria-hidden="true">{statuses.map(([key, , color]) => <span key={key} style={{ width: `${statusTotal ? (statusCounts[key] || 0) / statusTotal * 100 : 0}%`, background: color }} />)}</div>
+        <ul className="analytics-legend">{statuses.map(([key, label, color]) => <li key={key}><span className="analytics-dot" style={{ background: color }} /><span>{label}</span><strong>{count(statusCounts[key] || 0)}</strong></li>)}</ul>
+        {!statusTotal && <p className="analytics-empty">No loads in this period.</p>}
+      </section>
+    </div>
   </section>;
 }

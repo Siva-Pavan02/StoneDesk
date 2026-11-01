@@ -72,7 +72,7 @@ Previous step preserves input. Editing the profile uses the same wizard. GST is 
 
 ## Workspace and navigation
 
-The header stays structurally consistent across pages. A mobile drawer contains Dashboard, Loading entries, Monitor & dispatch, Invoices and Settings. A four-item bottom bar supports frequent daily navigation. The profile area identifies the current person and role; switching people uses logout/login.
+The header stays structurally consistent across pages. One role-aware floating navigation bar stays at the bottom on phones and near the top on larger screens. It preserves the current Dashboard, Loading entries, Profile and Settings destinations; logout is confirmed from Settings. The profile area identifies the current person and role; switching people uses logout/login.
 
 Search matches lorry number, party name, destination and full bill ID. Submit moves to Loading entries. Hash routes support browser Back and reopening a bill URL. Notifications show a count of drafts requiring review; no fabricated push notifications or unread badge.
 

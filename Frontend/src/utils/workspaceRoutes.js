@@ -27,6 +27,7 @@ export function resolveRoute(hash) {
 // [key, icon, label, adminOnly]
 export const NAVIGATION = [
   ['home', 'home', 'Dashboard'],
+  ['payments', 'bill', 'Payments'],
   ['entries', 'loads', 'Loading entries'],
   ['profile', 'user', 'Profile', true],
   ['settings', 'settings', 'Settings'],

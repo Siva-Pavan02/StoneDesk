@@ -13,7 +13,7 @@ const { round2 } = require("../utils/dispatchCalculations");
 // Shared with the real controller so money rounding and status cannot drift.
 const { derivePaymentSummary } = require("../utils/paymentSummary");
 const { organizationCode } = require("../utils/organizationCode");
-const { buildAnalytics, windows } = require("../utils/dispatchAnalytics");
+const { buildAnalytics, buildPaymentAnalytics, windows, ANALYTICS_PERIODS } = require("../utils/dispatchAnalytics");
 const { authFlags, requiresCurrentPassword, buildResetUrl } = require("../utils/authFlags");
 const { STATUS_TARGETS, statusTransitionError } = require("../utils/dispatchStatus");
 const { canAddProduct } = require("../utils/roles");
@@ -825,12 +825,17 @@ dispatches.get(
   "/analytics",
   wrap((req, res) => {
     const at = new Date();
-    const range = windows(at);
+    const period = req.query.period ?? "3";
+    if (typeof period !== "string" || !ANALYTICS_PERIODS.has(period)) fail(400, "Invalid analytics period");
+    const range = windows(at, period === "all" ? null : Number(period));
     const records = db.dispatches.filter((d) => {
       const t = new Date(d.date);
-      return t >= range.start && t < range.end;
+      return (!range.start || t >= range.start) && t < range.end;
     });
-    res.json(buildAnalytics(records, at));
+    res.json({
+      ...buildAnalytics(records, at, period),
+      paymentAnalytics: buildPaymentAnalytics(db.dispatches, db.payments, at, period)
+    });
   }),
 );
 dispatches.get(

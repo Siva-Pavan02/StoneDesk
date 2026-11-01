@@ -7,7 +7,7 @@ import AddPaymentDialog from './AddPaymentDialog.jsx';
 const formatDate = (iso) =>
   iso ? new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 
-export default function PaymentSection({ dispatchId, canRecordPayment = true }) {
+export default function PaymentSection({ dispatchId, canRecordPayment = true, onPaymentsChanged }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -49,6 +49,7 @@ export default function PaymentSection({ dispatchId, canRecordPayment = true }) 
 
   function onPaymentSaved(updatedSummary) {
     setData(updatedSummary);
+    onPaymentsChanged?.();
     closeDialog();
   }
 

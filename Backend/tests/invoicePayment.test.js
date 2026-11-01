@@ -338,6 +338,61 @@ test('Invoice Payments V1 API', async (t) => {
     assert.equal(payRes.data.payments[0].amount, 1.01);
   });
 
+  await t.test('15. Analytics reports party payment totals and remains organization-scoped', async () => {
+    const orgAAnalytics = await call(`${API_PREFIX}/dispatches/analytics`, 'GET', undefined, cookieA);
+    assert.equal(orgAAnalytics.status, 200);
+    assert.equal(orgAAnalytics.data.period.days, 3);
+    assert.equal(orgAAnalytics.data.paymentAnalytics.current.received, 90001.01);
+    assert.equal(orgAAnalytics.data.paymentAnalytics.current.completedInvoiceTotal, 90000);
+    assert.equal(orgAAnalytics.data.paymentAnalytics.current.completedInvoices, 2);
+    assert.equal(orgAAnalytics.data.paymentAnalytics.current.outstanding, 99.09);
+    assert.equal(orgAAnalytics.data.paymentAnalytics.current.partialInvoices, 1);
+    assert.equal(orgAAnalytics.data.paymentAnalytics.trend.reduce((sum, point) => sum + point.received, 0), 90001.01);
+    assert.equal(orgAAnalytics.data.paymentAnalytics.trend.reduce((sum, point) => sum + point.completedInvoiceTotal, 0), 90000);
+    assert.equal(orgAAnalytics.data.paymentAnalytics.trend.reduce((sum, point) => sum + point.completedInvoices, 0), 2);
+    assert.ok(orgAAnalytics.data.paymentAnalytics.parties.some(party => party.party === 'Unspecified party'));
+
+    const orgBAnalytics = await call(`${API_PREFIX}/dispatches/analytics`, 'GET', undefined, cookieB);
+    assert.equal(orgBAnalytics.status, 200);
+    assert.deepEqual(orgBAnalytics.data.paymentAnalytics.current, {
+      received: 0,
+      completedInvoiceTotal: 0,
+      completedInvoices: 0,
+      outstanding: 0,
+      unpaidInvoices: 0,
+      partialInvoices: 0
+    });
+    assert.deepEqual(orgBAnalytics.data.paymentAnalytics.parties, []);
+    assert.equal(orgBAnalytics.data.paymentAnalytics.trend.reduce((sum, point) => sum + point.received, 0), 0);
+    assert.equal(orgBAnalytics.data.paymentAnalytics.trend.reduce((sum, point) => sum + point.completedInvoices, 0), 0);
+
+    const shortPeriod = await call(`${API_PREFIX}/dispatches/analytics?period=3`, 'GET', undefined, cookieA);
+    assert.equal(shortPeriod.status, 200);
+    assert.equal(shortPeriod.data.period.days, 3);
+    assert.equal(shortPeriod.data.trend.length, 3);
+    assert.equal(shortPeriod.data.paymentAnalytics.period.days, 3);
+    assert.equal(shortPeriod.data.paymentAnalytics.current.received, 90001.01);
+
+    for (const days of [7, 30]) {
+      const selected = await call(`${API_PREFIX}/dispatches/analytics?period=${days}`, 'GET', undefined, cookieA);
+      assert.equal(selected.status, 200);
+      assert.equal(selected.data.period.days, days);
+      assert.equal(selected.data.trend.length, days);
+    }
+
+    const allTime = await call(`${API_PREFIX}/dispatches/analytics?period=all`, 'GET', undefined, cookieA);
+    assert.equal(allTime.status, 200);
+    assert.equal(allTime.data.period.days, null);
+    assert.equal(allTime.data.period.granularity, 'month');
+    assert.equal(allTime.data.comparison, null);
+    assert.ok(allTime.data.trend.every(point => /^\d{4}-\d{2}-01$/.test(point.date)));
+    assert.ok(allTime.data.paymentAnalytics.trend.every(point => /^\d{4}-\d{2}-01$/.test(point.date)));
+    assert.equal(allTime.data.paymentAnalytics.current.received, 90001.01);
+
+    const invalidPeriod = await call(`${API_PREFIX}/dispatches/analytics?period=14`, 'GET', undefined, cookieA);
+    assert.equal(invalidPeriod.status, 400);
+  });
+
     server.close();
   } catch (err) {
     console.error('INVOICE PAYMENT TEST ERROR:', err);

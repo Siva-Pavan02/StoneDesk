@@ -25,7 +25,7 @@ StoneDesk/
       supabaseKeys.js           Per-component Supabase secret keys (storage, admin)
       pilotCalculations.js      Server-side measurement validation and bill totals
       dispatchCalculations.js   Legacy piece-based totals
-      dispatchAnalytics.js      30-day dashboard analytics (IST)
+      dispatchAnalytics.js      Period-filtered dispatch and payment analytics (IST; daily and all-time monthly buckets)
       organizationCode.js       Shareable organization code generator
       businessBranding.js       Logo upload storage (sharp, content-addressed), business snapshot with a logo reference
       logoStorage.js            Private Supabase bucket or local UPLOAD_DIR; org/<orgId>/<sha256>.png objects
@@ -121,7 +121,8 @@ Every query on tenant data is scoped by the caller's `organizationId`.
 
 | Hash | Screen | Notes |
 | --- | --- | --- |
-| `#home` | `LoadHub` + `DashboardAnalytics` | Dashboard with 30-day analytics |
+| `#home` | `LoadHub` + `DashboardAnalytics` | Logistics dashboard with 3-, 7-, 30-day, and all-time analytics |
+| `#payments` | `PaymentsAnalytics` | Receipts and paid-in-full invoice trends; all-time outstanding by party |
 | `#entries` | `LoadHub` | Load list, `?status=` filter, cursor pagination |
 | `#load` | `NewLoad` + `MeasurementEntry` + `LoadSummary` | Create or edit a draft load |
 | `#bill/:id` | `BillView` | Bill preview, finalize, PDF/Excel/share |
@@ -131,7 +132,7 @@ Every query on tenant data is scoped by the caller's `organizationId`.
 | `#requirements` | `LoadingListScreen` | Loading requirement lists |
 | `#settings/...` | `AccountSettings` | Organization, Products & rates (`#settings/products`, `ProductSettings`: Admin full, Manager add-only, hidden for Dispatcher), team members, account, delete |
 
-`WorkspaceShell.jsx` provides the header and drawer navigation: Profile (Admin), Dashboard, New load, Loading entries, Settings. The New load item runs the same `newLoad()` as the header button. Until the business has a name, the app redirects to setup (`#profile`); a business without products can still open New load. Truck numbers and destinations are remembered automatically when a load is saved and offered as New load suggestions. Unsaved load drafts are kept in `localStorage` (`utils/pilotDraft.js`) and offered for recovery.
+`WorkspaceShell.jsx` provides the header and drawer navigation: Profile (Admin), Dashboard, Payments, New load, Loading entries, Settings. The New load item runs the same `newLoad()` as the header button. Until the business has a name, the app redirects to setup (`#profile`); a business without products can still open New load. Truck numbers and destinations are remembered automatically when a load is saved and offered as New load suggestions. Unsaved load drafts are kept in `localStorage` (`utils/pilotDraft.js`) and offered for recovery.
 
 ## 6. Calculations and Documents
 

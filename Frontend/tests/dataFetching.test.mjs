@@ -7,7 +7,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-const { buildAnalytics } = require('../../Backend/utils/dispatchAnalytics');
+const { buildAnalytics, buildPaymentAnalytics } = require('../../Backend/utils/dispatchAnalytics');
 let pw = process.env.INTERFACE_PLAYWRIGHT_DIR;
 if (!pw) {
   const cache = path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'npm-cache', '_npx');
@@ -38,7 +38,11 @@ try {
       else if (url.pathname === '/api/auth/invitations') body = [];
       else if (url.pathname === '/api/loading-lists') body = { data: [{ id: '11111111-1111-4111-8111-111111111111', loadingListNumber: 'LL-ONE', buyerDestination: 'Kadapa' }], nextCursor: null };
       else if (url.pathname.startsWith('/api/loading-lists/')) { await new Promise(resolve => setTimeout(resolve, 700)); body = { id: '11111111-1111-4111-8111-111111111111', loadingListNumber: 'LL-ONE', supervisor: 'Loaded supervisor', buyerDestination: 'Kadapa', stoneType: 'Stone', finish: 'Polished', requirements: [] }; }
-      else if (url.pathname === '/api/dispatches/analytics') body = buildAnalytics([], new Date());
+      else if (url.pathname === '/api/dispatches/analytics') {
+        const now = new Date();
+        const period = url.searchParams.get('period') || '3';
+        body = { ...buildAnalytics([], now, period), paymentAnalytics: buildPaymentAnalytics([], [], now, period) };
+      }
       else if (url.pathname === '/api/dispatches') {
         const q = url.searchParams.get('q') || 'recent';
         if (q === 'slow') await new Promise(resolve => setTimeout(resolve, 800));
@@ -69,6 +73,10 @@ try {
     await expect.poll(() => requests.filter(p => p.endsWith('?q=fast')).length).toBe(2);
     await page.waitForTimeout(1000);
     await expect(page.getByText('fast Party', { exact: true }).filter({ visible: true }).first()).toBeVisible();
+    const beforePayments = requests.length;
+    await page.evaluate(() => { location.hash = 'payments'; });
+    await expect(page.locator('.payments-analytics')).toBeVisible();
+    assert.deepEqual(requests.slice(beforePayments), ['/api/dispatches/analytics?period=3']);
     const beforeBill = requests.length;
     await page.evaluate(() => { location.hash = 'bill/saved'; });
     await expect.poll(() => requests.slice(beforeBill).includes('/api/dispatches/saved')).toBe(true);
@@ -89,8 +97,7 @@ try {
     await expect.poll(()=>requests.some(p=>p==='/api/loading-lists?q=old')).toBe(true);
     assert.equal(requests.slice(beforeLists).filter(p=>p.startsWith('/api/master-settings/')).length,0);
     assert.deepEqual(errors, []);
-    console.log(`PASS ${width}px: settings requests, lazy lists, debounced search, stale-response protection, bill-only fetch`);
+    console.log(`PASS ${width}px: settings requests, lazy lists, debounced search, stale-response protection, Payments analytics fetch`);
     await context.close();
   }
 } finally { await browser.close(); }
-

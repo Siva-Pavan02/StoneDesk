@@ -1,5 +1,5 @@
 /* One paper document for saved bills and the public sample. No live branding lookup. */
-.invoice-paper-shell { min-width: 0; padding: 6px; border-radius: 30px; background: #fef0ec; box-shadow: 0 16px 44px -28px rgb(251 71 31 / .12); }
+.invoice-paper-shell { min-width: 0; padding: 6px; border-radius: 30px; background: var(--surface-secondary, #F6F7F9); box-shadow: 0 16px 44px -28px rgb(36 59 83 / .08); }
 .invoice-paper { container-type: inline-size; min-width: 0; padding: clamp(20px, 3vw, 40px); border-radius: 24px; background: var(--ui-surface); color: var(--ui-ink); font-family: 'Geist', sans-serif; box-shadow: inset 0 0 0 1px rgb(24 24 27 / .06); }
 .invoice-reference { display: grid; justify-items: start; min-width: 0; gap: 3px; }
 .invoice-reference .status-tag { border-radius: 999px; padding: 3px 9px; font-size: 10px; }
@@ -76,7 +76,7 @@
 /* One shared column: each section matches the A4 preview's width and centre
    line. It is a cap only, so narrower screens keep the panels full width. */
 .bill-screen > * { max-inline-size: var(--bill-column); margin-inline: auto; }
-.bill-screen :is(.delivery-bar, .payment-panel, .invoice-export-panel, .invoice-admin-panel) {
+.bill-screen :is(.delivery-bar, .payment-panel, .invoice-export-panel) {
   border: 1px solid var(--bill-line);
   border-radius: var(--bill-radius);
   background: #fff;
@@ -134,13 +134,12 @@
 .payment-meta { display: grid; flex-shrink: 0; min-width: 0; max-width: 50%; color: var(--bill-muted); font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .payment-meta .payment-by { overflow: hidden; text-overflow: ellipsis; }
 
-/* Admin actions: one card, rows split by hairlines; delete stays quiet until confirmed. */
-.invoice-admin-panel { display: grid; padding: 8px 24px; }
-.invoice-admin-eyebrow { padding: 14px 0 2px; color: var(--bill-muted); font-family: "Geist Mono", monospace; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
-.invoice-admin-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; padding: 18px 0; }
+/* Admin actions stay unboxed; a divider separates the available actions. */
+.invoice-admin-panel { display: grid; padding: 0 16px; }
+.invoice-admin-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 16px; padding: 12px 0; }
 .invoice-admin-row + .invoice-admin-row { border-top: 1px solid var(--bill-line); }
-.invoice-admin-history { display: grid; align-items: stretch; }
-.invoice-admin-copy { flex: 1 1 280px; min-width: 0; }
+.invoice-admin-history { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+.invoice-admin-copy { min-width: 0; }
 .pilot .invoice-admin-copy h2 { font-size: 14px; font-weight: 500; line-height: 1.5; }
 .invoice-admin-copy p { max-width: 62ch; margin-top: 2px; color: var(--bill-muted); font-size: 12px; line-height: 1.6; }
 .invoice-admin-versions { display: grid; margin: 0; padding: 0; border-top: 1px solid var(--bill-line); list-style: none; }
@@ -165,7 +164,6 @@
   .payment-stat, .payment-stat:first-child { grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; padding: 12px 0; }
   .payment-stat + .payment-stat { border-top: 1px solid var(--bill-line); border-left: 0; }
   .payment-stat dd { font-size: 17px; text-align: right; }
-  .invoice-admin-panel { padding: 4px 16px; }
   .delivery-bar { padding-left: 16px; }
 }
 .invoice-draft-action { display: flex; justify-content: flex-end; }

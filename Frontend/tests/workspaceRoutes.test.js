@@ -52,23 +52,25 @@ test('any products/<x> hash resolves to New load', () => {
 test('other legacy hashes are unchanged and current routes are not replaced', () => {
   assert.deepEqual(resolveRoute('monitor'), { route: 'entries?status=Dispatched', replaced: true });
   assert.deepEqual(resolveRoute('invoices'), { route: 'entries', replaced: true });
+  assert.deepEqual(resolveRoute('payments'), { route: 'payments', replaced: false });
   assert.deepEqual(resolveRoute('settings'), { route: 'settings', replaced: false });
   assert.deepEqual(resolveRoute(''), { route: 'home', replaced: false });
 });
 
 test('sidebar navigation order and labels', () => {
-  assert.deepEqual(NAVIGATION.map(([, , label]) => label), ['Dashboard', 'Loading entries', 'Profile', 'Settings']);
-  assert.deepEqual(NAVIGATION.map(([key]) => key), ['home', 'entries', 'profile', 'settings']);
+  assert.deepEqual(NAVIGATION.map(([, , label]) => label), ['Dashboard', 'Payments', 'Loading entries', 'Profile', 'Settings']);
+  assert.deepEqual(NAVIGATION.map(([key]) => key), ['home', 'payments', 'entries', 'profile', 'settings']);
 });
 
 test('New load is not a menu item (the header button opens it)', () => {
   assert.ok(!NAVIGATION.some(([key]) => key === 'load'));
-  assert.deepEqual(visibleNavigation('Dispatcher').map(([key]) => key), ['home', 'entries', 'settings']);
-  assert.deepEqual(visibleNavigation('Yard Manager').map(([key]) => key), ['home', 'entries', 'settings']);
+  assert.deepEqual(visibleNavigation('Dispatcher').map(([key]) => key), ['home', 'payments', 'entries', 'settings']);
+  assert.deepEqual(visibleNavigation('Yard Manager').map(([key]) => key), ['home', 'payments', 'entries', 'settings']);
 });
 
 test('navigation key for the load screen', () => {
   assert.equal(navigationKey('load'), 'load');
+  assert.equal(navigationKey('payments'), 'payments');
   assert.equal(navigationKey('settings/team'), 'settings');
 });
 

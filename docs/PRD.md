@@ -25,7 +25,7 @@ StoneDesk modernizes B2B granite supply chain logistics. It is a mobile-first, m
   * **Buyer Financial Invoice:** PDF, Excel and printable A4 invoice with dimensions, pricing and total payable amount.
 * **Sharing:** One-tap sharing of generated files through the Web Share API (WhatsApp and other apps).
 * **Loading requirements:** Lists of required sizes and quantities with loaded pieces and balance, exportable to PDF and Excel.
-* **Dashboard:** Load list with search and status filter, plus 30-day analytics (status counts, daily totals, top destinations).
+* **Dashboard:** Load list with search and status filter, plus 3-day, 7-day, 30-day, and all-time analytics for billing and payment activity.
 * **Draft recovery:** Unsaved load input is kept on the device and can be resumed.
 
 ## 4. Localization Strategy

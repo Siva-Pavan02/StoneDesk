@@ -21,7 +21,7 @@ StoneDesk records granite and stone truck loads for a business (organization), t
 | `routes/authRoutes.js`, `utils/auth.js`, `utils/googleAuth.js` | Signup, login, Google sign-in, sessions, team members, password reset, account deletion |
 | `routes/masterSettingsRoutes.js`, `controllers/masterSettingsController.js`, `utils/businessBranding.js` | Business profile, logo, trucks, destinations, stone rates, royalty fee |
 | `routes/dispatchRoutes.js`, `controllers/dispatchController.js`, `utils/pilotCalculations.js` | Load drafts, finalize, delivery status, list, bill totals |
-| `utils/dispatchAnalytics.js` | 30-day dashboard analytics |
+| `utils/dispatchAnalytics.js` | Period-filtered dashboard billing analytics |
 | `routes/loadingListRoutes.js`, `controllers/loadingListController.js` | Loading requirement lists |
 | `utils/auditLog.js`, `utils/email.js` | Audit trail and outbound email |
 | `Frontend/src/components/pilot/*` | User-facing workflows: setup, new load, bill, dashboard, settings |
@@ -66,7 +66,7 @@ StoneDesk records granite and stone truck loads for a business (organization), t
 4. The list can be exported as PDF or Excel.
 
 ### 7. Dashboard analytics
-The dashboard shows status counts, daily totals and top destinations for the last 30 days compared with the previous 30 days, in India time. Only Dispatched and Delivered loads count.
+The dashboard offers 3-day, 7-day, 30-day, and all-time filters. Billing uses dispatch dates and payment receipts/completions use payment dates, in India time; all-time trends are monthly and have no previous-period comparison. Outstanding balances always show current invoice balances. Only Dispatched and Delivered loads count toward billed totals.
 
 ### 8. Team management (Admin)
 The Admin lists members and changes their role or active flag. Admin accounts and the Admin's own account cannot be changed. Pausing a user or changing an active user's role ends their sessions.
@@ -82,7 +82,7 @@ The user types their email to confirm. An Admin deletes the entire organization 
 ## Cross-Service Data Flows
 
 - **Organization to Load:** product rates prefill each load's group rates and the default royalty fee applies when none is given; the business profile is copied into the load at finalize so old bills keep the details in effect when they were issued.
-- **Load to Analytics:** finalized loads (Dispatched and Delivered) feed the 30-day analytics.
+- **Load to Analytics:** finalized loads (Dispatched and Delivered) feed the period-filtered analytics.
 - **Load to Documents:** the frontend builds invoices, driver slips and Excel files from the saved load; it never recalculates billed totals differently from the server (guarded by calculation parity tests).
 - **User to Sessions:** role changes, pausing, Google linking and password changes invalidate sessions.
 - **All actions to Audit:** sensitive actions write AuditLog entries keyed by organization and user.

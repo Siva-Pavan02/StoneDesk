@@ -6,21 +6,40 @@
 }
 
 :root {
-  --brand-primary: #FB471F;
-  --brand-primary-hover: #e03813;
-  --brand-primary-active: #c92e0c;
-  --brand-primary-soft: #fef0ec;
-  --brand-primary-border: #fcd5cb;
-  --brand-primary-focus: rgb(251 71 31 / .14);
-  --brand-primary-shadow: 0 4px 14px rgb(251 71 31 / .16);
+  --primary: #F43F4A;
+  --primary-hover: #E11D48;
+  --primary-soft: #FFF1F2;
 
-  --ui-accent: var(--brand-primary);
-  --ui-accent-hover: var(--brand-primary-hover);
-  --ui-accent-soft: var(--brand-primary-soft);
-  --ui-ink: #1c1917;
-  --ui-muted: #57534e;
-  --ui-surface: #ffffff;
-  --ui-canvas: #fafaf9;
+  --background: #FAFAFA;
+  --surface: #FFFFFF;
+  --surface-secondary: #F6F7F9;
+
+  --text-primary: #243B53;
+  --text-secondary: #5F6C7B;
+  --text-muted: #8A94A3;
+
+  --border: #E5E7EB;
+
+  --success: #16A34A;
+  --warning: #D97706;
+  --error: #DC2626;
+  --info: #2563EB;
+
+  --brand-primary: var(--primary);
+  --brand-primary-hover: var(--primary-hover);
+  --brand-primary-active: #9F1239;
+  --brand-primary-soft: var(--primary-soft);
+  --brand-primary-border: #FECDD3;
+  --brand-primary-focus: rgb(244 63 74 / .16);
+  --brand-primary-shadow: 0 4px 14px rgb(244 63 74 / .16);
+
+  --ui-accent: var(--primary);
+  --ui-accent-hover: var(--primary-hover);
+  --ui-accent-soft: var(--primary-soft);
+  --ui-ink: var(--text-primary);
+  --ui-muted: var(--text-secondary);
+  --ui-surface: var(--surface);
+  --ui-canvas: var(--background);
   /* Radius scale: xs inner chips/segments, sm controls, md cards, lg panels, xl hero, pill tags. */
   --ui-radius-xs: 8px;
   --ui-radius-sm: 10px;
@@ -28,25 +47,27 @@
   --ui-radius-lg: 20px;
   --ui-radius-xl: 28px;
   --ui-radius-pill: 999px;
-  --ui-shadow-panel: 0 12px 36px rgb(28 25 23 / .08);
+  --ui-shadow-panel: 0 12px 36px rgb(36 59 83 / .08);
   --ui-ease: cubic-bezier(.22, .61, .36, 1);
   --ui-dur: 160ms;
   --ui-press: scale(.98);
-  --workspace-border: #e7e5e4;
+  --workspace-border: var(--border);
   --workspace-muted: var(--ui-muted);
   /* One theme for every screen: role tokens. Screen palettes (--mn-*, --bill-*) alias these. */
   --ui-border: var(--workspace-border);
-  --ui-border-strong: #d6d3d1;
-  --ui-border-soft: #f5f5f4;
-  --ui-hover: #f5f5f4;
-  --ui-danger: #9f2f2d;
-  --ui-danger-hover: #842624;
-  --ui-danger-soft: #fdebec;
-  --ui-danger-line: #f5d5d6;
-  --ui-success: #1e293b;
-  --ui-success-soft: #f1f5f9;
-  --ui-warning: #956400;
-  --ui-warning-soft: #fbf3db;
+  --ui-border-strong: #D1D5DB;
+  --ui-border-soft: var(--surface-secondary);
+  --ui-hover: var(--surface-secondary);
+  --ui-danger: var(--error);
+  --ui-danger-hover: #B91C1C;
+  --ui-danger-soft: #FEF2F2;
+  --ui-danger-line: #FECACA;
+  --ui-success: var(--success);
+  --ui-success-soft: #DCFCE7;
+  --ui-warning: var(--warning);
+  --ui-warning-soft: #FEF3C7;
+  --ui-info: var(--info);
+  --ui-info-soft: #EFF6FF;
   /* Every action button is a pill, in the app and on the landing page. */
   --ui-radius-button: var(--ui-radius-pill);
   color-scheme: light;
@@ -65,13 +86,13 @@
 .pilot .btn:disabled { opacity: .55; }
 .pilot .input { min-width: 0; width: 100%; height: 44px; padding-inline: 12px; border: 1px solid var(--workspace-border); border-radius: var(--ui-radius-sm); background: var(--ui-surface); color: var(--ui-ink); font-size: 16px; box-shadow: none; transition: border-color var(--ui-dur) var(--ui-ease); }
 .pilot .input:hover:not(:focus):not(:disabled) { border-color: var(--ui-border-strong); }
-.pilot .input:focus { border-color: var(--ui-accent); box-shadow: 0 0 0 3px rgb(251 71 31 / .14); }
+.pilot .input:focus { border-color: var(--ui-accent); box-shadow: 0 0 0 3px rgb(244 63 74 / .16); }
 .pilot :where(input, select, textarea) { min-width: 0; max-width: 100%; }
 .pilot :where(textarea) { border-radius: var(--ui-radius-sm); }
 /* Every native dropdown shares one look: the .input shell plus a single orange chevron,
    so a <select class="input"> matches the ComboField and datalist dropdowns everywhere.
    This is the single source of truth; screen styles must not override the chevron. */
-.pilot select.input { appearance: none; -webkit-appearance: none; cursor: pointer; padding-right: 40px; text-overflow: ellipsis; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%23FB471F' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; background-size: 16px 16px; }
+.pilot select.input { appearance: none; -webkit-appearance: none; cursor: pointer; padding-right: 40px; text-overflow: ellipsis; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%23F43F4A' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; background-size: 16px 16px; }
 .pilot select.input:disabled { cursor: not-allowed; opacity: .6; }
 /* Multi-line Field: same shell as .input, but grows with rows and keeps line breaks. */
 .pilot .input-multiline { height: auto; min-height: 44px; padding-block: 10px; line-height: 1.5; resize: vertical; white-space: pre-wrap; }
@@ -141,8 +162,6 @@ img.brand-mark { background: none; }
 .app-dialog { width: min(440px, calc(100% - 24px)); max-height: calc(100dvh - 32px); margin: auto; padding: 0; border: 1px solid var(--workspace-border); border-radius: var(--ui-radius-md); color: var(--ui-ink); background: var(--ui-surface); overflow-y: auto; overscroll-behavior: contain; box-shadow: var(--ui-shadow-panel); }
 .app-dialog[open] { animation: app-dialog-glide 220ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 .app-dialog::backdrop { background: rgb(17 24 39 / .5); animation: app-backdrop-fade 220ms cubic-bezier(0.16, 1, 0.3, 1) both; }
-.app-dialog.nav-drawer { width: min(300px, 82vw); height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0 var(--ui-radius-lg) var(--ui-radius-lg) 0; }
-.app-dialog.nav-drawer[open] { animation: drawer-reveal 260ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 @keyframes app-dialog-glide {
   from { opacity: 0; transform: scale(0.96) translateY(8px); }
   to { opacity: 1; transform: scale(1) translateY(0); }
@@ -160,28 +179,24 @@ img.brand-mark { background: none; }
 .skip-link { position: fixed; top: -100px; left: 12px; z-index: 30; padding: 12px; background: var(--ui-surface); border: 2px solid var(--ui-accent); }
 .skip-link:focus { top: 8px; }
 /* Responsive layout fallback; the dedicated workspace stylesheet follows this file. */
-.workspace { padding-bottom: env(safe-area-inset-bottom); }
-.workspace-sidebar { display: none; }
+.workspace { padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
 .workspace-header { border-bottom: 1px solid var(--ui-border); background: white; }
 .workspace-toolbar { max-width: 1440px; margin-inline: auto; padding: 12px 16px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px 16px; }
 .workspace-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .workspace-organization { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .workspace-organization-mark { display: flex; align-items: center; justify-content: center; flex: 0 0 36px; width: 36px; height: 36px; border: 1px solid var(--ui-accent-border); border-radius: var(--ui-radius-sm); color: var(--ui-accent); background: var(--ui-accent-soft); }
+.workspace-organization-mark:has(img) { border-color: transparent; background: transparent; }
 .workspace-organization-mark img { width: 26px; height: 26px; object-fit: contain; }
 .workspace-organization-mark svg { width: 18px; height: 18px; }
 .business-initials { font-size: 12px; font-weight: 600; letter-spacing: .02em; line-height: 1; }
-/* The drawer is used on small screens, where the header mark is hidden; keep this one visible. */
-.nav-drawer-head .nav-drawer-business-mark { display: flex; flex: 0 0 32px; width: 32px; height: 32px; }
 .workspace-organization-text { min-width: 0; }
-.workspace-organization-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ui-ink); font-size: 14px; font-weight: 600; letter-spacing: -.02em; }
-.workspace-organization-caption { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--workspace-muted); font-size: 11px; line-height: 1.6; }
+.workspace-organization-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ui-ink); font-size: 16px; font-weight: 600; letter-spacing: -.02em; }
 .pilot .load-search .input { height: 44px; padding-inline: 44px 12px; border: 1px solid var(--workspace-border); border-radius: var(--ui-radius-sm); background: var(--ui-canvas); color: var(--ui-ink); font-size: 13px; }
 .load-search .input::placeholder { color: var(--ui-muted); opacity: 1; }
 .pilot .load-search .input:focus { border-color: var(--ui-accent); background: var(--ui-surface); }
 .workspace-header .icon-button { flex-shrink: 0; min-width: 44px; min-height: 44px; width: 44px; height: 44px; border-radius: var(--ui-radius-sm); color: var(--ui-muted); transition: background-color 150ms var(--ui-ease), color 150ms var(--ui-ease); }
 .workspace-header .icon-button:hover { color: var(--ui-accent); background: var(--ui-canvas); }
 .workspace-header .icon-button svg { width: 18px; height: 18px; }
-.workspace-header .mobile-menu { border: 1px solid var(--ui-border); }
 .load-search-submit { position: absolute; inset: 0 auto 0 0; }
 .workspace-header-actions { display: flex; grid-column: 2; grid-row: 1; align-items: center; gap: 8px; }
 .pilot .workspace-create-load { gap: 8px; }
@@ -202,10 +217,6 @@ img.brand-mark { background: none; }
 .workflow-actions .btn:first-of-type { flex-basis: 120px; }
 /* A quiet overview, scoped to Home rather than the shared load screens. */
 .dashboard-home { display: flex; flex-direction: column; gap: 24px; }
-.dashboard-heading { display: flex; flex-direction: column; align-items: flex-start; gap: 20px; padding-block: 4px 8px; }
-.dashboard-heading > div { min-width: 0; }
-.dashboard-heading h1 { font-size: clamp(22px, 2.5vw, 28px); font-weight: 600; line-height: 1.4; letter-spacing: -.035em; }
-.dashboard-heading p { margin-top: 6px; color: var(--workspace-muted); font-size: 13px; line-height: 1.7; }
 .pilot .dashboard-home .card { border-color: var(--ui-border); border-radius: var(--ui-radius-md); box-shadow: none; }
 .pilot .dashboard-home .dashboard-metric { gap: 12px; padding: 20px; }
 .dashboard-metric-label { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; color: var(--workspace-muted); font-size: 12px; line-height: 1.6; }
@@ -233,9 +244,6 @@ img.brand-mark { background: none; }
 .dashboard-activity .load-record p { color: var(--workspace-muted); font-size: 12px; }
 .pilot .dashboard-activity > .btn { width: calc(100% - 40px); margin: 16px 20px; }
 .dashboard-updated { align-self: flex-end; color: var(--workspace-muted); font-size: 11px; }
-@media (min-width: 640px) {
-  .dashboard-heading { flex-direction: row; align-items: center; justify-content: space-between; gap: 24px; }
-}
 /* Settings-only treatments keep other workspace cards unchanged. */
 .settings-screen { display: flex; flex-direction: column; gap: 16px; }
 .pilot .settings-screen .card { padding: 20px; border-color: var(--ui-border); border-radius: var(--ui-radius-md); box-shadow: none; }
@@ -345,8 +353,12 @@ img.brand-mark { background: none; }
 .st-member > .st-role { justify-self: end; }
 .st-member-status { grid-column: 1 / -1; }
 .st-access { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px 16px; }
-/* Role picker: same dropdown look as every other select, just a tighter min-width for the inline row. */
-.pilot .st-page .st-access-role { width: auto; min-width: 140px; font-weight: 500; }
+.pilot .st-page .st-invite-role { min-height: 48px; padding-left: 14px; padding-right: 48px; border-radius: 12px; background-image: linear-gradient(90deg, transparent calc(100% - 40px), var(--ui-accent-soft) calc(100% - 40px)), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%23F43F4A' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m4 6 4 4 4-4'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0 center, right 12px center; background-size: 40px 100%, 16px 16px; font-weight: 500; transition: border-color var(--ui-dur) var(--ui-ease), background-color var(--ui-dur) var(--ui-ease); }
+.pilot .st-page .st-invite-role:hover:not(:focus) { border-color: var(--ui-accent); }
+.st-account-actions { display: flex; justify-content: flex-end; }
+.pilot .st-page .settings-logout { gap: 8px; min-width: 112px; justify-content: center; border-color: var(--ui-danger-line); background: var(--ui-danger-soft); }
+.pilot .st-page .settings-logout svg { width: 16px; height: 16px; }
+.pilot .st-page .settings-logout:hover:not(:disabled) { border-color: var(--ui-danger); background: var(--ui-danger-soft); }
 .st-switch { position: relative; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; color: var(--mn-ink); font-size: 13px; font-weight: 500; cursor: pointer; user-select: none; }
 .st-switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
 .st-switch-track { position: relative; flex-shrink: 0; width: 32px; height: 18px; border-radius: 999px; background: var(--ui-border-strong); transition: background-color 160ms var(--ui-ease); }
@@ -476,19 +488,8 @@ img.brand-mark { background: none; }
   .load-record > .btn { width: auto; }
 }
 @media (min-width: 1024px) {
-  .workspace { padding-left: 232px; padding-bottom: 0; }
-  .workspace-sidebar { display: flex; flex-direction: column; position: fixed; inset: 0 auto 0 0; z-index: 25; width: 232px; padding: 24px 12px; border-right: 1px solid var(--workspace-border); background: white; overflow-y: auto; }
-  .sidebar-brand { display: flex; align-items: center; gap: 12px; margin: 4px 8px 44px; }
-  .sidebar-brand strong { font-size: 20px; font-weight: 600; letter-spacing: -.04em; }
-  .sidebar-link { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 46px; margin-bottom: 6px; padding: 12px; border-radius: var(--ui-radius-sm); text-align: left; color: var(--ui-muted); font-size: 13px; font-weight: 500; }
-  .sidebar-link:hover { background: var(--ui-hover); }
-  .sidebar-link[aria-current="page"] { background: var(--ui-accent-soft); color: var(--ui-accent); }
-  .sidebar-account { margin-top: auto; border-top: 1px solid var(--workspace-border); padding-top: 16px; }
-  .workspace .mobile-menu { display: none; }
+  .workspace { padding-bottom: 0; }
   .workspace-toolbar { padding: 14px 32px; }
-  .workspace-header { position: sticky; top: 0; z-index: 20; }
-  /* Keep focused fields and scrolled-to anchors clear of the sticky header (73px tall). */
-  html:has(.pilot.workspace) { scroll-padding-top: 89px; }
   .workspace-main { padding: 36px 32px 64px; }
   .workflow-actions { justify-content: flex-end; }
   .workflow-actions .btn { flex: 0 0 auto; min-width: 160px; }
@@ -608,7 +609,7 @@ img.brand-mark { background: none; }
 
 /* Last in this file so desktop layout declarations cannot override print sizing. */
 @media print {
-  .workspace-sidebar, .workspace-header, .workflow-actions { display: none !important; }
+  .workspace-nav, .workspace-header, .workflow-actions { display: none !important; }
   .workspace { padding: 0; }
   .workspace-main { padding: 0; max-width: none; }
 }

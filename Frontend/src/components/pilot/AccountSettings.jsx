@@ -3,6 +3,8 @@ import { CheckIcon, CopyIcon, EyeClosedIcon, EyeOpenIcon } from '@radix-ui/react
 import { request } from '../../lib/pilotApi.js';
 import { Button, ErrorMessage, FieldError } from './Controls.jsx';
 import Invitations from './Invitations.jsx';
+import LogoutDialog from './LogoutDialog.jsx';
+import Icon from './Icon.jsx';
 import { roleLabel, roleTone } from '../../utils/roles.js';
 
 const ROLES = ['Admin', 'Yard Manager', 'Dispatcher'];
@@ -78,8 +80,9 @@ function DeleteAccount({ user, onDeleted }) {
   </div>;
 }
 
-export default function AccountSettings({ settings, user, section, onDeleted, onUserChange }) {
+export default function AccountSettings({ settings, user, section, onDeleted, onLogout, onUserChange }) {
   const [users, setUsers] = useState([]);
+  const [confirmingLogout, setConfirmingLogout] = useState(false);
   const [message, setMessage] = useState(null);
   const [busy, setBusy] = useState('');
   const [copied, setCopied] = useState(false);
@@ -253,11 +256,29 @@ export default function AccountSettings({ settings, user, section, onDeleted, on
             </div>}
           </form>}
       {feedback('account')}
+      <div className="st-account-actions">
+        <Button
+          variant="danger-quiet"
+          className="settings-logout"
+          onClick={() => setConfirmingLogout(true)}
+          label="Log out"
+        >
+          <Icon name="logout" />
+        </Button>
+      </div>
     </section>
 
     <section id="settings-delete" className="st-section" aria-labelledby="settings-delete-heading">
       {head('delete', 'Danger zone', admin ? 'Close StoneDesk for your whole business.' : 'Leave this business.')}
       <DeleteAccount user={user} onDeleted={onDeleted} />
     </section>
+    <LogoutDialog
+      open={confirmingLogout}
+      onCancel={() => setConfirmingLogout(false)}
+      onConfirm={async () => {
+        await onLogout();
+        setConfirmingLogout(false);
+      }}
+    />
   </div>;
 }

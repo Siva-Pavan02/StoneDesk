@@ -36,7 +36,7 @@ export default function Invitations() {
     <ErrorMessage error={error} />
     <form onSubmit={create} className="st-invite-form">
       <Field name="email" type="email" required maxLength={254} autoComplete="off" autoCapitalize="none" spellCheck={false} error={emailError} onInput={() => setEmailError('')} label="Member email" />
-      <Field label="Role"><select name="role" className="input"><option value="Dispatcher">Dispatcher</option><option value="YardManager">Manager</option></select></Field>
+      <Field label="Role"><select name="role" className="input st-invite-role"><option value="Dispatcher">Dispatcher</option><option value="YardManager">Manager</option></select></Field>
       <Button type="submit" primary disabled={!!busy} aria-busy={busy === 'create' || undefined} label={busy === 'create' ? 'Creating…' : 'Create invitation'} />
     </form>
     {issued && <>

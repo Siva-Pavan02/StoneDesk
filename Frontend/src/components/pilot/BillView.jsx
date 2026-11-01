@@ -41,7 +41,7 @@ async function planPreview(model) {
   const printable = await withReadableLogo(model);
   return { model: printable, copies: { buyer: await planCopy(printable, 'buyer'), driver: await planCopy(printable, 'driver') } };
 }
-export default function BillView({ record, onBack, onResume, onEdit, onChanged, onDeleted, canFinalize = true, admin = false }) {
+export default function BillView({ record, onBack, onResume, onEdit, onChanged, onDeleted, onPaymentsChanged, canFinalize = true, admin = false }) {
   const [busy, setBusy] = useState(false);
   const [copy, setCopy] = useState('buyer');
   const [confirming, setConfirming] = useState(false);
@@ -285,7 +285,56 @@ export default function BillView({ record, onBack, onResume, onEdit, onChanged, 
       </div>}
       {statusError && <p className="delivery-bar-error" role="alert">{statusError}</p>}
     </section>}
-    {finalized && <PaymentSection dispatchId={record.id} canRecordPayment={canFinalize} />}
+    {finalized && admin && <div className="invoice-admin-panel">
+      {onEdit && <section className="invoice-admin-row" aria-labelledby="invoice-edit-title">
+        <div className="invoice-admin-copy">
+          <h2 id="invoice-edit-title">Edit invoice</h2>
+          <p>Correct saved invoice details.</p>
+        </div>
+        <div className="action-row shrink-0"><Button disabled={busy} label="Edit invoice" onClick={() => onEdit(record)} /></div>
+      </section>}
+      {showHistory && <section className="invoice-admin-row invoice-admin-history" aria-labelledby="invoice-history-title">
+        <div className="invoice-admin-copy">
+          <h2 id="invoice-history-title">Version history</h2>
+          <p>Earlier versions, newest first. Read-only.</p>
+        </div>
+        <ul className="invoice-admin-versions">
+          {versions.map(version => {
+            const active = selectedVersion?.index === version.index;
+            return <li key={version.index} className="flex items-center justify-between gap-3 py-2">
+              <span className="min-w-0 truncate text-sm">{versionTime(version.snapshot?.revisedAt)}</span>
+              <button type="button" className="text-button shrink-0 text-sm" aria-expanded={active} aria-controls={active ? `${historyPreviewId}-panel` : undefined} disabled={busy} onClick={() => setHistorySelection(active ? null : { key: historyKey, index: version.index })}>
+                {active ? 'Hide' : 'View'}
+              </button>
+            </li>;
+          })}
+        </ul>
+        {selectedVersion && <div id={`${historyPreviewId}-panel`} className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <strong className="min-w-0 text-sm">{`Version from ${versionTime(selectedVersion.snapshot?.revisedAt)} (read-only)`}</strong>
+            <button type="button" className="text-button shrink-0 text-sm" onClick={() => setHistorySelection(null)}>Close</button>
+          </div>
+          <div className="invoice-paper-shell a4-preview-shell">
+            {historyCurrent?.issue ? <p className="a4-preview-feedback" role="alert">{previewProblem(historyCurrent.issue)}</p>
+              : historyCurrent?.preview ? <>{historyCurrent.preview.model.warnings.length > 0 && <div className="a4-preview-feedback" role="alert"><strong>This earlier version has values that need review.</strong><ul>{historyCurrent.preview.model.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></div>}<div dangerouslySetInnerHTML={{ __html: historyHtml }} /></>
+                : <p className="a4-preview-feedback" role="status">Preparing this earlier version…</p>}
+          </div>
+        </div>}
+      </section>}
+      <section className="invoice-admin-row invoice-admin-delete" aria-labelledby="invoice-delete-title" data-state={confirmingDelete ? 'confirming' : 'idle'}>
+        <div className="invoice-admin-copy" aria-live="polite">
+          <h2 id="invoice-delete-title">{confirmingDelete ? 'Delete this invoice?' : 'Delete invoice'}</h2>
+          <p>{confirmingDelete ? 'This removes the invoice and its recorded payments. This can’t be undone.' : 'Recorded payments are deleted too.'}</p>
+          <ErrorMessage error={deleteError} />
+        </div>
+        <div className="action-row shrink-0">
+          {confirmingDelete
+            ? <><Button disabled={busy} data-delete-cancel="" label="Keep invoice" onClick={() => { setConfirmingDelete(false); focusSoon('[data-delete-trigger]'); }} /><Button variant="danger" disabled={busy} label={busy ? 'Deleting…' : 'Yes, delete'} onClick={removeInvoice} /></>
+            : <Button variant="danger-quiet" disabled={busy} data-delete-trigger="" label="Delete invoice" onClick={() => { setDeleteError(''); setConfirmingDelete(true); focusSoon('[data-delete-cancel]'); }} />}
+        </div>
+      </section>
+    </div>}
+    {finalized && <PaymentSection dispatchId={record.id} canRecordPayment={canFinalize} onPaymentsChanged={onPaymentsChanged} />}
     <div className="invoice-paper-shell a4-preview-shell">
       {!finalized ? <p className="a4-preview-feedback" role="status">Complete this draft to see the final A4 invoice. Missing data is never replaced with sample values.</p>
         : previewIssue ? <p className="a4-preview-feedback" role="alert">{previewProblem(previewIssue)}</p>
@@ -315,56 +364,6 @@ export default function BillView({ record, onBack, onResume, onEdit, onChanged, 
           <div className="action-row"><Button disabled={busy || logoPending} label="Print / PDF" onClick={printInvoice} /><Button disabled={busy || logoPending} label="Download" onClick={() => exportFile(copy)} /><Button primary disabled={busy || logoPending} label={busy ? 'Preparing…' : 'Share document'} onClick={() => exportFile(copy, true)}><Icon name="arrow" /></Button></div>
         </footer>
       </section>
-      {admin && <div className="invoice-admin-panel">
-      <p className="invoice-admin-eyebrow">Admin</p>
-      {onEdit && <section className="invoice-admin-row" aria-labelledby="invoice-edit-title">
-        <div className="invoice-admin-copy">
-          <h2 id="invoice-edit-title">Edit invoice</h2>
-          <p>Admins only. Correct measurements, prices or details. The slip number stays the same and the current version is kept in history.</p>
-        </div>
-        <div className="action-row shrink-0"><Button disabled={busy} label="Edit invoice" onClick={() => onEdit(record)} /></div>
-      </section>}
-      {showHistory && <section className="invoice-admin-row invoice-admin-history" aria-labelledby="invoice-history-title">
-        <div className="invoice-admin-copy">
-          <h2 id="invoice-history-title">Version history</h2>
-          <p>Admins only. Earlier versions of this invoice, most recent first. They are read-only.</p>
-        </div>
-        <ul className="invoice-admin-versions">
-          {versions.map(version => {
-            const active = selectedVersion?.index === version.index;
-            return <li key={version.index} className="flex items-center justify-between gap-3 py-2">
-              <span className="min-w-0 truncate text-sm">{versionTime(version.snapshot?.revisedAt)}</span>
-              <button type="button" className="text-button shrink-0 text-sm" aria-expanded={active} aria-controls={active ? `${historyPreviewId}-panel` : undefined} disabled={busy} onClick={() => setHistorySelection(active ? null : { key: historyKey, index: version.index })}>
-                {active ? 'Hide' : 'View'}
-              </button>
-            </li>;
-          })}
-        </ul>
-        {selectedVersion && <div id={`${historyPreviewId}-panel`} className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <strong className="min-w-0 text-sm">{`Version from ${versionTime(selectedVersion.snapshot?.revisedAt)} (read-only)`}</strong>
-            <button type="button" className="text-button shrink-0 text-sm" onClick={() => setHistorySelection(null)}>Close</button>
-          </div>
-          <div className="invoice-paper-shell a4-preview-shell">
-            {historyCurrent?.issue ? <p className="a4-preview-feedback" role="alert">{previewProblem(historyCurrent.issue)}</p>
-              : historyCurrent?.preview ? <>{historyCurrent.preview.model.warnings.length > 0 && <div className="a4-preview-feedback" role="alert"><strong>This earlier version has values that need review.</strong><ul>{historyCurrent.preview.model.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul></div>}<div dangerouslySetInnerHTML={{ __html: historyHtml }} /></>
-                : <p className="a4-preview-feedback" role="status">Preparing this earlier version…</p>}
-          </div>
-        </div>}
-      </section>}
-      <section className="invoice-admin-row invoice-admin-delete" aria-labelledby="invoice-delete-title" data-state={confirmingDelete ? 'confirming' : 'idle'}>
-        <div className="invoice-admin-copy" aria-live="polite">
-          <h2 id="invoice-delete-title">{confirmingDelete ? 'Delete this invoice?' : 'Delete invoice'}</h2>
-          <p>{confirmingDelete ? 'It will be removed from your loads, together with any recorded payments. This can’t be undone.' : 'Admins only. Any recorded payments are deleted with the invoice.'}</p>
-          <ErrorMessage error={deleteError} />
-        </div>
-        <div className="action-row shrink-0">
-          {confirmingDelete
-            ? <><Button disabled={busy} data-delete-cancel="" label="Keep invoice" onClick={() => { setConfirmingDelete(false); focusSoon('[data-delete-trigger]'); }} /><Button variant="danger" disabled={busy} label={busy ? 'Deleting…' : 'Yes, delete'} onClick={removeInvoice} /></>
-            : <Button variant="danger-quiet" disabled={busy} data-delete-trigger="" label="Delete invoice" onClick={() => { setDeleteError(''); setConfirmingDelete(true); focusSoon('[data-delete-cancel]'); }} />}
-        </div>
-      </section>
-      </div>}
     </> : <>
       <div className="invoice-draft-action"><Button primary disabled={busy} label="Continue this draft" onClick={() => onResume(record)}><Icon name="arrow" /></Button></div>
       <section className="invoice-admin-row invoice-admin-delete" aria-labelledby="draft-delete-title" data-state={confirmingDelete ? 'confirming' : 'idle'}>

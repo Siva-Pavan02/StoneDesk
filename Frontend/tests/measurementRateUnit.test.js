@@ -31,20 +31,20 @@ test('MeasurementEntry derives rateUnit directly from selected product with fall
   assert.equal(resolveRateUnit(products, undefined), 'SQ_FT', 'undefined productId falls back to SQ_FT');
 });
 
-test('MeasurementEntry conditionally unmounts Length, Width, and fractions when isUnit is true', () => {
-  // Ensure dimension fields and fractions are wrapped in {!isUnit && ...}
-  assert.match(measurementEntrySource, /\{!isUnit && <div className="grid grid-cols-2 gap-3">\s*\{?\['length', 'width'\]/);
+test('MeasurementEntry keeps Length, Width, and Quantity on one row with one shared fraction control', () => {
+  assert.match(measurementEntrySource, /\{!isUnit && <>\s*<div className="grid grid-cols-3 gap-2">[\s\S]*?label="Quantity"[\s\S]*?<\/div>\s*<details className="measurement-fractions">/);
+  assert.equal((measurementEntrySource.match(/className="measurement-fractions"/g) || []).length, 1);
+  assert.match(measurementEntrySource, /onFocus=\{\(\) => setFractionTarget\(key\)\}/);
+  assert.match(measurementEntrySource, /fraction\(fractionTarget, amount\)/);
 
-  // Ensure unmounting is NOT done via CSS hiding or disabled attribute
+  // Unit products omit dimensions and their fraction control entirely.
   assert.doesNotMatch(measurementEntrySource, /style=\{\{[^}]*(?:display:\s*'none'|visibility:\s*'hidden')/);
   assert.doesNotMatch(measurementEntrySource, /disabled=\{isUnit\}/);
 });
 
 test('MeasurementEntry dynamically labels Rate field as Rate / unit (₹) or Rate / sq ft (₹)', () => {
-  assert.match(
-    measurementEntrySource,
-    /<Field label=\{isUnit \? 'Rate \/ unit \(₹\)' : 'Rate \/ sq ft \(₹\)'\}/
-  );
+  assert.match(measurementEntrySource, /label="Rate \/ unit \(₹\)"/);
+  assert.match(measurementEntrySource, /label="Rate \/ sq ft \(₹\)"/);
 
   // Verify NumberStepper accessibility wiring in Controls.jsx uses the dynamic label
   assert.match(controlsSource, /aria-label=\{`Decrease \$\{label\}`\}/);

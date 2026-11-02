@@ -1,13 +1,50 @@
 /* Bill screen export panel and preview feedback (not part of the printed invoice). */
-.invoice-paper-shell.a4-preview-shell { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-.bill-screen .invoice-export-panel { min-width: 0; }
-.bill-screen .invoice-export-option { min-width: 0; }
-.bill-screen .export-option-title, .bill-screen .export-option-meta { overflow-wrap: anywhere; }
-.bill-screen .invoice-export-footer .action-row { min-width: 0; }
-.bill-screen .invoice-export-footer .action-row > .btn { min-width: 0; }
-.a4-preview-feedback { padding: 14px 16px; border: 1px solid var(--border, #d1d1d1); border-radius: 6px; background: #fff; color: #111111; }
-.a4-preview-feedback[role="alert"] { border-color: #c78980; color: #78382e; }
-.a4-preview-feedback ul { margin: 6px 0 0; padding-inline-start: 20px; }
+.invoice-paper-shell.a4-preview-shell {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.bill-screen .invoice-export-panel {
+  min-width: 0;
+}
+
+.bill-screen .invoice-export-option {
+  min-width: 0;
+}
+
+.bill-screen .export-option-title,
+.bill-screen .export-option-meta {
+  overflow-wrap: anywhere;
+}
+
+.bill-screen .invoice-export-footer .action-row {
+  min-width: 0;
+}
+
+.bill-screen .invoice-export-footer .action-row>.btn {
+  min-width: 0;
+}
+
+.a4-preview-feedback {
+  padding: 14px 16px;
+  border: 1px solid var(--border, #d1d1d1);
+  border-radius: 6px;
+  background: #fff;
+  color: #111111;
+}
+
+.a4-preview-feedback[role="alert"] {
+  border-color: #c78980;
+  color: #78382e;
+}
+
+.a4-preview-feedback ul {
+  margin: 6px 0 0;
+  padding-inline-start: 20px;
+}
 
 /* ==========================================================================
    A4 buyer invoice and driver slip: a port of the user's reference layout
@@ -23,11 +60,32 @@
 
 /* Noto Sans (SIL Open Font License 1.1, public/fonts/OFL.txt) under a private
    family name; the PDF export embeds the same files. */
-@font-face { font-family: 'StoneDesk Invoice Sans'; font-style: normal; font-weight: 400; src: url('/fonts/NotoSans-Regular.ttf') format('truetype'); font-display: swap; }
-@font-face { font-family: 'StoneDesk Invoice Sans'; font-style: normal; font-weight: 600; src: url('/fonts/NotoSans-SemiBold.ttf') format('truetype'); font-display: swap; }
-@font-face { font-family: 'StoneDesk Invoice Sans'; font-style: normal; font-weight: 700; src: url('/fonts/NotoSans-Bold.ttf') format('truetype'); font-display: swap; }
+@font-face {
+  font-family: 'StoneDesk Invoice Sans';
+  font-style: normal;
+  font-weight: 400;
+  src: url('/fonts/NotoSans-Regular.ttf') format('truetype');
+  font-display: swap;
+}
 
-.a4-invoice, body.a4-body {
+@font-face {
+  font-family: 'StoneDesk Invoice Sans';
+  font-style: normal;
+  font-weight: 600;
+  src: url('/fonts/NotoSans-SemiBold.ttf') format('truetype');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'StoneDesk Invoice Sans';
+  font-style: normal;
+  font-weight: 700;
+  src: url('/fonts/NotoSans-Bold.ttf') format('truetype');
+  font-display: swap;
+}
+
+.a4-invoice,
+body.a4-body {
   color-scheme: light;
   /* Shared monochrome invoice palette for preview, print and PDF.
      Existing size, spacing and geometry values are unchanged. */
@@ -55,103 +113,490 @@
      reference's. */
   --group-gap: 6px;
 }
-body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
+
+body.a4-body {
+  margin: 0;
+  padding: 24px;
+  background: var(--canvas);
+}
 
 /* Isolation from the app's global styles, so the in-app preview and measure
    host lay out exactly like the standalone print window. */
-.a4-invoice { color: var(--ink); font: 9pt/1.4 'StoneDesk Invoice Sans', 'Noto Sans', Arial, sans-serif; letter-spacing: normal; word-spacing: normal; text-transform: none; text-align: start; font-variant-numeric: normal; font-kerning: none; font-variant-ligatures: none; font-synthesis: none; }
-.a4-invoice, .a4-invoice * { box-sizing: border-box; }
-.a4-invoice :is(h1, h2, h3, p, dl, dt, dd, table, caption, figure) { margin: 0; padding: 0; }
-.a4-invoice :is(h1, h2, h3) { color: inherit; font-size: inherit; font-weight: inherit; text-wrap: wrap; }
-.a4-invoice img { display: block; max-width: 100%; }
-.a4-invoice table { border-collapse: collapse; border-spacing: 0; text-indent: 0; }
+.a4-invoice {
+  color: var(--ink);
+  font: 9pt/1.4 'StoneDesk Invoice Sans', 'Noto Sans', Arial, sans-serif;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-transform: none;
+  text-align: start;
+  font-variant-numeric: normal;
+  font-kerning: none;
+  font-variant-ligatures: none;
+  font-synthesis: none;
+}
 
-.a4-invoice .num { text-align: end; white-space: nowrap; font-variant-numeric: tabular-nums lining-nums; }
-.a4-invoice .sr-only { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.a4-invoice,
+.a4-invoice * {
+  box-sizing: border-box;
+}
+
+.a4-invoice :is(h1, h2, h3, p, dl, dt, dd, table, caption, figure) {
+  margin: 0;
+  padding: 0;
+}
+
+.a4-invoice :is(h1, h2, h3) {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  text-wrap: wrap;
+}
+
+.a4-invoice img {
+  display: block;
+  max-width: 100%;
+}
+
+.a4-invoice table {
+  border-collapse: collapse;
+  border-spacing: 0;
+  text-indent: 0;
+}
+
+.a4-invoice .num {
+  text-align: end;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.a4-invoice .sr-only {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 
 /* HEADER — compact business identity beside a structured invoice panel. */
-.a4-invoice .invoice-header { display: grid; grid-template-columns: minmax(0, 1fr); border-block-start: 3px solid var(--accent); border-block-end: 1px solid var(--border); margin-block-end: 16px; break-inside: avoid; }
-.a4-invoice .business-panel { min-inline-size: 0; padding-block: 12px; }
-.a4-invoice .business-name { font-size: 27px; line-height: 1; font-weight: 700; letter-spacing: -.035em; }
-.a4-invoice .business-contact { margin-block-start: 6px; color: var(--muted); font-size: 11px; line-height: 1.45; }
-.a4-invoice .phone { white-space: nowrap; }
-.a4-invoice .invoice-panel { min-inline-size: 0; padding-block: 10px 12px; border-block-start: 1px solid var(--line); }
-.a4-invoice .invoice-topline { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px 12px; }
-.a4-invoice .invoice-kind { color: var(--accent); font-size: 13px; font-weight: 700; line-height: 1.2; text-transform: uppercase; letter-spacing: .045em; }
-.a4-invoice .invoice-state { display: flex; align-items: center; gap: 10px; font-size: 11px; font-weight: 600; white-space: nowrap; }
-.a4-invoice .status { padding: 2px 7px; border: 1px solid var(--border); border-radius: 3px; background: var(--tint); color: var(--accent); font-size: 9px; line-height: 1.2; }
-.a4-invoice .invoice-reference { margin-block-start: 4px; color: var(--muted); font-size: 9px; line-height: 1.4; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-.a4-invoice .invoice-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; margin-block-start: 9px; }
-.a4-invoice .invoice-facts > div { min-inline-size: 0; }
-.a4-invoice .invoice-facts dt { color: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: .06em; line-height: 1.2; }
-.a4-invoice .invoice-facts dd { margin-block-start: 3px; font-size: 11px; font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; }
-.a4-invoice .invoice-facts .mono { font-family: inherit; font-variant-numeric: tabular-nums; }
+.a4-invoice .invoice-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  border-block-start: 3px solid var(--accent);
+  border-block-end: 1px solid var(--border);
+  margin-block-end: 16px;
+  break-inside: avoid;
+}
+
+.a4-invoice .business-panel {
+  min-inline-size: 0;
+  padding-block: 12px;
+}
+
+.a4-invoice .business-name {
+  font-size: 27px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -.035em;
+}
+
+.a4-invoice .business-contact {
+  margin-block-start: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.a4-invoice .phone {
+  white-space: nowrap;
+}
+
+.a4-invoice .invoice-panel {
+  min-inline-size: 0;
+  padding-block: 10px 12px;
+  border-block-start: 1px solid var(--line);
+}
+
+.a4-invoice .invoice-topline {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.a4-invoice .invoice-kind {
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: .045em;
+}
+
+.a4-invoice .invoice-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.a4-invoice .status {
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--tint);
+  color: var(--accent);
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.a4-invoice .invoice-reference {
+  margin-block-start: 4px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.a4-invoice .invoice-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin-block-start: 9px;
+}
+
+.a4-invoice .invoice-facts>div {
+  min-inline-size: 0;
+}
+
+.a4-invoice .invoice-facts dt {
+  color: var(--muted);
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  line-height: 1.2;
+}
+
+.a4-invoice .invoice-facts dd {
+  margin-block-start: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.a4-invoice .invoice-facts .mono {
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
 
 /* MEASUREMENTS — neutral grey category subtotals. */
-.a4-invoice .row-block { display: inline-block; inline-size: 100%; vertical-align: top; margin-block-end: 16px; break-inside: avoid; page-break-inside: avoid; }
-.a4-invoice .row-block h3 { margin-block-end: 8px; font-size: 12px; line-height: 1.2; font-weight: 700; }
-.a4-invoice table { inline-size: 100%; border-collapse: collapse; font-size: var(--table-font); line-height: 1.35; }
-.a4-invoice .row-table { table-layout: fixed; }
-.a4-invoice th, .a4-invoice td { padding: var(--cell-y) var(--cell-x); border-block-end: 1px solid var(--line); text-align: start; font-weight: 400; }
-.a4-invoice thead th { background: var(--total-bg); color: var(--ink); font-size: .86em; font-weight: 500; }
-.a4-invoice .row-table thead th { border-block-end-color: var(--border); }
-.a4-invoice tbody th { color: var(--muted); }
-.a4-invoice .row-table .dim, .a4-invoice .row-table .qty { text-align: center; white-space: nowrap; }
-.a4-invoice .row-table .type { white-space: nowrap; font-size: .9em; }
-.a4-invoice .row-table .top { color: var(--accent); }
-.a4-invoice .sub > *, .a4-invoice .total > * { color: var(--ink); font-size: 1em; font-weight: 600; }
-.a4-invoice .sub > * { background: var(--tint); }
-.a4-invoice .total > * { background: var(--total-bg); border-block-end: 0; }
-.a4-invoice .sub > th, .a4-invoice .total > th { text-align: start; }
-.a4-invoice .sub .qty, .a4-invoice .total .qty { text-align: center; }
-.a4-invoice .col-type, .a4-invoice .col-l, .a4-invoice .col-w { inline-size: 12%; }
-.a4-invoice .col-qty { inline-size: 9%; }
-.a4-invoice .col-area { inline-size: 24%; }
-.a4-invoice thead { display: table-header-group; }
-.a4-invoice tfoot { display: table-row-group; }
-.a4-invoice tr { break-inside: avoid; }
+.a4-invoice .row-block {
+  display: inline-block;
+  inline-size: 100%;
+  vertical-align: top;
+  margin-block-end: 16px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.a4-invoice .row-block h3 {
+  margin-block-end: 8px;
+  font-size: 12px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.a4-invoice table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-size: var(--table-font);
+  line-height: 1.35;
+}
+
+.a4-invoice .row-table {
+  table-layout: fixed;
+}
+
+.a4-invoice th,
+.a4-invoice td {
+  padding: var(--cell-y) var(--cell-x);
+  border-block-end: 1px solid var(--line);
+  text-align: start;
+  font-weight: 400;
+}
+
+.a4-invoice thead th {
+  background: var(--total-bg);
+  color: var(--ink);
+  font-size: .86em;
+  font-weight: 500;
+}
+
+.a4-invoice .row-table thead th {
+  border-block-end-color: var(--border);
+}
+
+.a4-invoice tbody th {
+  color: var(--muted);
+}
+
+.a4-invoice .row-table .dim,
+.a4-invoice .row-table .qty {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.a4-invoice .row-table .type {
+  white-space: nowrap;
+  font-size: .9em;
+}
+
+.a4-invoice .row-table .top {
+  color: var(--accent);
+}
+
+.a4-invoice .sub>*,
+.a4-invoice .total>* {
+  color: var(--ink);
+  font-size: 1em;
+  font-weight: 600;
+}
+
+.a4-invoice .sub>* {
+  background: var(--tint);
+}
+
+.a4-invoice .total>* {
+  background: var(--total-bg);
+  border-block-end: 0;
+}
+
+.a4-invoice .sub>th,
+.a4-invoice .total>th {
+  text-align: start;
+}
+
+.a4-invoice .sub .qty,
+.a4-invoice .total .qty {
+  text-align: center;
+}
+
+.a4-invoice .col-type,
+.a4-invoice .col-l,
+.a4-invoice .col-w {
+  inline-size: 12%;
+}
+
+.a4-invoice .col-qty {
+  inline-size: 9%;
+}
+
+.a4-invoice .col-area {
+  inline-size: 24%;
+}
+
+.a4-invoice thead {
+  display: table-header-group;
+}
+
+.a4-invoice tfoot {
+  display: table-row-group;
+}
+
+.a4-invoice tr {
+  break-inside: avoid;
+}
 
 /* Final section order and payment overview rules are defined with .summary-card below. */
 
 /* A4 print settings are explicit. */
-@page { size: A4 portrait; margin: 12mm; }
-@page density-pass3 { size: A4 portrait; margin: 8mm; }
-@page density-pass4 { size: A4 portrait; margin: 8mm; }
-@media print {
-  .a4-invoice, body.a4-body { --table-font: 8pt; --cell-y: 2.4px; --cell-x: 3px; }
-  body.a4-body { padding: 0; background: var(--paper); }
-  .a4-invoice { font-size: 9pt; }
-  .a4-invoice .paper { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-  .a4-invoice .invoice-header { grid-template-columns: minmax(0, .8fr) minmax(0, 2fr); border-block-start-width: 2px; margin-block-end: 12px; }
-  .a4-invoice .business-panel { align-self: stretch; margin-block: 8px; padding-block: 0; padding-inline-end: 12px; border-inline-end: 1px solid var(--border); }
-  .a4-invoice .business-name { font-size: 18pt; }
-  .a4-invoice .business-contact { font-size: 7.5pt; margin-block-start: 5px; }
-  .a4-invoice .invoice-panel { padding-block: 8px; padding-inline-start: 12px; border-block-start: 0; }
-  .a4-invoice .invoice-kind { font-size: 9pt; }
-  .a4-invoice .invoice-state { font-size: 8pt; gap: 8px; }
-  .a4-invoice .status { font-size: 6.5pt; }
-  .a4-invoice .invoice-reference { font-size: 6.5pt; margin-block-start: 3px; }
-  .a4-invoice .invoice-facts { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-block-start: 7px; }
-  .a4-invoice .invoice-facts dt { font-size: 6pt; }
-  .a4-invoice .invoice-facts dd { font-size: 7.5pt; margin-block-start: 2px; }
-  .a4-invoice .row-block { margin-block-end: 12px; }
+@page {
+  size: A4 portrait;
+  margin: 12mm;
 }
-/* Number-and-rule group heading: 1 ─────────; the rule is decorative. */
-.a4-invoice .row-block h3 { display: flex; align-items: center; gap: 8px; }
-.a4-invoice .row-block .group-rule { flex: 1; min-inline-size: 0; border-block-start: 1px solid var(--border); }
-/* LOGO placeholder, replaced by the business image when one is configured. */
-.a4-invoice .business-panel { display: flex; align-items: center; gap: 10px; }
-.a4-invoice .business-copy { min-inline-size: 0; }
-.a4-invoice .logo-placeholder { flex: 0 0 44px; inline-size: 44px; block-size: 44px; display: grid; place-items: center; border: 1px dashed var(--muted); border-radius: 5px; background: var(--tint); color: var(--muted); font-size: 8px; letter-spacing: .08em; }
-.a4-invoice .logo-placeholder.has-logo { border: 0; background: transparent; }
-.a4-invoice .logo-placeholder img { inline-size: 100%; block-size: 100%; object-fit: contain; }
-.a4-invoice .business-contact { overflow-wrap: anywhere; }
+
+@page density-pass3 {
+  size: A4 portrait;
+  margin: 8mm;
+}
+
+@page density-pass4 {
+  size: A4 portrait;
+  margin: 8mm;
+}
+
 @media print {
-  .a4-invoice .invoice-header { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
-  .a4-invoice .business-panel { gap: 8px; }
-  .a4-invoice .logo-placeholder { flex-basis: 36px; inline-size: 36px; block-size: 36px; border-radius: 4px; font-size: 6pt; }
-  .a4-invoice .business-name { font-size: 16pt; }
-  .a4-invoice .business-contact { font-size: 7pt; }
+
+  .a4-invoice,
+  body.a4-body {
+    --table-font: 8pt;
+    --cell-y: 2.4px;
+    --cell-x: 3px;
+  }
+
+  body.a4-body {
+    padding: 0;
+    background: var(--paper);
+  }
+
+  .a4-invoice {
+    font-size: 9pt;
+  }
+
+  .a4-invoice .paper {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .a4-invoice .invoice-header {
+    grid-template-columns: minmax(0, .8fr) minmax(0, 2fr);
+    border-block-start-width: 2px;
+    margin-block-end: 12px;
+  }
+
+  .a4-invoice .business-panel {
+    align-self: stretch;
+    margin-block: 8px;
+    padding-block: 0;
+    padding-inline-end: 12px;
+    border-inline-end: 1px solid var(--border);
+  }
+
+  .a4-invoice .business-name {
+    font-size: 18pt;
+  }
+
+  .a4-invoice .business-contact {
+    font-size: 7.5pt;
+    margin-block-start: 5px;
+  }
+
+  .a4-invoice .invoice-panel {
+    padding-block: 8px;
+    padding-inline-start: 12px;
+    border-block-start: 0;
+  }
+
+  .a4-invoice .invoice-kind {
+    font-size: 9pt;
+  }
+
+  .a4-invoice .invoice-state {
+    font-size: 8pt;
+    gap: 8px;
+  }
+
+  .a4-invoice .status {
+    font-size: 6.5pt;
+  }
+
+  .a4-invoice .invoice-reference {
+    font-size: 6.5pt;
+    margin-block-start: 3px;
+  }
+
+  .a4-invoice .invoice-facts {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 7px;
+    margin-block-start: 7px;
+  }
+
+  .a4-invoice .invoice-facts dt {
+    font-size: 6pt;
+  }
+
+  .a4-invoice .invoice-facts dd {
+    font-size: 7.5pt;
+    margin-block-start: 2px;
+  }
+
+  .a4-invoice .row-block {
+    margin-block-end: 12px;
+  }
+}
+
+/* Number-and-rule group heading: 1 ─────────; the rule is decorative. */
+.a4-invoice .row-block h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.a4-invoice .row-block .group-rule {
+  flex: 1;
+  min-inline-size: 0;
+  border-block-start: 1px solid var(--border);
+}
+
+/* LOGO placeholder, replaced by the business image when one is configured. */
+.a4-invoice .business-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.a4-invoice .business-copy {
+  min-inline-size: 0;
+}
+
+.a4-invoice .logo-placeholder {
+  flex: 0 0 44px;
+  inline-size: 44px;
+  block-size: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--muted);
+  border-radius: 5px;
+  background: var(--tint);
+  color: var(--muted);
+  font-size: 8px;
+  letter-spacing: .08em;
+}
+
+.a4-invoice .logo-placeholder.has-logo {
+  border: 0;
+  background: transparent;
+}
+
+.a4-invoice .logo-placeholder img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+}
+
+.a4-invoice .business-contact {
+  overflow-wrap: anywhere;
+}
+
+@media print {
+  .a4-invoice .invoice-header {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  }
+
+  .a4-invoice .business-panel {
+    gap: 8px;
+  }
+
+  .a4-invoice .logo-placeholder {
+    flex-basis: 36px;
+    inline-size: 36px;
+    block-size: 36px;
+    border-radius: 4px;
+    font-size: 6pt;
+  }
+
+  .a4-invoice .business-name {
+    font-size: 16pt;
+  }
+
+  .a4-invoice .business-contact {
+    font-size: 7pt;
+  }
 }
 
 /* A4 SHEETS: explicit groups and pages, repacked by measured height. Final
@@ -170,44 +615,182 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   box-shadow: var(--shadow);
   background: var(--paper);
 }
-.a4-invoice .sample-sheet .business-name { font-size: 18px; line-height: 1.05; }
-.a4-invoice .sample-sheet .business-contact { font-size: 9px; }
-.a4-invoice .sample-sheet .logo-placeholder { flex-basis: 36px; inline-size: 36px; block-size: 36px; font-size: 7px; }
-.a4-invoice .sample-sheet .business-panel { gap: 8px; }
-.a4-invoice .sample-sheet .invoice-header { flex: 0 0 auto; }
-.a4-invoice .detail-columns { display: grid; grid-template-columns: repeat(var(--invoice-columns, 4),minmax(0,1fr)); gap: 3mm; align-items: start; }
-.a4-invoice .detail-columns.cols-2, .a4-invoice .detail-columns[data-columns="2"], .a4-invoice .sample-sheet[data-columns="2"] .detail-columns { grid-template-columns: repeat(2,minmax(0,1fr)); }
-.a4-invoice .detail-columns.cols-3, .a4-invoice .detail-columns[data-columns="3"], .a4-invoice .sample-sheet[data-columns="3"] .detail-columns { grid-template-columns: repeat(3,minmax(0,1fr)); }
-.a4-invoice .detail-columns.cols-4, .a4-invoice .detail-columns[data-columns="4"], .a4-invoice .sample-sheet[data-columns="4"] .detail-columns { grid-template-columns: repeat(4,minmax(0,1fr)); }
-.a4-invoice .detail-columns.cols-5, .a4-invoice .detail-columns[data-columns="5"], .a4-invoice .sample-sheet[data-columns="5"] .detail-columns { grid-template-columns: repeat(5,minmax(0,1fr)); gap: 2.2mm; }
-.a4-invoice .detail-column { min-inline-size: 0; }
-.a4-invoice .sample-sheet .row-block { display: block; margin-block-end: 12px; }
-.a4-invoice .sample-sheet .row-block h3 { margin-block-end: 5px; font-size: 8.5pt; }
-.a4-invoice .continuation { margin-block-start: 8px; color: var(--muted); font-size: 9px; }
-.a4-invoice .sample-sheet .closing { margin-block-end: 14px; }
+
+.a4-invoice .sample-sheet .business-name {
+  font-size: 18px;
+  line-height: 1.05;
+}
+
+.a4-invoice .sample-sheet .business-contact {
+  font-size: 9px;
+}
+
+.a4-invoice .sample-sheet .logo-placeholder {
+  flex-basis: 36px;
+  inline-size: 36px;
+  block-size: 36px;
+  font-size: 7px;
+}
+
+.a4-invoice .sample-sheet .business-panel {
+  gap: 8px;
+}
+
+.a4-invoice .sample-sheet .invoice-header {
+  flex: 0 0 auto;
+}
+
+.a4-invoice .detail-columns {
+  display: grid;
+  grid-template-columns: repeat(var(--invoice-columns, 4), minmax(0, 1fr));
+  gap: 3mm;
+  align-items: start;
+}
+
+.a4-invoice .detail-columns.cols-2,
+.a4-invoice .detail-columns[data-columns="2"],
+.a4-invoice .sample-sheet[data-columns="2"] .detail-columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.a4-invoice .detail-columns.cols-3,
+.a4-invoice .detail-columns[data-columns="3"],
+.a4-invoice .sample-sheet[data-columns="3"] .detail-columns {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.a4-invoice .detail-columns.cols-4,
+.a4-invoice .detail-columns[data-columns="4"],
+.a4-invoice .sample-sheet[data-columns="4"] .detail-columns {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.a4-invoice .detail-columns.cols-5,
+.a4-invoice .detail-columns[data-columns="5"],
+.a4-invoice .sample-sheet[data-columns="5"] .detail-columns {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 2.2mm;
+}
+
+.a4-invoice .detail-column {
+  min-inline-size: 0;
+}
+
+.a4-invoice .sample-sheet .row-block {
+  display: block;
+  margin-block-end: 12px;
+}
+
+.a4-invoice .sample-sheet .row-block h3 {
+  margin-block-end: 5px;
+  font-size: 8.5pt;
+}
+
+.a4-invoice .continuation {
+  margin-block-start: 8px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.a4-invoice .sample-sheet .closing {
+  margin-block-end: 14px;
+}
+
 @media print {
-  .a4-invoice.sample-pages { display: block; }
-  .a4-invoice .sample-sheet { inline-size: auto; max-inline-size: none; min-block-size: 273mm; padding: 0; margin: 0; border: 0; border-radius: 0; box-shadow: none; break-after: page; page-break-after: always; }
-  .a4-invoice .sample-sheet:last-child { break-after: auto; page-break-after: auto; }
-  .a4-invoice .sample-sheet .business-name { font-size: 13pt; }
-  .a4-invoice .sample-sheet .business-contact { font-size: 7pt; }
-  .a4-invoice .sample-sheet .logo-placeholder { font-size: 6pt; }
-  .a4-invoice .detail-columns { grid-template-columns: repeat(var(--invoice-columns, 4),minmax(0,1fr)); gap: 3mm; }
-  .a4-invoice .detail-columns.cols-2, .a4-invoice .detail-columns[data-columns="2"], .a4-invoice .sample-sheet[data-columns="2"] .detail-columns { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .a4-invoice .detail-columns.cols-3, .a4-invoice .detail-columns[data-columns="3"], .a4-invoice .sample-sheet[data-columns="3"] .detail-columns { grid-template-columns: repeat(3,minmax(0,1fr)); }
-  .a4-invoice .detail-columns.cols-4, .a4-invoice .detail-columns[data-columns="4"], .a4-invoice .sample-sheet[data-columns="4"] .detail-columns { grid-template-columns: repeat(4,minmax(0,1fr)); }
-  .a4-invoice .detail-columns.cols-5, .a4-invoice .detail-columns[data-columns="5"], .a4-invoice .sample-sheet[data-columns="5"] .detail-columns { grid-template-columns: repeat(5,minmax(0,1fr)); gap: 2.2mm; }
-  .a4-invoice .detail-column, .a4-invoice .row-block { break-inside: avoid; page-break-inside: avoid; }
-  .a4-invoice .continuation { font-size: 6.5pt; }
+  .a4-invoice.sample-pages {
+    display: block;
+  }
+
+  .a4-invoice .sample-sheet {
+    inline-size: auto;
+    max-inline-size: none;
+    min-block-size: 273mm;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .a4-invoice .sample-sheet:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .a4-invoice .sample-sheet .business-name {
+    font-size: 13pt;
+  }
+
+  .a4-invoice .sample-sheet .business-contact {
+    font-size: 7pt;
+  }
+
+  .a4-invoice .sample-sheet .logo-placeholder {
+    font-size: 6pt;
+  }
+
+  .a4-invoice .detail-columns {
+    grid-template-columns: repeat(var(--invoice-columns, 4), minmax(0, 1fr));
+    gap: 3mm;
+  }
+
+  .a4-invoice .detail-columns.cols-2,
+  .a4-invoice .detail-columns[data-columns="2"],
+  .a4-invoice .sample-sheet[data-columns="2"] .detail-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .a4-invoice .detail-columns.cols-3,
+  .a4-invoice .detail-columns[data-columns="3"],
+  .a4-invoice .sample-sheet[data-columns="3"] .detail-columns {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .a4-invoice .detail-columns.cols-4,
+  .a4-invoice .detail-columns[data-columns="4"],
+  .a4-invoice .sample-sheet[data-columns="4"] .detail-columns {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .a4-invoice .detail-columns.cols-5,
+  .a4-invoice .detail-columns[data-columns="5"],
+  .a4-invoice .sample-sheet[data-columns="5"] .detail-columns {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 2.2mm;
+  }
+
+  .a4-invoice .detail-column,
+  .a4-invoice .row-block {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .a4-invoice .continuation {
+    font-size: 6.5pt;
+  }
 }
 
 
 
 /* Measurement table columns; all financial values stay in the final summary. */
-.a4-invoice .row-table .col-type { inline-size: 14%; }
-.a4-invoice .row-table .col-l, .a4-invoice .row-table .col-w { inline-size: 18%; }
-.a4-invoice .row-table .col-qty { inline-size: 14%; }
-.a4-invoice .row-table .col-area { inline-size: 36%; }
+.a4-invoice .row-table .col-type {
+  inline-size: 14%;
+}
+
+.a4-invoice .row-table .col-l,
+.a4-invoice .row-table .col-w {
+  inline-size: 18%;
+}
+
+.a4-invoice .row-table .col-qty {
+  inline-size: 14%;
+}
+
+.a4-invoice .row-table .col-area {
+  inline-size: 36%;
+}
 
 /* Slightly larger logo and distinct, restrained subtotal emphasis. */
 .a4-invoice .sample-sheet .logo-placeholder {
@@ -217,6 +800,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   font-size: 8px;
   border-radius: 5px;
 }
+
 @media print {
   .a4-invoice .sample-sheet .logo-placeholder {
     flex-basis: 46px;
@@ -225,25 +809,44 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
     font-size: 6.5pt;
   }
 }
-.a4-invoice .row-table .sub > * {
+
+.a4-invoice .row-table .sub>* {
   background: var(--subtotal-bg);
   border-block-start: 1px solid var(--subtotal-border);
   border-block-end: 1px solid var(--subtotal-border);
   color: var(--ink);
   font-weight: 600;
 }
-.a4-invoice .row-table .sub > th:first-child {
+
+.a4-invoice .row-table .sub>th:first-child {
   border-inline-start: 2px solid var(--subtotal-marker);
   padding-inline-start: 5px;
 }
 
 /* Dimension/count notation: L × W = Qty, followed by the calculated Sq ft.
    Qty is an input piece count; the symbols do not change any value. */
-.a4-invoice .row-table .col-type { inline-size: 14%; }
-.a4-invoice .row-table .col-l, .a4-invoice .row-table .col-w { inline-size: 17%; }
-.a4-invoice .row-table .col-times, .a4-invoice .row-table .col-equals { inline-size: 5%; }
-.a4-invoice .row-table .col-qty { inline-size: 14%; }
-.a4-invoice .row-table .col-area { inline-size: 28%; }
+.a4-invoice .row-table .col-type {
+  inline-size: 14%;
+}
+
+.a4-invoice .row-table .col-l,
+.a4-invoice .row-table .col-w {
+  inline-size: 17%;
+}
+
+.a4-invoice .row-table .col-times,
+.a4-invoice .row-table .col-equals {
+  inline-size: 5%;
+}
+
+.a4-invoice .row-table .col-qty {
+  inline-size: 14%;
+}
+
+.a4-invoice .row-table .col-area {
+  inline-size: 28%;
+}
+
 .a4-invoice .row-table .operator-cell {
   text-align: center;
   padding-inline: 0;
@@ -258,6 +861,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   border-block-start: 0;
   border-block-end: 3px solid var(--accent);
 }
+
 @media print {
   .a4-invoice .sample-sheet .invoice-header {
     border-block-start: 0;
@@ -280,15 +884,31 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   padding: 12mm;
   font-size: 9pt;
 }
-.a4-invoice .sample-sheet .page-body { display: flex; flex-direction: column; inline-size: 100%; min-block-size: 100%; block-size: 100%; }
-.a4-invoice .sample-sheet .detail-columns { flex: 1 1 auto; }
-.a4-invoice .sample-sheet .final-section { flex: 0 0 auto; margin-block-start: auto; }
+
+.a4-invoice .sample-sheet .page-body {
+  display: flex;
+  flex-direction: column;
+  inline-size: 100%;
+  min-block-size: 100%;
+  block-size: 100%;
+}
+
+.a4-invoice .sample-sheet .detail-columns {
+  flex: 1 1 auto;
+}
+
+.a4-invoice .sample-sheet .final-section {
+  flex: 0 0 auto;
+  margin-block-start: auto;
+}
+
 .a4-invoice .sample-sheet .invoice-header {
   grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   border-block-start: 0;
   border-block-end: 2px solid var(--accent);
   margin-block-end: 4px;
 }
+
 .a4-invoice .sample-sheet .business-panel {
   align-self: stretch;
   margin-block: 2px;
@@ -297,32 +917,72 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   border-inline-end: 1px solid var(--border);
   gap: 8px;
 }
+
 .a4-invoice .sample-sheet .business-name {
   font-size: 12pt;
   line-height: 1.05;
   overflow-wrap: anywhere;
 }
-.a4-invoice .sample-sheet .business-contact { font-size: 7pt; margin-block-start: 5px; }
-.a4-invoice .sample-sheet .logo-placeholder { flex-basis: 46px; inline-size: 46px; block-size: 46px; font-size: 6.5pt; }
-.a4-invoice .sample-sheet .invoice-panel { padding-block: 2px; padding-inline-start: 12px; border-block-start: 0; }
-.a4-invoice .sample-sheet .invoice-kind { font-size: 9pt; }
-.a4-invoice .sample-sheet .invoice-state { font-size: 8pt; gap: 8px; }
-.a4-invoice .sample-sheet .status { font-size: 6.5pt; }
-.a4-invoice .sample-sheet .invoice-reference { font-size: 6.5pt; margin-block-start: 3px; }
+
+.a4-invoice .sample-sheet .business-contact {
+  font-size: 7pt;
+  margin-block-start: 5px;
+}
+
+.a4-invoice .sample-sheet .logo-placeholder {
+  flex-basis: 46px;
+  inline-size: 46px;
+  block-size: 46px;
+  font-size: 6.5pt;
+}
+
+.a4-invoice .sample-sheet .invoice-panel {
+  padding-block: 2px;
+  padding-inline-start: 12px;
+  border-block-start: 0;
+}
+
+.a4-invoice .sample-sheet .invoice-kind {
+  font-size: 9pt;
+}
+
+.a4-invoice .sample-sheet .invoice-state {
+  font-size: 8pt;
+  gap: 8px;
+}
+
+.a4-invoice .sample-sheet .status {
+  font-size: 6.5pt;
+}
+
+.a4-invoice .sample-sheet .invoice-reference {
+  font-size: 6.5pt;
+  margin-block-start: 3px;
+}
+
 .a4-invoice .sample-sheet .invoice-facts {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 2px;
   margin-block-start: 4px;
   line-height: 1.2;
 }
-.a4-invoice .sample-sheet .invoice-facts dt { font-size: 6pt; }
-.a4-invoice .sample-sheet .invoice-facts dd { font-size: 7.5pt; margin-block-start: 2px; }
+
+.a4-invoice .sample-sheet .invoice-facts dt {
+  font-size: 6pt;
+}
+
+.a4-invoice .sample-sheet .invoice-facts dd {
+  font-size: 7.5pt;
+  margin-block-start: 2px;
+}
+
 .a4-invoice .sample-sheet .invoice-continued-header {
   display: block;
   margin-block-end: 12px;
   padding-block-end: 4px;
   border-block-end: 1px solid var(--border);
 }
+
 .a4-invoice .sample-sheet .invoice-continued-header .continued-label {
   font-size: 8pt;
   font-weight: 600;
@@ -330,6 +990,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   text-transform: uppercase;
   letter-spacing: .08em;
 }
+
 .a4-invoice .sample-sheet .detail-columns {
   display: grid;
   grid-template-columns: repeat(var(--invoice-columns, 4), minmax(0, 1fr));
@@ -337,12 +998,37 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   align-items: stretch;
   margin: 0;
 }
-.a4-invoice .sample-sheet .detail-columns.cols-2, .a4-invoice .sample-sheet[data-columns="2"] .detail-columns, .a4-invoice .sample-sheet .detail-columns[data-columns="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.a4-invoice .sample-sheet .detail-columns.cols-3, .a4-invoice .sample-sheet[data-columns="3"] .detail-columns, .a4-invoice .sample-sheet .detail-columns[data-columns="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.a4-invoice .sample-sheet .detail-columns.cols-4, .a4-invoice .sample-sheet[data-columns="4"] .detail-columns, .a4-invoice .sample-sheet .detail-columns[data-columns="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.a4-invoice .sample-sheet .detail-columns.cols-5, .a4-invoice .sample-sheet[data-columns="5"] .detail-columns, .a4-invoice .sample-sheet .detail-columns[data-columns="5"] { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2.2mm; }
 
-.a4-invoice .sample-sheet .detail-column { position: relative; min-inline-size: 0; }
+.a4-invoice .sample-sheet .detail-columns.cols-2,
+.a4-invoice .sample-sheet[data-columns="2"] .detail-columns,
+.a4-invoice .sample-sheet .detail-columns[data-columns="2"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.a4-invoice .sample-sheet .detail-columns.cols-3,
+.a4-invoice .sample-sheet[data-columns="3"] .detail-columns,
+.a4-invoice .sample-sheet .detail-columns[data-columns="3"] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.a4-invoice .sample-sheet .detail-columns.cols-4,
+.a4-invoice .sample-sheet[data-columns="4"] .detail-columns,
+.a4-invoice .sample-sheet .detail-columns[data-columns="4"] {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.a4-invoice .sample-sheet .detail-columns.cols-5,
+.a4-invoice .sample-sheet[data-columns="5"] .detail-columns,
+.a4-invoice .sample-sheet .detail-columns[data-columns="5"] {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 2.2mm;
+}
+
+.a4-invoice .sample-sheet .detail-column {
+  position: relative;
+  min-inline-size: 0;
+}
+
 /* The | separators are real, fine vertical rules centred in the column gaps. */
 .a4-invoice .sample-sheet .column-rule {
   position: absolute;
@@ -352,24 +1038,30 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   border-inline-start: 1px solid var(--column-rule);
   pointer-events: none;
 }
+
 .a4-invoice .sample-sheet[data-columns="5"] .column-rule,
 .a4-invoice .sample-sheet .detail-columns.cols-5 .column-rule {
   inset-inline-start: calc(-1.1mm - .5px);
 }
+
 .a4-invoice .sample-sheet[data-columns="2"] {
   --cell-x: 4px;
 }
+
 .a4-invoice .sample-sheet[data-columns="5"] {
   --cell-x: 1.5px;
 }
+
 .a4-invoice .sample-sheet[data-columns="5"] .row-table {
   font-size: 7.5pt;
   line-height: 1.15;
 }
+
 .a4-invoice .sample-sheet[data-columns="5"] .row-table th,
 .a4-invoice .sample-sheet[data-columns="5"] .row-table td {
   padding-inline: 1.5px;
 }
+
 .a4-invoice .sample-sheet .row-block {
   display: block;
   inline-size: 100%;
@@ -377,10 +1069,27 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   break-inside: avoid;
   page-break-inside: avoid;
 }
-.a4-invoice .sample-sheet .row-block:last-child { margin-block-end: 0; }
-.a4-invoice .sample-sheet .row-block h3 { margin-block-end: 4px; font-size: 8.5pt; line-height: 1.2; }
-.a4-invoice .sample-sheet .row-table { font-size: 8pt; line-height: 1.2; }
-.a4-invoice .sample-sheet .row-table th, .a4-invoice .sample-sheet .row-table td { padding-block: var(--cell-y); }
+
+.a4-invoice .sample-sheet .row-block:last-child {
+  margin-block-end: 0;
+}
+
+.a4-invoice .sample-sheet .row-block h3 {
+  margin-block-end: 4px;
+  font-size: 8.5pt;
+  line-height: 1.2;
+}
+
+.a4-invoice .sample-sheet .row-table {
+  font-size: 8pt;
+  line-height: 1.2;
+}
+
+.a4-invoice .sample-sheet .row-table th,
+.a4-invoice .sample-sheet .row-table td {
+  padding-block: var(--cell-y);
+}
+
 .a4-invoice .sample-sheet .final-section {
   display: flow-root;
   margin-block-start: auto;
@@ -389,6 +1098,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   break-inside: avoid;
   page-break-inside: avoid;
 }
+
 .a4-invoice .summary-card {
   display: flex;
   flex-direction: column;
@@ -404,9 +1114,11 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
-.a4-invoice .summary-card > section {
+
+.a4-invoice .summary-card>section {
   margin: 0;
 }
+
 .a4-invoice .summary-title,
 .a4-invoice .bank-heading,
 .a4-invoice .words-line .label {
@@ -418,34 +1130,41 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   margin: 0;
   line-height: 1.2;
 }
+
 .a4-invoice .product-summary {
   border-block-end: 0.5pt solid var(--line);
   padding-block-end: 4px;
   margin: 0;
 }
+
 .a4-invoice .product-summary .section-header {
   border-block-end: 1px solid var(--line);
   padding-block-end: 3px;
   margin-block-end: 2px;
 }
+
 .a4-invoice .product-summary-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   column-gap: 0;
   row-gap: 5px;
 }
+
 .a4-invoice .product-summary-card {
   padding: 2px 10px;
   margin: 0;
   box-sizing: border-box;
 }
+
 .a4-invoice .product-summary-card:first-child,
 .a4-invoice .product-summary-card:nth-child(3n + 1) {
   padding-inline-start: 0;
 }
+
 .a4-invoice .product-summary-card:not(:nth-child(3n + 1)) {
   border-inline-start: 1px solid var(--line);
 }
+
 .a4-invoice .product-summary-name {
   font-size: 8pt;
   font-weight: 500;
@@ -453,14 +1172,17 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   margin-block-end: 2px;
   overflow-wrap: anywhere;
 }
+
 .a4-invoice .product-summary-bottom {
   display: flex;
   align-items: baseline;
 }
+
 .a4-invoice .product-summary-quantity {
   display: inline-flex;
   align-items: baseline;
 }
+
 .a4-invoice .product-summary-quantity .qty-num {
   font-size: 14pt;
   font-weight: 700;
@@ -468,12 +1190,14 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
+
 .a4-invoice .product-summary-quantity .qty-unit {
   font-size: 7.5pt;
   font-weight: 400;
   color: var(--muted);
   margin-inline-start: 3px;
 }
+
 .a4-invoice .metric-divider {
   color: var(--border);
   margin-inline: 8px;
@@ -481,10 +1205,12 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   font-size: 10pt;
   line-height: 1;
 }
+
 .a4-invoice .product-summary-rate {
   display: inline-flex;
   align-items: baseline;
 }
+
 .a4-invoice .product-summary-rate .rate-num {
   font-size: 9.5pt;
   font-weight: 700;
@@ -492,6 +1218,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
+
 .a4-invoice .product-summary-rate .rate-unit {
   font-size: 7.5pt;
   font-weight: 400;
@@ -507,24 +1234,30 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   margin: 0;
   padding: 0;
 }
-.a4-invoice .invoice-summary > .order-overview {
+
+.a4-invoice .invoice-summary>.order-overview {
   padding-inline-end: 12px;
   border-inline-end: 1px solid var(--line);
 }
-.a4-invoice .invoice-summary > .settlement-overview {
+
+.a4-invoice .invoice-summary>.settlement-overview {
   padding-inline-start: 12px;
 }
+
 .a4-invoice .invoice-summary.driver-summary {
   display: block;
 }
-.a4-invoice .invoice-summary.driver-summary > .order-overview {
+
+.a4-invoice .invoice-summary.driver-summary>.order-overview {
   padding-inline-end: 0;
   border-inline-end: 0;
 }
+
 .a4-invoice .order-overview .section-header,
 .a4-invoice .settlement-overview .section-header {
   margin-block-end: 5px;
 }
+
 .a4-invoice .headline-totals {
   display: flex;
   align-items: center;
@@ -532,6 +1265,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   margin: 0;
   padding: 0;
 }
+
 .a4-invoice .headline-stat {
   display: flex;
   flex-direction: column;
@@ -539,12 +1273,14 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   padding-block: 2px;
   margin: 0;
 }
+
 .a4-invoice .headline-stat dt {
   font-size: 7pt;
   color: var(--muted);
   font-weight: 500;
   margin: 0 0 1px 0;
 }
+
 .a4-invoice .headline-stat dd {
   font-size: 15pt;
   font-weight: 700;
@@ -553,6 +1289,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   font-variant-numeric: tabular-nums;
   margin: 0;
 }
+
 .a4-invoice .kpi-divider {
   color: var(--border);
   font-size: 12pt;
@@ -560,6 +1297,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   margin-inline: 6px;
   line-height: 1;
 }
+
 .a4-invoice .subtotal-box {
   background-color: var(--subtotal-bg);
   border-radius: 4px;
@@ -568,10 +1306,12 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
+
 .a4-invoice .subtotal-box .material-total {
   margin: 0;
   padding: 0;
 }
+
 .a4-invoice .subtotal-row {
   display: flex;
   justify-content: space-between;
@@ -580,14 +1320,17 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   margin: 0;
   font-size: 7.5pt;
 }
+
 .a4-invoice .subtotal-row:not(:last-child) {
   border-block-end: 1px solid var(--line);
 }
+
 .a4-invoice .subtotal-row dt {
   color: var(--muted);
   font-weight: 500;
   margin: 0;
 }
+
 .a4-invoice .subtotal-row dd {
   font-weight: 700;
   color: var(--ink);
@@ -600,6 +1343,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   margin: 0;
   padding: 0;
 }
+
 .a4-invoice .settlement-row {
   display: flex;
   justify-content: space-between;
@@ -609,17 +1353,20 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   font-size: 7.5pt;
   border-block-end: 1px solid var(--line);
 }
+
 .a4-invoice .settlement-row dt {
   color: var(--muted);
   font-weight: 500;
   margin: 0;
 }
+
 .a4-invoice .settlement-row dd {
   font-weight: 600;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
   margin: 0;
 }
+
 .a4-invoice .settlement-net {
   background-color: var(--subtotal-bg);
   border-inline-start: 3px solid var(--ink);
@@ -632,6 +1379,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
+
 .a4-invoice .settlement-net dt {
   font-size: 7pt;
   font-weight: 700;
@@ -640,6 +1388,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   color: var(--ink);
   margin: 0;
 }
+
 .a4-invoice .settlement-net dd {
   font-size: 15pt;
   font-weight: 900;
@@ -655,12 +1404,14 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   padding-block: 3px;
   margin: 0;
 }
+
 .a4-invoice .words-line {
   display: flex;
   align-items: baseline;
   gap: 8px;
   margin: 0;
 }
+
 .a4-invoice .words-line .label {
   font-size: 8.5px;
   font-weight: 700;
@@ -671,6 +1422,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   white-space: nowrap;
   margin: 0;
 }
+
 .a4-invoice .words-line .amount-in-words {
   font-size: 8pt;
   font-weight: 700;
@@ -686,6 +1438,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   margin: 0;
   padding: 0;
 }
+
 .a4-invoice .footer-details {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -693,14 +1446,17 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   align-items: end;
   padding-block-start: 2px;
 }
+
 .a4-invoice .bank-details {
   min-inline-size: 0;
   margin: 0;
   padding: 0;
 }
+
 .a4-invoice .bank-head {
   margin-block-end: 3px;
 }
+
 .a4-invoice .bank-head .bank-heading {
   font-size: 7pt;
   font-weight: 700;
@@ -709,6 +1465,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   color: var(--ink);
   margin: 0;
 }
+
 .a4-invoice .bank-fields {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -717,24 +1474,28 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   margin: 0;
   padding: 0;
 }
-.a4-invoice .bank-fields > div {
+
+.a4-invoice .bank-fields>div {
   display: flex;
   align-items: baseline;
   gap: 3px;
   font-size: 7pt;
   line-height: 1.25;
 }
+
 .a4-invoice .bank-fields dt {
   color: var(--muted);
   font-weight: 500;
   white-space: nowrap;
 }
+
 .a4-invoice .bank-fields dd {
   color: var(--ink);
   font-weight: 600;
   margin: 0;
   overflow-wrap: anywhere;
 }
+
 .a4-invoice .sign {
   display: flex;
   flex-direction: column;
@@ -746,18 +1507,26 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   padding-block-start: 3px;
   margin-inline-start: auto;
 }
+
 .a4-invoice .sign strong {
   font-size: 7.5pt;
   font-weight: 700;
   color: var(--ink);
 }
+
 .a4-invoice .sign span {
   font-size: 6.5pt;
   font-weight: 700;
   text-transform: uppercase;
   color: var(--muted);
 }
-.a4-invoice .sample-sheet .continuation { margin-block-start: 8px; font-size: 6.5pt; line-height: 1.3; }
+
+.a4-invoice .sample-sheet .continuation {
+  margin-block-start: 8px;
+  font-size: 6.5pt;
+  line-height: 1.3;
+}
+
 .a4-invoice .serial-badge {
   display: inline-flex;
   align-items: center;
@@ -773,8 +1542,22 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   text-align: center;
   flex: 0 0 15px;
 }
-.a4-invoice .continuation-marker { margin-inline-start: 2px; color: var(--muted); font-size: 5.5pt; font-weight: 500; letter-spacing: 0; text-transform: lowercase; }
-.a4-invoice .bank-text { font-size: 7.25pt; line-height: 1.3; font-weight: 500; overflow-wrap: anywhere; }
+
+.a4-invoice .continuation-marker {
+  margin-inline-start: 2px;
+  color: var(--muted);
+  font-size: 5.5pt;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: lowercase;
+}
+
+.a4-invoice .bank-text {
+  font-size: 7.25pt;
+  line-height: 1.3;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
 
 /* Multi-pass density tiers for fitting on one A4 page */
 /* Pass 2: Reduced unnecessary padding and spacing */
@@ -785,11 +1568,13 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   --cell-x: 2.5px;
   --group-gap: 4px;
 }
+
 .a4-invoice .sample-sheet.density-pass2 .invoice-header,
 .a4-invoice .sample-sheet.density-pass3 .invoice-header,
 .a4-invoice .sample-sheet.density-pass4 .invoice-header {
   margin-block-end: 6px;
 }
+
 .a4-invoice .sample-sheet.density-pass2 .business-panel,
 .a4-invoice .sample-sheet.density-pass3 .business-panel,
 .a4-invoice .sample-sheet.density-pass4 .business-panel {
@@ -797,17 +1582,20 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   padding-block: 0;
   gap: 6px;
 }
+
 .a4-invoice .sample-sheet.density-pass2 .invoice-panel,
 .a4-invoice .sample-sheet.density-pass3 .invoice-panel,
 .a4-invoice .sample-sheet.density-pass4 .invoice-panel {
   padding-block: 4px 6px;
 }
+
 .a4-invoice .sample-sheet.density-pass2 .row-block h3,
 .a4-invoice .sample-sheet.density-pass3 .row-block h3,
 .a4-invoice .sample-sheet.density-pass4 .row-block h3 {
   margin-block-end: 2px;
   font-size: 8pt;
 }
+
 .a4-invoice .sample-sheet.density-pass2 .serial-badge,
 .a4-invoice .sample-sheet.density-pass3 .serial-badge,
 .a4-invoice .sample-sheet.density-pass4 .serial-badge {
@@ -816,6 +1604,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   font-size: 7pt;
   flex: 0 0 13.5px;
 }
+
 .a4-invoice .sample-sheet.density-pass2 .summary-card,
 .a4-invoice .sample-sheet.density-pass3 .summary-card,
 .a4-invoice .sample-sheet.density-pass4 .summary-card {
@@ -824,6 +1613,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   margin-block-start: 8px;
   margin-top: 8px;
 }
+
 .a4-invoice .sample-sheet.density-pass2 .settlement-row,
 .a4-invoice .sample-sheet.density-pass3 .settlement-row,
 .a4-invoice .sample-sheet.density-pass4 .settlement-row {
@@ -835,6 +1625,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
 .a4-invoice .sample-sheet.density-pass4 {
   padding: 8mm;
 }
+
 @media print {
   .a4-invoice .sample-sheet.density-pass3 {
     padding: 0;
@@ -842,6 +1633,7 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
     min-block-size: 281mm;
     block-size: 281mm;
   }
+
   .a4-invoice .sample-sheet.density-pass4 {
     padding: 0;
     page: density-pass4;
@@ -849,14 +1641,17 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
     block-size: 281mm;
   }
 }
+
 .a4-invoice.a4-measure-host .sample-sheet.density-pass3,
 .a4-invoice.a4-measure-host .sample-sheet.density-pass4 {
   padding: 8mm;
 }
-.a4-invoice.a4-measure-host .sample-sheet.density-pass3 + .page-height-ruler,
-.a4-invoice.a4-measure-host .sample-sheet.density-pass4 + .page-height-ruler {
+
+.a4-invoice.a4-measure-host .sample-sheet.density-pass3+.page-height-ruler,
+.a4-invoice.a4-measure-host .sample-sheet.density-pass4+.page-height-ruler {
   inline-size: 194mm;
-  block-size: 281mm; /* 297mm - 16mm = 281mm */
+  block-size: 281mm;
+  /* 297mm - 16mm = 281mm */
 }
 
 /* Pass 4: Measurement typography down to 7.5pt (the absolute minimum floor) */
@@ -865,10 +1660,12 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   --cell-y: 0.8px;
   --cell-x: 2px;
 }
+
 .a4-invoice .sample-sheet.density-pass4 .row-table {
   font-size: 7.5pt;
   line-height: 1.2;
 }
+
 .a4-invoice .sample-sheet.density-pass4 .row-table th,
 .a4-invoice .sample-sheet.density-pass4 .row-table td {
   padding-block: 0.8px;
@@ -887,38 +1684,130 @@ body.a4-body { margin: 0; padding: 24px; background: var(--canvas); }
   pointer-events: none;
   z-index: -1;
 }
-.a4-invoice.a4-measure-host .sample-sheet { inline-size: 210mm; max-inline-size: none; padding: 12mm; box-shadow: none; }
-.a4-invoice.a4-measure-host .page-height-ruler { position: absolute; inline-size: 186mm; block-size: 272.5mm; }
+
+.a4-invoice.a4-measure-host .sample-sheet {
+  inline-size: 210mm;
+  max-inline-size: none;
+  padding: 12mm;
+  box-shadow: none;
+}
+
+.a4-invoice.a4-measure-host .page-height-ruler {
+  position: absolute;
+  inline-size: 186mm;
+  block-size: 272.5mm;
+}
 
 /* Keep the printable canvas intact; narrow screens scroll inside the preview. */
-.a4-invoice.sample-pages { display: grid; justify-items: center; gap: 20px; inline-size: 100%; min-inline-size: 0; }
-@media screen {
-  .a4-invoice.sample-pages { overflow-x: auto; grid-template-columns: minmax(210mm, 1fr); }
-  .a4-invoice.sample-pages .sample-sheet { max-inline-size: none; }
+.a4-invoice.sample-pages {
+  display: grid;
+  justify-items: center;
+  gap: 20px;
+  inline-size: 100%;
+  min-inline-size: 0;
 }
+
+@media screen {
+  .a4-invoice.sample-pages {
+    overflow-x: auto;
+    grid-template-columns: minmax(210mm, 1fr);
+  }
+
+  .a4-invoice.sample-pages .sample-sheet {
+    max-inline-size: none;
+  }
+}
+
 @media print {
-  .a4-invoice.sample-pages { display: block; }
-  .a4-invoice .sample-sheet { inline-size: auto; max-inline-size: none; min-block-size: 272.5mm; block-size: 272.5mm; padding: 0; margin: 0; border: 0; box-shadow: none; break-after: page; page-break-after: always; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-  .a4-invoice .sample-sheet:last-child { break-after: auto; page-break-after: auto; }
-  .a4-invoice .sample-sheet .detail-column { break-inside: avoid; page-break-inside: avoid; }
-  .a4-invoice.a4-measure-host .sample-sheet { inline-size: 210mm; padding: 12mm; }
-  body.a4-body { padding: 0; background: var(--paper); }
+  .a4-invoice.sample-pages {
+    display: block;
+  }
+
+  .a4-invoice .sample-sheet {
+    inline-size: auto;
+    max-inline-size: none;
+    min-block-size: 272.5mm;
+    block-size: 272.5mm;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    box-shadow: none;
+    break-after: page;
+    page-break-after: always;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .a4-invoice .sample-sheet:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .a4-invoice .sample-sheet .detail-column {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .a4-invoice.a4-measure-host .sample-sheet {
+    inline-size: 210mm;
+    padding: 12mm;
+  }
+
+  body.a4-body {
+    padding: 0;
+    background: var(--paper);
+  }
 }
 
 @media screen and (max-width: 359px) {
-  .bill-screen .invoice-export-intro { padding-inline: 12px; }
-  .bill-screen .invoice-export-options { padding-inline: 0; }
-  .bill-screen .invoice-export-option { gap: 8px; padding-inline: 8px; }
-  .bill-screen .invoice-export-footer { padding-inline: 12px; }
-  .bill-screen .invoice-export-footer .action-row { flex-wrap: wrap; }
-  .bill-screen .invoice-export-footer .action-row > .btn { flex: 1 1 100%; }
-  .bill-screen .invoice-export-footer .action-icon-disc { width: 24px; height: 24px; }
+  .bill-screen .invoice-export-intro {
+    padding-inline: 12px;
+  }
+
+  .bill-screen .invoice-export-options {
+    padding-inline: 0;
+  }
+
+  .bill-screen .invoice-export-option {
+    gap: 8px;
+    padding-inline: 8px;
+  }
+
+  .bill-screen .invoice-export-footer {
+    padding-inline: 12px;
+  }
+
+  .bill-screen .invoice-export-footer .action-row {
+    flex-wrap: wrap;
+  }
+
+  .bill-screen .invoice-export-footer .action-row>.btn {
+    flex: 1 1 100%;
+  }
+
+  .bill-screen .invoice-export-footer .action-icon-disc {
+    width: 24px;
+    height: 24px;
+  }
 }
 
 /* Preserve readable five-column labels and area subtotals without shrinking text. */
 .a4-invoice .sample-sheet[data-columns="5"] .row-table th,
-.a4-invoice .sample-sheet[data-columns="5"] .row-table td { padding-inline: .5px; }
+.a4-invoice .sample-sheet[data-columns="5"] .row-table td {
+  padding-inline: .5px;
+}
+
 .a4-invoice .sample-sheet[data-columns="5"] .row-table .col-l,
-.a4-invoice .sample-sheet[data-columns="5"] .row-table .col-w { inline-size: 15.5%; }
-.a4-invoice .sample-sheet[data-columns="5"] .row-table .col-area { inline-size: 31%; }
-.a4-invoice .unit-products p { font-size: 8pt; overflow-wrap: anywhere; margin-block: 3px; }
+.a4-invoice .sample-sheet[data-columns="5"] .row-table .col-w {
+  inline-size: 15.5%;
+}
+
+.a4-invoice .sample-sheet[data-columns="5"] .row-table .col-area {
+  inline-size: 31%;
+}
+
+.a4-invoice .unit-products p {
+  font-size: 8pt;
+  overflow-wrap: anywhere;
+  margin-block: 3px;
+}

@@ -36,6 +36,7 @@ function buildAnalytics(records, now = new Date(), period = '30') {
   const days = period === 'all' ? null : Number(period);
   const range = windows(now, days);
   const statusCounts = { Draft: 0, Dispatched: 0, Delivered: 0 };
+  const todayStatusCounts = { Draft: 0, Dispatched: 0, Delivered: 0 };
   const current = emptyTotals(), previous = emptyTotals();
   const trend = new Map();
   if (days !== null) for (let i = 0; i < days; i += 1) {
@@ -64,6 +65,7 @@ function buildAnalytics(records, now = new Date(), period = '30') {
     const inPrevious = range.previousFrom !== null && day >= range.previousFrom && day <= range.previousTo;
     if (!inCurrent && !inPrevious) continue;
     if (inCurrent && statusCounts[record.status] !== undefined) statusCounts[record.status] += 1;
+    if (day === range.to && todayStatusCounts[record.status] !== undefined) todayStatusCounts[record.status] += 1;
     if (!FINALIZED.has(record.status)) continue;
     const summary = record.summary || {};
     const billed = figure(summary.netBillableAmount);
@@ -94,6 +96,7 @@ function buildAnalytics(records, now = new Date(), period = '30') {
     period: { from: range.from, to: range.to, days, granularity: days === null ? 'month' : 'day', timezone: TIMEZONE, dateBasis: 'dispatchDate' },
     comparison: range.previousFrom ? { from: range.previousFrom, to: range.previousTo } : null,
     statusCounts,
+    todayStatusCounts,
     current,
     previous,
     trend: [...trend.values()].sort((a, b) => a.date.localeCompare(b.date)).map(point => ({ ...point, billed: money(point.billed) })),
@@ -140,7 +143,7 @@ function buildPaymentAnalytics(records, payments, now = new Date(), period = '30
   const getParty = record => {
     const name = String(record.partyName || '').trim() || 'Unspecified party';
     if (!parties.has(name)) parties.set(name, {
-      party: name, received: 0, completedInvoiceTotal: 0, completedInvoices: 0,
+      party: name, billed: 0, received: 0, completedInvoiceTotal: 0, completedInvoices: 0,
       outstanding: 0, unpaidInvoices: 0, partialInvoices: 0
     });
     return parties.get(name);
@@ -150,6 +153,7 @@ function buildPaymentAnalytics(records, payments, now = new Date(), period = '30
     const invoiceTotal = figure(record.summary?.netBillableAmount);
     if (invoiceTotal === null) continue;
     const party = getParty(record);
+    party.billed += invoiceTotal;
     const invoicePayments = paymentsByDispatch.get(record.id) || [];
     const paymentSummary = derivePaymentSummary(invoiceTotal, invoicePayments);
     party.outstanding += paymentSummary.balance;
@@ -180,6 +184,7 @@ function buildPaymentAnalytics(records, payments, now = new Date(), period = '30
   }
 
   for (const party of parties.values()) {
+    party.billed = money(party.billed);
     party.received = money(party.received);
     party.completedInvoiceTotal = money(party.completedInvoiceTotal);
     party.outstanding = money(party.outstanding);

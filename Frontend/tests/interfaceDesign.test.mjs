@@ -100,7 +100,7 @@ const analyticsMock = (empty, selectedPeriod = '3') => {
     return { date, received: receipt, completedInvoiceTotal: completed, completedInvoices: completed ? 1 : 0 };
   });
   return { period: { from, to, days, granularity: allTime ? 'month' : 'day', timezone: 'Asia/Kolkata', dateBasis: 'dispatchDate' }, comparison: allTime ? null : { from: addAnalyticsDays(from, -days), to: addAnalyticsDays(from, -1) },
-    statusCounts: { Draft: empty ? 0 : 2, Dispatched: empty ? 0 : 2, Delivered: empty ? 0 : 3 }, current: totals,
+    statusCounts: { Draft: empty ? 0 : 2, Dispatched: empty ? 0 : 2, Delivered: empty ? 0 : 3 }, todayStatusCounts: { Draft: empty ? 0 : 2, Dispatched: empty ? 0 : 2, Delivered: empty ? 0 : 3 }, current: totals,
     previous: empty ? totals : { finalizedLoads: 4, billed: 73536, areaSqFt: 1074, pieces: 172, averageBilled: 18384 }, trend,
     topDestinations: empty ? [] : [{ name: 'Sample North Yard', billed: 55152, loads: 3 }, { name: 'Sample South Yard', billed: 36768, loads: 2 }], unreadable: 0,
     paymentAnalytics: {
@@ -111,10 +111,10 @@ const analyticsMock = (empty, selectedPeriod = '3') => {
       previous: { received: empty ? 0 : 15000 },
       trend: paymentTrend,
       parties: empty ? [] : [
-        { party: 'Sample Buyer 1', received: 15000, completedInvoiceTotal: 15000, completedInvoices: 1, outstanding: 6000, unpaidInvoices: 0, partialInvoices: 1 },
-        { party: 'Sample Buyer 2', received: 12000, completedInvoiceTotal: 15000, completedInvoices: 1, outstanding: 4000, unpaidInvoices: 0, partialInvoices: 1 },
-        { party: 'Sample Buyer 3', received: 10000, completedInvoiceTotal: 0, completedInvoices: 0, outstanding: 3000, unpaidInvoices: 1, partialInvoices: 0 },
-        { party: 'Sample Buyer 4', received: 8000, completedInvoiceTotal: 0, completedInvoices: 0, outstanding: 2000, unpaidInvoices: 1, partialInvoices: 0 }
+        { party: 'Sample Buyer 1', billed: 21000, received: 15000, completedInvoiceTotal: 15000, completedInvoices: 1, outstanding: 6000, unpaidInvoices: 0, partialInvoices: 1 },
+        { party: 'Sample Buyer 2', billed: 16000, received: 12000, completedInvoiceTotal: 15000, completedInvoices: 1, outstanding: 4000, unpaidInvoices: 0, partialInvoices: 1 },
+        { party: 'Sample Buyer 3', billed: 30000, received: 10000, completedInvoiceTotal: 0, completedInvoices: 0, outstanding: 3000, unpaidInvoices: 1, partialInvoices: 0 },
+        { party: 'Sample Buyer 4', billed: 9000, received: 8000, completedInvoiceTotal: 0, completedInvoices: 0, outstanding: 2000, unpaidInvoices: 1, partialInvoices: 0 }
       ]
     }
   };
@@ -409,19 +409,27 @@ async function workspace(language, width) {
     await capture('dashboard-priority'); await trigger.click(); await expect(trigger).toHaveAttribute('aria-pressed', 'false'); await expect(visibleRecords()).toHaveCount(5);
   });
   await check('Payments page owns finance insights without repeating them on dashboard', async () => {
-    await expect(main().locator('.analytics-domain h3')).toHaveText('Logistics');
-    await expect(main().locator('.payments-summary, .payments-trend-chart, .payments-party-bars')).toHaveCount(0);
+    await expect(main().locator('.dashboard-analytics h2')).toHaveText('Load status');
+    await expect(main().locator('.dashboard-analytics .analytics-pie')).toBeVisible();
+    await expect(main().locator('.dashboard-analytics .analytics-legend li')).toHaveCount(3);
+    await expect(main().locator('.dashboard-analytics .analytics-period-filter, .dashboard-analytics .analytics-summary')).toHaveCount(0);
+    await expect(main().locator('.payments-summary, .payments-trend-chart, .payments-party-bars, .payments-donut')).toHaveCount(0);
     await page.evaluate(() => { location.hash = 'payments'; });
     await view('payments');
     const payments = main().locator('.payments-analytics');
     await expect(payments.getByRole('heading', { name: 'Payments', exact: true })).toBeVisible();
-    await expect(payments.locator('.payments-summary dt')).toHaveText(['Total billed', 'Received', 'Invoices paid in full', 'Outstanding']);
+    await expect(payments.locator('.payments-summary dt')).toHaveText(['Billed in period', 'Received in period', 'Invoices paid in full', 'Outstanding']);
     await expect(payments.locator('.payments-summary dd')).toHaveText(['₹91,920.00', '₹45,000.00', '2₹30,000.00 invoice value', '₹15,000.00']);
     await expect(payments.locator('.payments-summary > div').nth(3)).toContainText('All time');
-    await expect(payments.locator('.payments-trend-bar')).toHaveCount(6);
-    await expect(payments.locator('.payments-party-bars > li')).toHaveCount(4);
-    await expect(payments.locator('.analytics-payment-status')).toHaveText(['Part-paid', 'Part-paid', 'Unpaid', 'Unpaid']);
-    await expect(payments.locator('.analytics-donut, .analytics-party-list')).toHaveCount(0);
+    await expect(payments.locator('.payments-donut-segment')).toHaveCount(4);
+    await expect(payments.locator('.payments-party-lines, .payments-party-line')).toHaveCount(0);
+    await expect(payments.locator('.payments-trend-chart, .payments-trend-line')).toHaveCount(0);
+    await expect(payments.locator('.payments-donut-total')).toHaveCount(0);
+    await expect(payments.locator('.payments-party-list > li')).toHaveCount(4);
+    await expect(payments.locator('.payments-party-amount-bar')).toHaveCount(8);
+    await expect(payments.locator('.payments-party-amounts > div')).toHaveCount(8);
+    await expect(payments.locator('.payments-party-list').getByText('Total billed', { exact: true })).toHaveCount(4);
+    await expect(payments.locator('.payments-party-list').getByText('Due', { exact: true })).toHaveCount(4);
     await expect(payments.getByRole('button', { name: '3 days', exact: true })).toHaveCSS('min-height', '44px');
     const size = await payments.evaluate(element => ({ client: element.clientWidth, scroll: element.scrollWidth }));
     assert.ok(size.scroll <= size.client, `Payments analytics overflow: ${JSON.stringify(size)}`);
@@ -434,7 +442,7 @@ async function workspace(language, width) {
       allTime.click()
     ]);
     await expect(allTime).toHaveAttribute('aria-pressed', 'true');
-    await expect(payments.locator('.payments-trend-chart text').last()).toContainText('Oct');
+    await expect(payments.locator('.payments-receivables .analytics-note')).toContainText('All-time');
     await overflow('payments', true);
     await page.evaluate(() => { location.hash = 'home'; });
     await view('home');
@@ -645,10 +653,18 @@ async function workspace(language, width) {
     await main().getByLabel('Party name', { exact: true }).fill('Sample Preview Buyer');
     await main().getByLabel('Truck number', { exact: true }).fill('MOCK-PREVIEW-LORRY');
     await main().getByLabel('Destination', { exact: true }).fill('Sample North Yard');
+    const dimensions = main().locator('.grid-cols-3').filter({ has: main().getByLabel('Length (ft)', { exact: true }) });
+    await expect(dimensions.getByLabel('Width (ft)', { exact: true })).toHaveCount(1);
+    await expect(dimensions.getByLabel('Quantity', { exact: true })).toHaveCount(1);
+    await expect(main().locator('.measurement-fractions')).toHaveCount(1);
     await main().getByLabel('Length (ft)', { exact: true }).fill('3');
     const fractions = main().locator('.measurement-fractions').first(); await fractions.locator('summary').click();
     await fractions.getByRole('button', { name: 'Add ½ foot to length', exact: true }).click();
+    await expect(main().getByLabel('Length (ft)', { exact: true })).toHaveValue('3½');
     await main().getByLabel('Width (ft)', { exact: true }).fill('2');
+    await fractions.locator('summary').click();
+    await fractions.getByRole('button', { name: 'Add ¼ foot to width', exact: true }).click();
+    await expect(main().getByLabel('Width (ft)', { exact: true })).toHaveValue('2¼');
     await main().getByLabel('Quantity', { exact: true }).fill('30');
     await main().getByRole('button', { name: 'Add entry', exact: true }).click(); await expect(main().locator('.measurement-record')).toHaveCount(1);
     await main().getByRole('button', { name: 'Edit entry' }).click(); await expect(main().locator('.measurement-record')).toHaveCount(0);

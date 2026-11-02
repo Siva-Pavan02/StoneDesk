@@ -17,6 +17,7 @@ const MAX_ROW = 20;
 export default function MeasurementEntry({ products, entry, onChange, onAdd, errors = {}, notice = '', canAddProduct = false, organizationId, onProductAdded, onRemoveProduct, onEditProduct }) {
   // null | { kind: 'add' } | { kind: 'edit', id }
   const [panel, setPanel] = useState(null);
+  const [fractionTarget, setFractionTarget] = useState('length');
   // A product save is in flight: the picker's add / edit / remove actions are locked so they
   // cannot unmount the pending form (selecting a product stays allowed).
   const [productBusy, setProductBusy] = useState(false);
@@ -91,12 +92,15 @@ export default function MeasurementEntry({ products, entry, onChange, onAdd, err
     </div>
     <div className="control-field placement-field"><span className="control-label" id={`${baseId}-placement-label`}>Placement in row</span>
       <div className="placement-switch" role="group" aria-labelledby={`${baseId}-placement-label`}>{[['Regular', 'Regular'], ['TOP', 'Top']].map(([value, label]) => <button key={value} type="button" aria-pressed={entry.category === value} onClick={() => onChange({ ...entry, category: value })}>{label}</button>)}</div></div>
-    {!isUnit && <div className="grid grid-cols-2 gap-3">
-      {['length', 'width'].map(key => <div key={key} className="space-y-2"><Field label={key === 'length' ? 'Length (ft)' : 'Width (ft)'} id={ids[key]} value={entry[key]} onChange={update(key)} onKeyDown={enterTo(key === 'length' ? 'width' : 'quantity')} enterKeyHint="next" inputMode="decimal" name={key} autoComplete="off" spellCheck={false} placeholder="3½…" error={errors[key]} />
-        <details className="measurement-fractions"><summary>Add fraction</summary><div className="grid grid-cols-3 gap-1">{[[.25, '¼'], [.5, '½'], [.75, '¾']].map(([amount, label]) => <button key={label} type="button" aria-label={`Add ${label} foot to ${key}`} className="btn min-w-0 px-0 text-base bg-white border-outline-variant" onClick={() => fraction(key, amount)}>+{label}</button>)}</div></details>
-      </div>)}
-    </div>}
-    <div className="grid grid-cols-2 gap-3"><Field label="Quantity" type="number" min="1" max="100000" step="1" name="quantity" id={ids.quantity} value={entry.quantity} onChange={update('quantity')} onFocus={selectAll} onMouseDown={markClickFocus} onMouseUp={keepSelection} onKeyDown={enterTo('add')} enterKeyHint="next" error={errors.quantity} /><Field label={isUnit ? 'Rate / unit (₹)' : 'Rate / sq ft (₹)'} type="number" min="0" step="0.01" name="rate" id={ids.rate} value={entry.rate} onChange={update('rate')} onKeyDown={enterTo('add')} enterKeyHint="next" error={errors.rate} /></div>
+    {!isUnit && <>
+      <div className="grid grid-cols-3 gap-2">
+        {['length', 'width'].map(key => <Field key={key} label={key === 'length' ? 'Length (ft)' : 'Width (ft)'} id={ids[key]} value={entry[key]} onChange={update(key)} onFocus={() => setFractionTarget(key)} onKeyDown={enterTo(key === 'length' ? 'width' : 'quantity')} enterKeyHint="next" inputMode="decimal" name={key} autoComplete="off" spellCheck={false} placeholder="3½…" error={errors[key]} />)}
+        <Field label="Quantity" type="number" min="1" max="100000" step="1" name="quantity" id={ids.quantity} value={entry.quantity} onChange={update('quantity')} onFocus={selectAll} onMouseDown={markClickFocus} onMouseUp={keepSelection} onKeyDown={enterTo('add')} enterKeyHint="next" error={errors.quantity} />
+      </div>
+      <details className="measurement-fractions"><summary>Add fraction to {fractionTarget === 'length' ? 'Length' : 'Width'}</summary><div className="grid grid-cols-3 gap-1">{[[.25, '¼'], [.5, '½'], [.75, '¾']].map(([amount, label]) => <button key={label} type="button" aria-label={`Add ${label} foot to ${fractionTarget}`} className="btn min-w-0 px-0 text-base bg-white border-outline-variant" onClick={() => fraction(fractionTarget, amount)}>+{label}</button>)}</div></details>
+      <Field label="Rate / sq ft (₹)" type="number" min="0" step="0.01" name="rate" id={ids.rate} value={entry.rate} onChange={update('rate')} onKeyDown={enterTo('add')} enterKeyHint="next" error={errors.rate} />
+    </>}
+    {isUnit && <div className="grid grid-cols-2 gap-3"><Field label="Quantity" type="number" min="1" max="100000" step="1" name="quantity" id={ids.quantity} value={entry.quantity} onChange={update('quantity')} onFocus={selectAll} onMouseDown={markClickFocus} onMouseUp={keepSelection} onKeyDown={enterTo('add')} enterKeyHint="next" error={errors.quantity} /><Field label="Rate / unit (₹)" type="number" min="0" step="0.01" name="rate" id={ids.rate} value={entry.rate} onChange={update('rate')} onKeyDown={enterTo('add')} enterKeyHint="next" error={errors.rate} /></div>}
     <FieldError role="alert" className="field-error-block" error={notice} />
     <Button primary id={ids.add} label="Add entry" onClick={add} />
   </Card>;

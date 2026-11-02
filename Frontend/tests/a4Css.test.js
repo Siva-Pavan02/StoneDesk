@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
 const css = await readFile(new URL('../src/styles/a4Invoice.css', import.meta.url), 'utf8');
+const screenCss = await readFile(new URL('../src/styles/invoice.css', import.meta.url), 'utf8');
 const fonts = new URL('../public/fonts/', import.meta.url);
 
 test('Monochrome invoice palette preserves A4 print geometry', () => {
@@ -31,11 +32,16 @@ test('three @font-face rules point at bundled Noto Sans files with the OFL licen
   assert.match(css, /font-synthesis: none/);
 });
 
-test('narrow previews scroll the fixed four-column A4 canvas without stacking', () => {
+test('screen previews preserve the fixed four-column A4 canvas and can scroll when zoomed', () => {
   assert.doesNotMatch(css, /(?<![\w-])content\s*:/);
   assert.doesNotMatch(css, /@container/);
   assert.match(css, /@media screen \{\s*\.a4-invoice\.sample-pages \{[^}]*overflow-x: auto;[^}]*minmax\(210mm, 1fr\)/);
   assert.match(css, /grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
+  assert.match(screenCss, /\.bill-screen \.invoice-preview-viewport \{[^}]*overflow-x: auto/);
+  const print = screenCss.match(/@media print \{([\s\S]*?)\n\}/g)?.find(block => block.includes('.invoice-preview-controls'));
+  assert.match(print || '', /\.bill-screen \.invoice-preview-controls \{ display: none !important; \}/);
+  assert.match(print || '', /\.bill-screen \.invoice-preview-scaled \{ position: static; transform: none !important; inline-size: 210mm; \}/);
+  assert.match(print || '', /\.bill-screen \.invoice-preview-stage \{ inline-size: 210mm !important; block-size: auto !important; margin: 0; \}/);
 });
 
 test('measure host and bill-screen export rules are present', () => {

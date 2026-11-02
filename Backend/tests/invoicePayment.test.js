@@ -365,6 +365,7 @@ test('Invoice Payments V1 API', async (t) => {
     assert.deepEqual(orgBAnalytics.data.paymentAnalytics.parties, []);
     assert.equal(orgBAnalytics.data.paymentAnalytics.trend.reduce((sum, point) => sum + point.received, 0), 0);
     assert.equal(orgBAnalytics.data.paymentAnalytics.trend.reduce((sum, point) => sum + point.completedInvoices, 0), 0);
+    assert.deepEqual(orgBAnalytics.data.todayStatusCounts, { Draft: 0, Dispatched: 0, Delivered: 0 });
 
     const shortPeriod = await call(`${API_PREFIX}/dispatches/analytics?period=3`, 'GET', undefined, cookieA);
     assert.equal(shortPeriod.status, 200);

@@ -40,8 +40,6 @@ export default function LoadHub({
   onNew,
   updatedAt,
   analytics,
-  analyticsPeriod,
-  onAnalyticsPeriodChange,
   onRetryAnalytics,
   admin = false,
   onDelete,
@@ -379,7 +377,7 @@ export default function LoadHub({
           )}
           <header className="dashboard-priority">
             <div className="dashboard-priority-heading">
-              <div><p className="surface-kicker">WORKSPACE</p><h1>Dashboard</h1></div>
+              <h1>Dashboard</h1>
               {onNew && <Button primary className="dashboard-create-load" label="New load" onClick={onNew}><Icon name="plus" /></Button>}
             </div>
             {drafts.length > 0 && <button type="button" aria-pressed={priorityOnly} className="dashboard-priority-action" onClick={() => setPriorityOnly(value => !value)}>{priorityOnly ? "Show recent loads" : "Review drafts"}<Icon name="arrow" /></button>}
@@ -387,8 +385,7 @@ export default function LoadHub({
           {analytics && (
             <DashboardAnalytics
               analytics={analytics}
-              selectedPeriod={analyticsPeriod}
-              onPeriodChange={onAnalyticsPeriodChange}
+              recoveries={recoveries}
               onRetry={onRetryAnalytics}
             />
           )}

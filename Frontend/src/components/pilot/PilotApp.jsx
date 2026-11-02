@@ -485,8 +485,6 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
           hasMore={!!nextCursor}
           loading={refreshing}
           analytics={analytics}
-          analyticsPeriod={analyticsPeriod}
-          onAnalyticsPeriodChange={changeAnalyticsPeriod}
           onRetryAnalytics={() => refreshAnalytics()}
           recoveries={recoveries}
           maxDrafts={MAX_DRAFTS}
@@ -507,6 +505,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
       user={user}
       view={current}
       navigate={navigate}
+      onLogout={logout}
       attention={loads.filter((l) => l.status === "Draft").length}
     >
       <ErrorMessage error={error} />

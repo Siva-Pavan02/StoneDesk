@@ -69,6 +69,16 @@ test('drafts count as drafts but never as billed; both finalized states bill onc
   assert.equal(result.current.pieces, 20);
 });
 
+test('today status counts are independent from the selected analytics period', () => {
+  const result = buildAnalytics([
+    record('2026-10-08', 'Delivered', 3000),
+    record('2026-10-09', 'Draft', 0),
+    record('2026-10-09', 'Dispatched', 1000),
+    record('2026-10-09', 'Delivered', 2000)
+  ], now, 'all');
+  assert.deepEqual(result.todayStatusCounts, { Draft: 1, Dispatched: 1, Delivered: 1 });
+});
+
 test('daily series has 30 days and destinations rank by billed value', () => {
   const result = buildAnalytics([
     record('2026-10-02', 'Dispatched', 1000, 'Chennai'),
@@ -156,6 +166,7 @@ test('payment analytics groups recent collections and full payments by party wit
   })), [{ date: '2026-10-01', completedInvoiceTotal: 250, completedInvoices: 1 }]);
   assert.deepEqual(result.parties.find(party => party.party === 'Granite Co'), {
     party: 'Granite Co',
+    billed: 2750,
     received: 450,
     completedInvoiceTotal: 250,
     completedInvoices: 1,

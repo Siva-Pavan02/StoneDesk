@@ -225,7 +225,7 @@ export default function WorkspaceShell({
           </p>
           <a
             href="#entries"
-            className="btn w-full min-h-12 bg-primary text-white"
+            className="btn control-button-primary w-full min-h-12"
             onClick={(event) => {
               if (!isPlainClick(event)) return;
               event.preventDefault();

@@ -7,6 +7,7 @@
 # Environment (keep examples)
 **/.env
 **/.env.*
+**/.env-*
 !**/.env.example
 !**/.env.test.example
 
@@ -50,6 +51,7 @@ AGENTS.md
 PILOT.md
 ponytail/
 skills/
+.github/
 
 # Stitch files
 .stitch/

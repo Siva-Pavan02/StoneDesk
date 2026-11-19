@@ -14,6 +14,7 @@ import {
   detailErrors,
   entryErrors,
   previewRows,
+  repriceGroupRows,
   summarize,
   money,
 } from "../../utils/pilotDraft.js";
@@ -46,6 +47,7 @@ import {
   removeDestination,
   removeStoneRate,
 } from "../../lib/api.js";
+import ProductPriceDialog from "./ProductPriceDialog.jsx";
 
 export default function NewLoad({
   settings,
@@ -149,6 +151,7 @@ export default function NewLoad({
   // their own product name and rate, so the draft is not touched.
   const [confirmProduct, setConfirmProduct] = useState(null);
   const removingProduct = useRef(false);
+  const [editingPrice, setEditingPrice] = useState(null);
   async function removeProduct(product) {
     setConfirmProduct(null);
     if (removingProduct.current) return;
@@ -187,6 +190,14 @@ export default function NewLoad({
         ? { ...current, rate: String(product.defaultRate ?? "") }
         : current,
     );
+  }
+  function saveProductPrice(nextRate) {
+    if (!editingPrice) return;
+    setDraft((current) => ({
+      ...current,
+      rows: repriceGroupRows(current.rows, editingPrice, nextRate),
+    }));
+    setEditingPrice(null);
   }
   const root = useRef(null);
   const [storageError, setStorageError] = useState("");
@@ -674,16 +685,19 @@ export default function NewLoad({
                 const position = (review ? n : order) + 1;
                 return (
                 <Card key={i} className="measurement-record gap-2">
-                  <strong className="break-words">
-                    {position}. {r.stoneType} · {r.finish}
-                    {r.category === "TOP" ? ` · ${"Top"}` : ""}
-                  </strong>
+                  <div className="measurement-record-name">
+                    <strong className="break-words">
+                      {position}. {r.stoneType}
+                      {r.category === "TOP" ? ` · ${"Top"}` : ""}
+                    </strong>
+                    {r.finish && <span className="measurement-record-finish">{r.finish}</span>}
+                  </div>
                   {r.rateUnit === "UNIT" ? (
-                    <p>
+                    <p className="measurement-record-detail">
                       {countFormat.format(r.quantity)}{"\u00A0"}{r.quantity === 1 ? "unit" : "units"}
                     </p>
                   ) : (
-                    <p>
+                    <p className="measurement-record-detail">
                       {decimalToFraction(r.lengthFt)} ×{" "}
                       {decimalToFraction(r.widthFt)}{"\u00A0"}{"ft"} ×{" "}
                       {countFormat.format(r.quantity)}{"\u00A0"}{"pieces"}
@@ -768,7 +782,12 @@ export default function NewLoad({
           />
         </Card>
       )}
-      <LoadSummary rows={rows} summary={summary} />
+      <LoadSummary
+        rows={rows}
+        summary={summary}
+        canEditPrice={canManageProducts(user?.role)}
+        onEditPrice={setEditingPrice}
+      />
       {review && !reviseOf && (
         <p className="text-sm text-on-surface">
           {"Finalizing locks this bill’s quantities, prices, totals, and business branding."}
@@ -841,6 +860,11 @@ export default function NewLoad({
         onCancel={() => setConfirmProduct(null)}
         onConfirm={() => confirmProduct && removeProduct(confirmProduct)}
       />
+      {editingPrice && <ProductPriceDialog
+        product={editingPrice}
+        onSave={saveProductPrice}
+        onCancel={() => setEditingPrice(null)}
+      />}
     </div>
   );
 }

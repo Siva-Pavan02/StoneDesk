@@ -60,3 +60,93 @@ test('app screens use theme colours, not raw Tailwind palette utilities', () => 
   const palette = /\b(?:[a-z-]+:)*(?:bg|text|border|ring|accent)-(?:slate|gray|teal|red|green|orange|amber|emerald|stone)-\d{2,3}\b/;
   for (const [path, text] of jsx) assert.doesNotMatch(text, palette, path);
 });
+
+test('initial loading page is branded, accessible, and motion-safe', () => {
+  const app = readFileSync(join(SRC, 'App.jsx'), 'utf8');
+  const loading = readFileSync(join(SRC, 'components', 'pilot', 'LoadingPage.jsx'), 'utf8');
+  const index = readFileSync(join(SRC, 'index.css'), 'utf8');
+  assert.match(app, /fallback=\{<LoadingPage\s*\/>\}/);
+  assert.match(app, /view === "loading" \?[\s\S]*?<LoadingPage\s*\/>/);
+  assert.match(loading, /role="status"/);
+  assert.match(loading, /aria-live="polite"/);
+  assert.match(loading, /aria-label="Opening StoneDesk"/);
+  assert.match(loading, /<BrandLogo\b/);
+  assert.match(index, /\.loading-page-progress span\s*\{/);
+  assert.match(index, /@media \(prefers-reduced-motion: reduce\)[\s\S]*?animation: none !important/);
+});
+
+test('load summary offers a direct Admin price edit for each product type', () => {
+  const summary = readFileSync(join(SRC, 'components', 'pilot', 'LoadSummary.jsx'), 'utf8');
+  const newLoad = readFileSync(join(SRC, 'components', 'pilot', 'NewLoad.jsx'), 'utf8');
+  const priceDialog = readFileSync(join(SRC, 'components', 'pilot', 'ProductPriceDialog.jsx'), 'utf8');
+  assert.match(summary, /<Icon name="edit"[^>]*\/><span>Edit<\/span>/);
+  assert.match(summary, /onEditPrice/);
+  assert.match(newLoad, /canEditPrice/);
+  assert.match(newLoad, /repriceGroupRows/);
+  assert.match(priceDialog, /<dialog\b/);
+  assert.match(priceDialog, /Apply price/);
+});
+
+test('measurement cards use an explicit compact title, detail, amount, action layout', () => {
+  const newLoad = readFileSync(join(SRC, 'components', 'pilot', 'NewLoad.jsx'), 'utf8');
+  const workspace = readFileSync(join(SRC, 'styles', 'workspace.css'), 'utf8');
+  assert.match(newLoad, /className="measurement-record-detail"/);
+  assert.match(newLoad, /measurement-record-finish/);
+  assert.match(workspace, /\.pilot\.workspace \.measurement-record\s*\{[\s\S]*grid-template-columns:/);
+  assert.match(workspace, /measurement-record-detail/);
+  assert.match(workspace, /padding: 8px 16px/);
+  assert.match(workspace, /height: 32px/);
+});
+
+test('load summary uses an explicit compact mobile organization', () => {
+  const summary = readFileSync(join(SRC, 'components', 'pilot', 'LoadSummary.jsx'), 'utf8');
+  const index = readFileSync(join(SRC, 'index.css'), 'utf8');
+  assert.match(summary, /load-summary-product-row/);
+  assert.match(index, /@media \(max-width: 639px\)[\s\S]*load-summary-product/);
+  assert.match(index, /repeat\(2, minmax\(0, 1fr\)\)/);
+});
+
+test('dashboard draft filter belongs with the loads activity heading', () => {
+  const hub = readFileSync(join(SRC, 'components', 'pilot', 'LoadHub.jsx'), 'utf8');
+  const workspace = readFileSync(join(SRC, 'styles', 'workspace.css'), 'utf8');
+  assert.match(hub, /dashboard-activity-heading[\s\S]*dashboard-record-filter/);
+  assert.doesNotMatch(hub, /dashboard-priority[\s\S]*dashboard-priority-action/);
+  assert.match(workspace, /\.dashboard-record-filter/);
+  assert.match(workspace, /button\[aria-pressed="true"\]/);
+});
+
+test('payments period options use one capsule filter', () => {
+  const payments = readFileSync(join(SRC, 'components', 'pilot', 'PaymentsAnalytics.jsx'), 'utf8');
+  const workspace = readFileSync(join(SRC, 'styles', 'workspace.css'), 'utf8');
+  assert.match(payments, /analytics-period-filter/);
+  assert.match(payments, /aria-label=\{period === 'all' \? 'All' : `\$\{period\} days`\}/);
+  assert.match(payments, />\{period === 'all' \? 'All' : period\}/);
+  assert.match(workspace, /\.analytics-period-filter\s*\{[\s\S]*border-radius: 999px/);
+  assert.match(workspace, /\.analytics-period-filter button\[aria-pressed="true"\]/);
+});
+
+test('payment invoice links and expansion controls are accessible', () => {
+  const payments = readFileSync(join(SRC, 'components', 'pilot', 'PaymentsAnalytics.jsx'), 'utf8');
+  const workspace = readFileSync(join(SRC, 'styles', 'workspace.css'), 'utf8');
+  assert.match(payments, /aria-label="Payments period"/);
+  assert.match(payments, /payments-invoice-action[\s\S]*<a href=/);
+  assert.match(payments, /aria-controls=\{`payments-invoices-/);
+  assert.match(payments, /panelId=\{`payments-invoices-/);
+  assert.match(payments, /className="payments-refresh" aria-label="Refresh payment analytics"/);
+  assert.match(workspace, /@media \(max-width: 360px\)[\s\S]*payments-heading-actions/);
+  assert.match(workspace, /\.payments-invoice-action a[\s\S]*height: 24px[\s\S]*min-height: 0/);
+});
+
+test('payments activity no longer renders a receipt trend graph', () => {
+  const payments = readFileSync(join(SRC, 'components', 'pilot', 'PaymentsAnalytics.jsx'), 'utf8');
+  const workspace = readFileSync(join(SRC, 'styles', 'workspace.css'), 'utf8');
+  assert.doesNotMatch(payments, /payments-trend|Receipts over time/);
+  assert.doesNotMatch(workspace, /\.payments-trend/);
+});
+
+test('mobile party invoice expansion uses a compact organized row layout', () => {
+  const workspace = readFileSync(join(SRC, 'styles', 'workspace.css'), 'utf8');
+  assert.match(workspace, /@media \(max-width: 480px\)[\s\S]*\.payments-invoice-list > li\s*\{[\s\S]*grid-template-columns:/);
+  assert.match(workspace, /\.payments-invoice-panel h3 \{ display: none; \}/);
+  assert.match(workspace, /\.payments-invoice-action a[\s\S]*height: 24px/);
+});

@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /uploads/
+Disallow: /reset-password
+Sitemap: https://stone-desk.vercel.app/sitemap.xml

@@ -380,7 +380,6 @@ export default function LoadHub({
               <h1>Dashboard</h1>
               {onNew && <Button primary className="dashboard-create-load" label="New load" onClick={onNew}><Icon name="plus" /></Button>}
             </div>
-            {drafts.length > 0 && <button type="button" aria-pressed={priorityOnly} className="dashboard-priority-action" onClick={() => setPriorityOnly(value => !value)}>{priorityOnly ? "Show recent loads" : "Review drafts"}<Icon name="arrow" /></button>}
           </header>
           {analytics && (
             <DashboardAnalytics
@@ -457,30 +456,33 @@ export default function LoadHub({
       >
         <div className="dashboard-activity-heading flex items-center justify-between gap-3">
           <h2 id="load-hub-records-heading" className="font-bold">
-            {view === "home"
-              ? priorityOnly
-                ? "Drafts to review"
-                : "Recent loads"
-              : `${filtered.length} ${"records"}`}
+            {view === "home" ? "Loads" : `${filtered.length} ${"records"}`}
           </h2>
-          <button
-            type="button"
-            disabled={loading || refreshPhase === "refreshing"}
-            aria-busy={refreshBusy}
-            className="text-button refresh-button flex items-center gap-2 text-sm"
-            onClick={handleRefresh}
-          >
-            <span className={refreshBusy ? "refresh-spin" : ""}>
-              <Icon name={refreshPhase === "done" ? "check" : "refresh"} />
-            </span>
-            <span aria-live="polite">
-              {refreshBusy
-                ? "Refreshing…"
-                : refreshPhase === "done"
-                  ? "Updated"
-                  : "Refresh"}
-            </span>
-          </button>
+          {view === "home" ? (
+            <div className="dashboard-record-filter" role="group" aria-label="Load filter">
+              <button type="button" aria-pressed={!priorityOnly} onClick={() => setPriorityOnly(false)}>Recent</button>
+              {drafts.length > 0 && <button type="button" aria-pressed={priorityOnly} onClick={() => setPriorityOnly(true)}>Drafts</button>}
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={loading || refreshPhase === "refreshing"}
+              aria-busy={refreshBusy}
+              className="text-button refresh-button flex items-center gap-2 text-sm"
+              onClick={handleRefresh}
+            >
+              <span className={refreshBusy ? "refresh-spin" : ""}>
+                <Icon name={refreshPhase === "done" ? "check" : "refresh"} />
+              </span>
+              <span aria-live="polite">
+                {refreshBusy
+                  ? "Refreshing…"
+                  : refreshPhase === "done"
+                    ? "Updated"
+                    : "Refresh"}
+              </span>
+            </button>
+          )}
         </div>
         {loading && !loads.length && (
           <div

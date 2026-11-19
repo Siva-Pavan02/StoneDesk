@@ -1,7 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { newDraft, readDraft, readDrafts, writeDraft, clearDraft, hasDraftContent, DRAFT_KEY, DRAFTS_FULL, MAX_DRAFTS, detailErrors, entryErrors, makeRow, payload } from '../src/utils/pilotDraft.js';
+import { newDraft, readDraft, readDrafts, writeDraft, clearDraft, hasDraftContent, DRAFT_KEY, DRAFTS_FULL, MAX_DRAFTS, detailErrors, entryErrors, makeRow, payload, repriceGroupRows, summarize } from '../src/utils/pilotDraft.js';
 const storage = () => { const values = new Map(); return { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) }; };
+test('invoice price edit changes only the selected summary group and its saved payload', () => {
+  const regular = { stoneType: 'Granite', finish: 'Polished', category: 'Regular', ratePerSqFt: 40, lengthFt: 3, widthFt: 2, quantity: 1, rowNo: 1 };
+  const top = { ...regular, category: 'TOP', rowNo: 2 };
+  const custom = { ...regular, ratePerSqFt: 35, rowNo: 3 };
+  const unit = { stoneType: 'Basin', finish: '', category: 'Regular', rateUnit: 'UNIT', rate: 40, ratePerSqFt: 40, quantity: 2, rowNo: 4 };
+  const original = [regular, top, custom, unit];
+  const edited = repriceGroupRows(original, regular, 50);
+  assert.equal(edited[0].ratePerSqFt, 50);
+  assert.deepEqual(edited.slice(1), original.slice(1));
+  assert.equal(original[0].ratePerSqFt, 40);
+  assert.equal(summarize(edited, 0).baseMaterialTotal, 830);
+  const draft = { ...newDraft(), partyName: 'Buyer', truckNumber: 'TN 01 AB 1234', buyerDestination: 'Kadapa', supervisor: 'Ravi', rows: edited };
+  assert.deepEqual(payload(draft).inventory.map(group => group.ratePerSqFt), [50, 40, 35, 40]);
+  const unitEdited = repriceGroupRows(original, unit, 55);
+  assert.equal(unitEdited[3].rate, 55);
+  assert.equal(unitEdited[3].ratePerSqFt, 55);
+  assert.equal(summarize(unitEdited, 0).baseMaterialTotal, 800);
+});
 test('encrypted draft recovery preserves the latest edit and organization isolation', async () => {
   const store = storage(), first = { ...newDraft(), partyName: 'First', entry: { length: '3', width: '2' } }, last = { ...first, partyName: 'Latest' };
   const a = writeDraft(first, 'yard-a', store), b = writeDraft(last, 'yard-a', store);

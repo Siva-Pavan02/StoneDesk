@@ -7,6 +7,7 @@ const { allowRoles } = require('../utils/auth');
 router.post('/', controller.createDraft);
 router.get('/', controller.list);
 router.get('/analytics', controller.analytics);
+router.get('/receivables', controller.receivables);
 router.get('/:id', controller.getById);
 router.get('/:id/payments', paymentController.getPayments);
 router.post('/:id/payments', allowRoles('Admin', 'Dispatcher'), paymentController.createPayment);

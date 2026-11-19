@@ -34,7 +34,7 @@ try {
     assert.equal(await page.locator('.analytics-pie-total').innerText(), '10\nTotal loads');
     assert.equal(await page.locator('.analytics-period-filter').count(), 0);
     assert.equal(await page.locator('.analytics-summary').count(), 0);
-    assert.match(await page.locator('.analytics-heading').innerText(), /Load status\s+Today/);
+    assert.match(await page.locator('.analytics-heading').innerText(), /Load status\s+All time/);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     assert.equal(await page.locator('.analytics-legend > li').count(), 3);
     assert.equal(await page.locator('.analytics-donut, .analytics-party-list, .analytics-money-bars').count(), 0);

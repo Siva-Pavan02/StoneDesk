@@ -9,13 +9,13 @@ import {
   MAX_DRAFTS,
 } from "../../utils/pilotDraft.js";
 import { BackButton, Button, Card, ErrorMessage } from "./Controls.jsx";
-import BusinessSetup from "./BusinessSetup.jsx";
-import NewLoad from "./NewLoad.jsx";
 import WorkspaceShell from "./WorkspaceShell.jsx";
 import LoadHub from "./LoadHub.jsx";
-import AccountSettings from "./AccountSettings.jsx";
-import PaymentsAnalytics from "./PaymentsAnalytics.jsx";
 import { NEW_LOAD_ROUTE, profileSaveTarget, resolveRoute } from "../../utils/workspaceRoutes.js";
+const BusinessSetup = lazy(() => import("./BusinessSetup.jsx"));
+const NewLoad = lazy(() => import("./NewLoad.jsx"));
+const AccountSettings = lazy(() => import("./AccountSettings.jsx"));
+const PaymentsAnalytics = lazy(() => import("./PaymentsAnalytics.jsx"));
 const BillView = lazy(() => import("./BillView.jsx"));
 const LoadingRequirements = lazy(() => import("../LoadingListScreen.jsx"));
 const route = () => {
@@ -23,12 +23,19 @@ const route = () => {
   if (replaced) window.history.replaceState(null, "", "#" + next);
   return next;
 };
+const analyticsPeriodFromRoute = (viewValue) => {
+  const [page, query = ""] = viewValue.split("?");
+  if (page !== "payments") return null;
+  const period = new URLSearchParams(query).get("period");
+  return ["3", "7", "30", "all"].includes(period) ? period : "3";
+};
 
 export default function PilotApp({ user, onLogout, onUserChange }) {
   const [settings, setSettings] = useState(null),
     [loads, setLoads] = useState([]);
   const [view, setView] = useState(route),
     [record, setRecord] = useState(null);
+  const [billReturnView, setBillReturnView] = useState("home");
   const [initialDraft, setInitialDraft] = useState(null),
     [query, setQuery] = useState("");
   const [error, setError] = useState(""),
@@ -43,8 +50,13 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
     error: "",
     loading: true,
   });
-  const [analyticsPeriod, setAnalyticsPeriod] = useState("3");
+  const [analyticsPeriod, setAnalyticsPeriod] = useState(() =>
+    analyticsPeriodFromRoute(route()) || "3",
+  );
+  const analyticsPeriodRef = useRef(analyticsPeriod);
   const analyticsRequest = useRef(0);
+  // Dashboard uses all-time counts; Payments keeps its own selected period.
+  const analyticsRequestedPeriod = useRef(null);
   // Dashboard and Payments share analytics data, refreshed after loads change.
   const analyticsStale = useRef(true);
   const loadsStale = useRef(true);
@@ -79,6 +91,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
   }
   const refreshAnalytics = useCallback(async (period = analyticsPeriod, clearData = false) => {
     const ticket = ++analyticsRequest.current;
+    analyticsRequestedPeriod.current = period;
     analyticsStale.current = false;
     setAnalytics((prev) => ({ ...prev, data: clearData ? null : prev.data, error: "", loading: true }));
     try {
@@ -96,7 +109,9 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
   }, [analyticsPeriod]);
   const changeAnalyticsPeriod = useCallback((period) => {
     if (period === analyticsPeriod) return;
+    analyticsPeriodRef.current = period;
     setAnalyticsPeriod(period);
+    window.location.hash = `payments?period=${encodeURIComponent(period)}`;
     refreshAnalytics(period, true);
   }, [analyticsPeriod, refreshAnalytics]);
   const refreshLoads = useCallback(async () => {
@@ -145,10 +160,20 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
     load();
   }, [load]);
   useEffect(() => {
-    const changed = () => setView(route());
+    const changed = () => {
+      const next = route();
+      setView(next);
+      const period = analyticsPeriodFromRoute(next);
+      if (period) {
+        if (analyticsPeriodRef.current === period) return;
+        analyticsPeriodRef.current = period;
+        setAnalyticsPeriod(period);
+        refreshAnalytics(period, true);
+      }
+    };
     window.addEventListener("hashchange", changed);
     return () => window.removeEventListener("hashchange", changed);
-  }, []);
+  }, [refreshAnalytics]);
   // readDrafts is async — read it into state so we never pass a Promise as a prop
   useEffect(() => {
     if (!settings?.id) return;
@@ -272,6 +297,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
     loadsInFlight.current = null;
     setRefreshing(false);
     setRecord(data);
+    setBillReturnView("home");
     navigate(`bill/${data.id}`);
     analyticsStale.current = true;
     loadsStale.current = true;
@@ -292,7 +318,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
     await deleteDispatch(id);
     removeLoad(id);
     await dropLocalCopies(id);
-    if (current === "home") refreshAnalytics();
+    if (current === "home") refreshAnalytics("all");
   }
   // A deleted server draft must not live on as an unfinished load on this phone.
   async function dropLocalCopies(id) {
@@ -313,7 +339,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
       removeLoad(target);
       dropLocalCopies(target);
     }
-    home();
+    navigate(billReturnView);
   }
   useEffect(() => {
     // Settings, setup and bill pages do not use dispatch lists.
@@ -322,9 +348,11 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
       (loadsInFlight.current && loadsInFlight.current.path !== listPath)) refreshLoads();
   }, [current, settings, listPath, refreshLoads]);
   useEffect(() => {
-    if (["home", "payments"].includes(current) && settings && analyticsStale.current)
-      refreshAnalytics();
-  }, [current, settings, refreshAnalytics]);
+    if (!["home", "payments"].includes(current) || !settings) return;
+    const period = current === "home" ? "all" : analyticsPeriod;
+    if (analyticsStale.current || analyticsRequestedPeriod.current !== period)
+      refreshAnalytics(period, analyticsRequestedPeriod.current !== period);
+  }, [current, settings, analyticsPeriod, refreshAnalytics]);
   let content;
   const openingBill =
     view.startsWith("bill/") && record?.id !== view.slice(5) && !error;
@@ -411,7 +439,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
             admin={admin}
             canFinalize={canFinalize}
             onChanged={saved}
-            onBack={home}
+            onBack={() => navigate(billReturnView)}
             onResume={resume}
             onEdit={reviseInvoice}
             onDeleted={deleted}
@@ -422,8 +450,8 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
         </Suspense>
       ) : (
         <BackButton
-          label="Back to dashboard"
-          onClick={home}
+          label={billReturnView === "payments" ? "Back to payments" : "Back to dashboard"}
+          onClick={() => navigate(billReturnView)}
         />
       );
   else if (current === "settings")
@@ -445,9 +473,10 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
         selectedPeriod={analyticsPeriod}
         onPeriodChange={changeAnalyticsPeriod}
         onRetry={() => refreshAnalytics()}
-        onViewParty={party => {
-          setQuery(party === "Unspecified party" ? "" : party);
-          navigate("entries");
+        onOpenInvoice={id => {
+          setBillReturnView("payments");
+          setRecord(null);
+          navigate(`bill/${id}`);
         }}
       />
     );
@@ -470,6 +499,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
           onSearchChange={setQuery}
           onFilterChange={value => navigate(value === 'all' ? 'entries' : `entries?status=${value}`)}
           onOpen={(id) => {
+            setBillReturnView("home");
             // Reuse the cached full bill unless the list shows it changed since.
             const listed = loads.find((l) => l.id === id);
             if (record?.id === id && listed?.updatedAt !== record.updatedAt)
@@ -477,7 +507,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
             navigate(`bill/${id}`);
           }}
           onRefresh={() => {
-            if (current === "home") refreshAnalytics();
+            if (current === "home") refreshAnalytics("all");
             else analyticsStale.current = true;
             return refreshLoads();
           }}
@@ -485,7 +515,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
           hasMore={!!nextCursor}
           loading={refreshing}
           analytics={analytics}
-          onRetryAnalytics={() => refreshAnalytics()}
+          onRetryAnalytics={() => refreshAnalytics("all")}
           recoveries={recoveries}
           maxDrafts={MAX_DRAFTS}
           onContinue={(draft) => {
@@ -509,7 +539,9 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
       attention={loads.filter((l) => l.status === "Draft").length}
     >
       <ErrorMessage error={error} />
-      {content}
+      <Suspense fallback={<p role="status">{"Loading…"}</p>}>
+        {content}
+      </Suspense>
     </WorkspaceShell>
   );
 }

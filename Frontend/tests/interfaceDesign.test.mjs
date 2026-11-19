@@ -403,10 +403,12 @@ async function workspace(language, width) {
     for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) assert.ok(!(Math.min(boxes[i].right, boxes[j].right) - Math.max(boxes[i].left, boxes[j].left) > 1 && Math.min(boxes[i].bottom, boxes[j].bottom) - Math.max(boxes[i].top, boxes[j].top) > 1), `${boxes[i].name} overlaps ${boxes[j].name}`);
   });
   await check('Dashboard priority toggle filters drafts and restores recent loads', async () => {
-    const trigger = page.locator('.dashboard-priority-action'); await expect(trigger).toHaveAttribute('aria-pressed', 'false'); await trigger.click();
-    await expect(trigger).toHaveAttribute('aria-pressed', 'true'); await expect(visibleRecords()).toHaveCount(2);
+    const recent = page.locator('.dashboard-record-filter').getByRole('button', { name: 'Recent', exact: true });
+    const drafts = page.locator('.dashboard-record-filter').getByRole('button', { name: 'Drafts', exact: true });
+    await expect(recent).toHaveAttribute('aria-pressed', 'true'); await drafts.click();
+    await expect(drafts).toHaveAttribute('aria-pressed', 'true'); await expect(visibleRecords()).toHaveCount(2);
     await expect(main().locator('.status-tag:visible:not(.status-draft)')).toHaveCount(0);
-    await capture('dashboard-priority'); await trigger.click(); await expect(trigger).toHaveAttribute('aria-pressed', 'false'); await expect(visibleRecords()).toHaveCount(5);
+    await capture('dashboard-priority'); await recent.click(); await expect(recent).toHaveAttribute('aria-pressed', 'true'); await expect(visibleRecords()).toHaveCount(5);
   });
   await check('Payments page owns finance insights without repeating them on dashboard', async () => {
     await expect(main().locator('.dashboard-analytics h2')).toHaveText('Load status');
@@ -430,7 +432,7 @@ async function workspace(language, width) {
     await expect(payments.locator('.payments-party-amounts > div')).toHaveCount(8);
     await expect(payments.locator('.payments-party-list').getByText('Total billed', { exact: true })).toHaveCount(4);
     await expect(payments.locator('.payments-party-list').getByText('Due', { exact: true })).toHaveCount(4);
-    await expect(payments.getByRole('button', { name: '3 days', exact: true })).toHaveCSS('min-height', '44px');
+    await expect(payments.getByRole('button', { name: '3 days', exact: true })).toHaveCSS('min-height', width <= 480 ? '34px' : '36px');
     const size = await payments.evaluate(element => ({ client: element.clientWidth, scroll: element.scrollWidth }));
     assert.ok(size.scroll <= size.client, `Payments analytics overflow: ${JSON.stringify(size)}`);
     const allTime = payments.getByRole('group', { name: 'Payments period' }).getByRole('button', { name: 'All time', exact: true });
@@ -908,8 +910,8 @@ async function motion() {
 }
 async function empty(language, width) {
   const c = await makeCase('empty', language, width, { empty: true });
-  await c.check('Empty dashboard has one New load and a disabled priority action', async () => {
-    await c.page.goto(`${base}/#home`, { waitUntil: 'domcontentloaded' }); await expect(c.page.locator('.dashboard-priority')).toBeVisible(); await c.oneCreate(); await expect(c.page.locator('.dashboard-priority-action')).toHaveCount(0); await expect(c.page.locator('.dashboard-empty')).toBeVisible();
+  await c.check('Empty dashboard has one New load and no draft filter', async () => {
+    await c.page.goto(`${base}/#home`, { waitUntil: 'domcontentloaded' }); await expect(c.page.locator('.dashboard-priority')).toBeVisible(); await c.oneCreate(); await expect(c.page.locator('.dashboard-record-filter').getByRole('button', { name: 'Drafts', exact: true })).toHaveCount(0); await expect(c.page.locator('.dashboard-empty')).toBeVisible();
   });
   await c.overflow('empty-dashboard', true); await c.finish();
 }

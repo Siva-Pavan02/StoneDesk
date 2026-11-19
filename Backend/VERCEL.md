@@ -45,7 +45,7 @@ Every variable the backend reads, taken from the code rather than from documenta
 | `SUPABASE_LOGO_BUCKET` | Runtime configuration | Optional | Defaults to `stonedesk-logos`. Keep the bucket private. |
 | `UPSTASH_REDIS_REST_URL` | Runtime secret | Production and Preview | Without it, every authentication attempt returns 503 by design. |
 | `UPSTASH_REDIS_REST_TOKEN` | Runtime secret | Production and Preview | As above. |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Runtime secret | Optional | Password reset only. Absent credentials log a warning at first use and fail the reset request; nothing else degrades. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Runtime configuration and secret | Optional | Password reset only. For Resend, use `smtp.resend.com`, port `465`, user `resend`, an API key as the password, and an address on a verified domain as the sender. Missing configuration returns 503. |
 | `SERVE_FRONTEND` | Runtime configuration | Must be unset or false | Startup rejects `true`. |
 | `UPLOAD_DIR` | Local only | No | Ignored while `LOGO_STORAGE=supabase`. |
 | `PORT`, `HOST` | Local only | No | Consumed by `server.js`, which the serverless entrypoint never loads. |

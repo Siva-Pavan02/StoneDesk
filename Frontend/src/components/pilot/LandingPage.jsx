@@ -28,7 +28,7 @@ function ScrubText({ text, className }) {
       const box = node.getBoundingClientRect();
       const progress = Math.min(1, Math.max(0, (window.innerHeight * 0.85 - box.top) / (window.innerHeight * 0.5)));
       const lit = progress * words.length;
-      words.forEach((word, index) => { word.style.opacity = String(Math.min(1, Math.max(0.3, lit - index + 0.3))); });
+      words.forEach((word, index) => { word.style.opacity = String(Math.min(1, Math.max(0.65, lit - index + 0.65))); });
     };
     const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
     update();

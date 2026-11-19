@@ -4,7 +4,8 @@ import { rowGroups, rowOverview, subtotals } from '../../utils/billData.js';
 import { productRateSuffix } from '../../utils/productForm.js';
 import { money } from '../../utils/pilotDraft.js';
 import { fixed2, rawAmount, round2 } from '../../utils/loadMath.js';
-export default function LoadSummary({ rows, summary, groups, showGroups = true, variant = 'load' }) {
+import Icon from './Icon.jsx';
+export default function LoadSummary({ rows, summary, groups, showGroups = true, variant = 'load', canEditPrice = false, onEditPrice }) {
   const topAmount = round2(rows.filter(r => r.category === 'TOP').reduce((sum, r) => sum + rawAmount(r), 0));
   if (variant === 'invoice') {
     const groups = rowGroups(rows), overview = rowOverview(groups);
@@ -25,14 +26,20 @@ export default function LoadSummary({ rows, summary, groups, showGroups = true, 
   }
   return <Card className="load-summary gap-4">
     <h2 className="text-lg font-bold">Load summary</h2>
-    {showGroups && (groups || subtotals(rows)).map((g, i) => <div key={i} className="border-b border-outline-variant pb-3">
-      <div className="flex justify-between gap-3"><strong className="break-words">{g.stoneType}{g.finish ? ` · ${g.finish}` : ''}{g.category === 'TOP' ? ` · Top` : ''}</strong><strong className="shrink-0">{money(g.lineTotal)}</strong></div>
-      <p className="text-sm text-on-surface mt-1">{g.quantity} {g.rateUnit === 'UNIT' ? 'units' : 'pieces'}{g.rateUnit === 'UNIT' ? '' : ` · ${fixed2(g.sqFt)} sq ft`} · {money(g.ratePerSqFt)} {productRateSuffix(g)}</p>
+    {showGroups && (groups || subtotals(rows)).map((g, i) => <div key={i} className="load-summary-product border-b border-outline-variant pb-3">
+      <div className="load-summary-product-row flex justify-between gap-3">
+        <div className="load-summary-product-name">
+          <strong className="break-words">{g.stoneType}{g.finish ? ` · ${g.finish}` : ''}{g.category === 'TOP' ? ` · Top` : ''}</strong>
+          {canEditPrice && onEditPrice && <button type="button" className="load-summary-edit-price" aria-label={`Edit price for ${g.stoneType}${g.finish ? ` ${g.finish}` : ''}`} onClick={() => onEditPrice(g)}><Icon name="edit" /><span>Edit</span></button>}
+        </div>
+        <strong className="shrink-0">{money(g.lineTotal)}</strong>
+      </div>
+      <p className="load-summary-rate text-sm text-on-surface mt-1">{g.quantity} {g.rateUnit === 'UNIT' ? 'units' : 'pieces'}{g.rateUnit === 'UNIT' ? '' : ` · ${fixed2(g.sqFt)} sq ft`} · {money(g.ratePerSqFt)} {productRateSuffix(g)}</p>
     </div>)}
     <div className="flex justify-between gap-3"><Label label="Total pieces" /><strong>{summary.totalPieces ?? rows.reduce((sum, r) => sum + r.quantity, 0)}</strong></div>
     <div className="flex justify-between gap-3"><Label label="Total square feet" /><strong>{fixed2(summary.totalDispatchVolumeSqFt)}</strong></div>
     <div className="flex justify-between gap-3"><Label label="Material amount" /><strong>{money(summary.baseMaterialTotal)}</strong></div>
     <div className="flex justify-between gap-3"><Label label="Loading / royalty" /><strong>{money(summary.loadingAndRoyaltyFees)}</strong></div>
-    <div className="load-summary-total flex justify-between gap-3"><Label label="Net payable" /><strong className="text-xl text-primary">{money(summary.netBillableAmount)}</strong></div>
+    <div className="load-summary-total flex justify-between gap-3"><Label label="Net payable" /><strong className="text-xl">{money(summary.netBillableAmount)}</strong></div>
   </Card>;
 }

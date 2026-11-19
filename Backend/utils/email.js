@@ -2,6 +2,10 @@ const nodemailer = require('nodemailer');
 
 let transporter = null;
 
+function isEmailConfigured() {
+  return ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM'].every(key => Boolean(process.env[key]?.trim()));
+}
+
 function getTransporter() {
   if (transporter) return transporter;
   
@@ -9,9 +13,8 @@ function getTransporter() {
   const port = parseInt(process.env.SMTP_PORT || '587', 10);
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
-  const from = process.env.SMTP_FROM || 'StoneDesk <noreply@stonedesk.app>';
   
-  if (!host || !user || !pass) {
+  if (!isEmailConfigured()) {
     console.warn('SMTP credentials not configured, email sending will fail');
     return null;
   }
@@ -21,7 +24,9 @@ function getTransporter() {
     port,
     secure: port === 465,
     auth: { user, pass },
-    from
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000
   });
   
   return transporter;
@@ -78,6 +83,7 @@ async function sendPasswordResetEmail(email, resetUrl, businessName) {
   `;
   
   await transporter.sendMail({
+    from: process.env.SMTP_FROM,
     to: email,
     subject: 'Reset your StoneDesk password',
     text,
@@ -85,4 +91,4 @@ async function sendPasswordResetEmail(email, resetUrl, businessName) {
   });
 }
 
-module.exports = { sendPasswordResetEmail };
+module.exports = { sendPasswordResetEmail, isEmailConfigured };

@@ -23,7 +23,7 @@ Copy `Backend/.env.example` to `Backend/.env` and fill it in:
 ```env
 PORT=5000
 APP_ORIGIN=http://localhost:5173
-DATABASE_URL="postgresql://postgres.PROJECT:PASSWORD@POOLER_HOST:5432/postgres?pgbouncer=true"
+DATABASE_URL="postgresql://postgres.PROJECT:PASSWORD@POOLER_HOST:5432/postgres?connection_limit=5"
 DIRECT_URL="postgresql://postgres.PROJECT:PASSWORD@POOLER_HOST:5432/postgres"
 
 # Upstash Redis (optional locally; falls back to in-memory rate limiting)
@@ -39,6 +39,8 @@ SMTP_FROM="StoneDesk <noreply@stonedesk.app>"
 ```
 
 The frontend reads `Frontend/.env.example` (`VITE_API_BASE_URL=/api`); by default Vite proxies `/api` to `http://localhost:5000`.
+
+For the long-running local backend, use the session pooler on port 5432 for `DATABASE_URL`. Do not add `pgbouncer=true` to that URL: Prisma uses prepared statements on session connections. For serverless deployment, use the transaction pooler on port 6543 with `pgbouncer=true` and an appropriate per-instance connection limit. Keep `DIRECT_URL` on a direct or session connection for migrations.
 
 ## Local Development Setup
 

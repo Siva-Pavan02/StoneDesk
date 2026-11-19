@@ -394,6 +394,31 @@ test('Invoice Payments V1 API', async (t) => {
     assert.equal(invalidPeriod.status, 400);
   });
 
+  await t.test('16. Receivables show only this organization’s unpaid invoices for the exact party', async () => {
+    const path = `${API_PREFIX}/dispatches/receivables?party=Unspecified%20party`;
+    const orgA = await call(path, 'GET', undefined, cookieA);
+    assert.equal(orgA.status, 200);
+    assert.equal(orgA.data.data.length, 1);
+    assert.equal(orgA.data.data[0].balance, 99.09);
+    assert.equal(orgA.data.data[0].status, 'PARTIALLY_PAID');
+    assert.equal(orgA.data.nextCursor, null);
+
+    const orgB = await call(path, 'GET', undefined, cookieB);
+    assert.equal(orgB.status, 200);
+    assert.deepEqual(orgB.data.data, []);
+    const differentParty = await call(`${API_PREFIX}/dispatches/receivables?party=Someone%20else`, 'GET', undefined, cookieA);
+    assert.deepEqual(differentParty.data.data, []);
+    assert.equal((await call(`${API_PREFIX}/dispatches/receivables?party=`, 'GET', undefined, cookieA)).status, 400);
+    assert.equal((await call(`${path}&cursor=invalid`, 'GET', undefined, cookieA)).status, 400);
+    assert.equal((await call(path, 'GET')).status, 401);
+
+    const settled = await call(`${API_PREFIX}/dispatches/${orgA.data.data[0].id}/payments`, 'POST', { amount: 99.09 }, cookieA);
+    assert.equal(settled.status, 201);
+    assert.equal(settled.data.balance, 0);
+    const afterSettlement = await call(path, 'GET', undefined, cookieA);
+    assert.deepEqual(afterSettlement.data.data, []);
+  });
+
     server.close();
   } catch (err) {
     console.error('INVOICE PAYMENT TEST ERROR:', err);

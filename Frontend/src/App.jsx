@@ -1,8 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import AuthDialog from "./components/pilot/AuthDialog";
 import LogoutDialog from "./components/pilot/LogoutDialog";
-import ResetPassword from "./components/pilot/ResetPassword";
 import { Button, Card, ErrorMessage } from "./components/pilot/Controls";
+import LoadingPage from "./components/pilot/LoadingPage";
 import { request } from "./lib/pilotApi";
 import { finishGoogleSignIn } from "./lib/googleSignIn";
 import {
@@ -12,6 +11,8 @@ import {
 } from "./lib/authFlow";
 const PilotApp = lazy(() => import("./components/pilot/PilotApp"));
 const LandingPage = lazy(() => import("./components/pilot/LandingPage"));
+const AuthDialog = lazy(() => import("./components/pilot/AuthDialog"));
+const ResetPassword = lazy(() => import("./components/pilot/ResetPassword"));
 
 export default function App() {
   // First state hook: the initializer strips the reset link from the URL during the first render.
@@ -119,11 +120,7 @@ export default function App() {
         </div>
       )}
       <Suspense
-        fallback={
-          <div className="pilot p-6" role="status">
-            Opening StoneDesk…
-          </div>
-        }
+        fallback={<LoadingPage />}
       >
         {view === "reset" ? (
           <ResetPassword
@@ -133,12 +130,7 @@ export default function App() {
             onHome={() => setReset(null)}
           />
         ) : view === "loading" ? (
-          <div
-            className="pilot min-h-dvh bg-surface p-6 text-on-surface"
-            role="status"
-          >
-            Opening StoneDesk…
-          </div>
+          <LoadingPage />
         ) : view === "landing" ? (
           <LandingPage
             user={user}
@@ -192,26 +184,30 @@ export default function App() {
           }}
         />
       )}
-      <AuthDialog
-        key={authMode || "closed"}
-        mode={authMode}
-        initialMethod={
-          reset?.done && authMode === "login" ? "email" : undefined
-        }
-        googleSignup={googleSignup}
-        initialError={error}
-        onClearError={() => setError("")}
-        onClose={() => {
-          setGoogleSignup(null);
-          setAuthMode(null);
-        }}
-        onMode={(value) => {
-          setError("");
-          setGoogleSignup(null);
-          setAuthMode(value);
-        }}
-        onSignedIn={signedIn}
-      />
+      <Suspense fallback={null}>
+        {authMode && (
+          <AuthDialog
+            key={authMode}
+            mode={authMode}
+            initialMethod={
+              reset?.done && authMode === "login" ? "email" : undefined
+            }
+            googleSignup={googleSignup}
+            initialError={error}
+            onClearError={() => setError("")}
+            onClose={() => {
+              setGoogleSignup(null);
+              setAuthMode(null);
+            }}
+            onMode={(value) => {
+              setError("");
+              setGoogleSignup(null);
+              setAuthMode(value);
+            }}
+            onSignedIn={signedIn}
+          />
+        )}
+      </Suspense>
     </>
   );
 }

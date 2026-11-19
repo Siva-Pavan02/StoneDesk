@@ -857,6 +857,69 @@ const LIST_FIELDS = {
 const MAX_LIST_LIMIT = 50;
 const DEFAULT_LIST_LIMIT = 20;
 
+// Cursor order is stable even when a payment settles an invoice between pages.
+exports.receivables = async (req, res, next) => {
+  try {
+    const party = req.query.party;
+    if (typeof party !== "string" || !party.trim() || party.length > 120)
+      calc.bad("Invalid party");
+    let cursorDate = null;
+    let cursorId = null;
+    if (req.query.cursor !== undefined) {
+      try {
+        if (typeof req.query.cursor !== "string" || req.query.cursor.length > 240) throw new Error();
+        const value = JSON.parse(Buffer.from(req.query.cursor, "base64url").toString("utf8"));
+        if (!Array.isArray(value) || value.length !== 2 ||
+            !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value[0]) ||
+            !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value[1])) throw new Error();
+        cursorDate = new Date(value[0]);
+        if (!Number.isFinite(cursorDate.getTime())) throw new Error();
+        cursorId = value[1];
+      } catch { calc.bad("Invalid receivables cursor"); }
+    }
+    const rows = await prisma.$queryRaw`
+      WITH payment_totals AS (
+        SELECT ip."dispatchId", SUM(ip.amount) AS received
+        FROM "InvoicePayment" ip
+        WHERE ip."organizationId" = ${req.user.organizationId}::uuid
+        GROUP BY ip."dispatchId"
+      ), invoices AS (
+        SELECT d.id, d."dispatchSlipNumber", d.date,
+          CASE WHEN d.summary->>'netBillableAmount' ~ '^[0-9]+([.][0-9]+)?$'
+            THEN (d.summary->>'netBillableAmount')::numeric ELSE 0::numeric END AS invoice_total,
+          COALESCE(pt.received, 0::numeric) AS received
+        FROM "Dispatch" d
+        LEFT JOIN payment_totals pt ON pt."dispatchId" = d.id
+        WHERE d."organizationId" = ${req.user.organizationId}::uuid
+          AND d.status IN ('Dispatched', 'Delivered')
+          AND COALESCE(NULLIF(BTRIM(d."partyName"), ''), 'Unspecified party') = ${party.trim()}
+      )
+      SELECT id, "dispatchSlipNumber", date, invoice_total, received,
+        invoice_total - received AS balance
+      FROM invoices
+      WHERE invoice_total > received
+        AND (${cursorDate}::timestamptz IS NULL OR (date, id) > (${cursorDate}::timestamptz, ${cursorId}::uuid))
+      ORDER BY date, id
+      LIMIT ${DEFAULT_LIST_LIMIT + 1}
+    `;
+    const hasMore = rows.length > DEFAULT_LIST_LIMIT;
+    const page = rows.slice(0, DEFAULT_LIST_LIMIT);
+    const last = page.at(-1);
+    res.json({
+      data: page.map(row => ({
+        id: row.id,
+        dispatchSlipNumber: row.dispatchSlipNumber,
+        date: row.date,
+        status: Number(row.received) > 0 ? "PARTIALLY_PAID" : "PAYMENT_DUE",
+        invoiceTotal: round2(Number(row.invoice_total)),
+        received: round2(Number(row.received)),
+        balance: round2(Number(row.balance)),
+      })),
+      nextCursor: hasMore ? Buffer.from(JSON.stringify([last.date.toISOString(), last.id])).toString("base64url") : null,
+    });
+  } catch (err) { next(err); }
+};
+
 exports.list = async (req, res, next) => {
   try {
     const filter = { organizationId: req.user.organizationId };

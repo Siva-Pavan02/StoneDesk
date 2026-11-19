@@ -69,7 +69,15 @@ test('accounts protect all business data, activate staff, enforce roles and revo
     assert.equal((await call(API_PREFIX + '/auth' + path, method, body, staffCookie)).status, 403);
   }
   assert.equal((await call(API_PREFIX + '/auth/login', 'POST', {email:staff.data.user.email,password:newPassword})).status, 403);
-  assert.equal((await call(API_PREFIX + '/auth/forgot-password', 'POST', {email:staff.data.user.email})).status, 200);
+  const smtpFrom = process.env.SMTP_FROM;
+  try {
+    delete process.env.SMTP_FROM;
+    for (const email of [staff.data.user.email, owner.data.user.email, 'missing@example.test']) {
+      assert.equal((await call(API_PREFIX + '/auth/forgot-password', 'POST', { email })).status, 503);
+    }
+  } finally {
+    if (smtpFrom !== undefined) process.env.SMTP_FROM = smtpFrom;
+  }
   assert.equal(await prisma.passwordResetToken.count(), 0);
   await call(`${API_PREFIX}/auth/users/` + staff.data.user.id, 'PATCH', { role: 'Dispatcher', active: false }, ownerCookie);
   assert.equal((await call(`${API_PREFIX}/dispatches`, 'GET', undefined, staffCookie)).status, 401);

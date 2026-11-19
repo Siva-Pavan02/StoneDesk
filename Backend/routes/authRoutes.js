@@ -5,7 +5,7 @@ const { createHash } = require("node:crypto");
 const prisma = require("../utils/prisma");
 const auth = require("../utils/auth");
 const { organizationCode } = require("../utils/organizationCode");
-const { sendPasswordResetEmail } = require("../utils/email");
+const { sendPasswordResetEmail, isEmailConfigured } = require("../utils/email");
 const { auditLog } = require("../utils/auditLog");
 const router = express.Router();
 const googleAuth = require("../utils/googleAuth");
@@ -520,6 +520,10 @@ router.patch(
 
 router.post("/forgot-password", auth.authLimit, async (req, res, next) => {
   try {
+    // Check service configuration before account lookup so this response cannot reveal accounts.
+    if (!isEmailConfigured() || !process.env.APP_ORIGIN) {
+      return res.status(503).json({ error: "Password reset email is unavailable. Please contact your administrator." });
+    }
     const email =
       typeof req.body.email === "string"
         ? req.body.email.trim().toLowerCase()
@@ -550,9 +554,7 @@ router.post("/forgot-password", auth.authLimit, async (req, res, next) => {
       },
     });
 
-    const appOrigin =
-      process.env.APP_ORIGIN ||
-      `${req.protocol}://${req.get("host") || "localhost:5000"}`;
+    const appOrigin = process.env.APP_ORIGIN;
     const resetUrl = buildResetUrl(appOrigin, token, email);
 
     const settings = await prisma.masterSettings.findUnique({
@@ -563,7 +565,8 @@ router.post("/forgot-password", auth.authLimit, async (req, res, next) => {
     try {
       await sendPasswordResetEmail(email, resetUrl, settings?.businessName);
     } catch (emailErr) {
-      console.error("Failed to send password reset email:", emailErr);
+      // Keep the public response generic; delivery errors must not reveal registered emails.
+      console.error("Failed to send password reset email:", emailErr.code || "EMAIL_SEND_FAILED");
     }
 
     await auditLog("password_reset.request", req, { email });

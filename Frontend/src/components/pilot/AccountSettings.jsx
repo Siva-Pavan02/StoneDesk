@@ -241,13 +241,13 @@ export default function AccountSettings({ settings, user, section, onDeleted, on
             <p>You sign in with Google. Add a password to also log in with your email.</p>
             <input type="text" autoComplete="username" value={user.email || ''} readOnly hidden />
             <PasswordField name="password" inputRef={newPasswordInput} error={passwordError?.field === 'password' ? passwordError.message : ''} label="New password (12+ characters)" autoComplete="new-password" minLength={12} maxLength={128} required />
-            <div><Button type="submit" primary disabled={!!busy} label={busy === 'password' ? 'Setting…' : 'Set password'} /></div>
+            <div className="st-password-submit"><Button type="submit" primary disabled={!!busy} label={busy === 'password' ? 'Setting…' : 'Set password'} /></div>
           </form>
         : <form key="change" className="st-password st-card" onSubmit={savePassword} onInput={() => { markDirty('password', true); setPasswordError(null); }}>
             <input type="text" autoComplete="username" value={user.email || ''} readOnly hidden />
             <PasswordField name="currentPassword" inputRef={currentPasswordInput} error={passwordError?.field === 'currentPassword' ? passwordError.message : ''} label="Current password" autoComplete="current-password" maxLength={128} required />
             <PasswordField name="password" inputRef={newPasswordInput} error={passwordError?.field === 'password' ? passwordError.message : ''} label="New password (12+ characters)" autoComplete="new-password" minLength={12} maxLength={128} required />
-            <div><Button type="submit" primary disabled={!!busy} label={busy === 'password' ? 'Updating…' : 'Update password'} /></div>
+            <div className="st-password-submit"><Button type="submit" primary disabled={!!busy} label={busy === 'password' ? 'Updating…' : 'Update password'} /></div>
             {user.hasGoogle === true && <div className="st-password-reset">
               <p>Signed up with Google and never chose a password? Email yourself a reset link to set one.</p>
               <button type="button" className="text-button" disabled={!!busy} aria-busy={busy === 'reset-link' || undefined} onClick={sendResetLink}>

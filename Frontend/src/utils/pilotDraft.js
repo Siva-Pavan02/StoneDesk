@@ -165,6 +165,18 @@ export function previewRows(rows) {
     lineTotal: row.rateUnit === 'UNIT' ? round2((row.quantity ?? 1) * Number(row.rate ?? row.ratePerSqFt ?? 0)) : round2(rawAmount(row)),
   }));
 }
+// Reprice only the summary group selected in this draft; product defaults stay unchanged.
+export function repriceGroupRows(rows, group, nextRate) {
+  return rows.map(row =>
+    row.stoneType === group.stoneType &&
+    (row.finish || '') === (group.finish || '') &&
+    row.category === group.category &&
+    (row.rateUnit || 'SQ_FT') === (group.rateUnit || 'SQ_FT') &&
+    Number(row.ratePerSqFt) === Number(group.ratePerSqFt)
+      ? { ...row, rate: nextRate, ratePerSqFt: nextRate }
+      : row
+  );
+}
 export function makeRow(entry, product) {
   const isUnit = product?.rateUnit === 'UNIT';
   const lengthFt = isUnit ? undefined : parseFraction(entry.length)?.numeric;

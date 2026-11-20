@@ -4,6 +4,7 @@ const database = require('./database');
 const prisma = database.prisma;
 const http = require('node:http');
 const app = require('../app');
+const { randomUUID } = require('node:crypto');
 const API_PREFIX = '/api';
 
 // Pure-unit coverage: runs without a test database.
@@ -30,13 +31,19 @@ test('Invoice Payments V1 API', async (t) => {
   const baseUrl = `http://localhost:${port}`;
 
   async function call(path, method = 'GET', body, cookie) {
+    // Existing scenarios create distinct payment intents unless a test supplies
+    // a key explicitly to exercise replay or missing-key behavior.
+    const payload = method === 'POST' && /^\/api\/dispatches\/[^/]+\/payments$/.test(path) &&
+      body && !Object.hasOwn(body, 'clientRequestId')
+      ? { ...body, clientRequestId: randomUUID() }
+      : body;
     const res = await fetch(baseUrl + path, {
       method,
       headers: {
         'Content-Type': 'application/json',
         ...(cookie ? { Cookie: cookie } : {})
       },
-      body: body === undefined ? undefined : JSON.stringify(body)
+      body: payload === undefined ? undefined : JSON.stringify(payload)
     });
     return { status: res.status, data: await res.json().catch(() => null), cookies: res.headers.getSetCookie() };
   }
@@ -164,10 +171,23 @@ test('Invoice Payments V1 API', async (t) => {
     assert.equal(res.status, 400);
   });
 
+  await t.test('4b. Reject missing and malformed payment request IDs', async () => {
+    const missing = await call(`${API_PREFIX}/dispatches/${draftId}/payments`, 'POST',
+      { amount: 100, clientRequestId: undefined }, cookieA);
+    assert.equal(missing.status, 400);
+    assert.match(missing.data.error, /refresh/i);
+    const malformed = await call(`${API_PREFIX}/dispatches/${draftId}/payments`, 'POST',
+      { amount: 100, clientRequestId: 'not-a-uuid' }, cookieA);
+    assert.equal(malformed.status, 400);
+  });
+
+  const firstPaymentKey = randomUUID();
+  let firstPaymentId;
   await t.test('5. First partial payment (25,000)', async () => {
     const res = await call(`${API_PREFIX}/dispatches/${draftId}/payments`, 'POST', {
       amount: 25000,
-      note: 'Advance payment received'
+      note: 'Advance payment received',
+      clientRequestId: firstPaymentKey
     }, cookieA);
     assert.equal(res.status, 201);
     assert.equal(res.data.invoiceTotal, 80000);
@@ -178,6 +198,25 @@ test('Invoice Payments V1 API', async (t) => {
     assert.equal(res.data.payments[0].amount, 25000);
     assert.equal(res.data.payments[0].note, 'Advance payment received');
     assert.equal(res.data.payments[0].createdBy, 'Owner A');
+    firstPaymentId = res.data.payments[0].id;
+  });
+
+  await t.test('5b. Identical replay returns one saved payment and normalized changes conflict', async () => {
+    const replay = await call(`${API_PREFIX}/dispatches/${draftId}/payments`, 'POST', {
+      amount: 25000, note: '  Advance payment received  ', clientRequestId: firstPaymentKey
+    }, cookieA);
+    assert.equal(replay.status, 200);
+    assert.equal(replay.data.received, 25000);
+    assert.equal(replay.data.payments.length, 1);
+    assert.equal(replay.data.payments[0].id, firstPaymentId);
+    const changedAmount = await call(`${API_PREFIX}/dispatches/${draftId}/payments`, 'POST', {
+      amount: 25000.01, note: 'Advance payment received', clientRequestId: firstPaymentKey
+    }, cookieA);
+    assert.equal(changedAmount.status, 409);
+    const changedNote = await call(`${API_PREFIX}/dispatches/${draftId}/payments`, 'POST', {
+      amount: 25000, note: 'Different', clientRequestId: firstPaymentKey
+    }, cookieA);
+    assert.equal(changedNote.status, 409);
   });
 
   await t.test('6. Second partial payment (20,000)', async () => {
@@ -246,6 +285,11 @@ test('Invoice Payments V1 API', async (t) => {
     const id2 = draft2.data.id;
     await call(`${API_PREFIX}/dispatches/${id2}/finalize`, 'POST', {}, cookieA);
 
+    const reusedAcrossInvoices = await call(`${API_PREFIX}/dispatches/${id2}/payments`, 'POST', {
+      amount: 100, note: 'Advance payment received', clientRequestId: firstPaymentKey
+    }, cookieA);
+    assert.equal(reusedAcrossInvoices.status, 409);
+
     // Two simultaneous requests each trying to pay 10,000
     const [p1, p2] = await Promise.all([
       call(`${API_PREFIX}/dispatches/${id2}/payments`, 'POST', { amount: 10000, note: 'User A' }, cookieA),
@@ -308,7 +352,7 @@ test('Invoice Payments V1 API', async (t) => {
     assert.equal(s4.status, 'PAID');
   });
 
-  await t.test('14. API accepts 1.005 and rounds half-up to exact 1.01 in database', async () => {
+  await t.test('14. API rejects fractional-paisa payment input', async () => {
     // Create new finalized dispatch with total = 100.10
     const d3 = await call(`${API_PREFIX}/dispatches`, 'POST', {
       supervisor: 'Supervisor Precision',
@@ -325,10 +369,15 @@ test('Invoice Payments V1 API', async (t) => {
     const id3 = d3.data.id;
     await call(`${API_PREFIX}/dispatches/${id3}/finalize`, 'POST', {}, cookieA);
 
-    // Post payment of 1.005
-    const payRes = await call(`${API_PREFIX}/dispatches/${id3}/payments`, 'POST', {
+    const rejected = await call(`${API_PREFIX}/dispatches/${id3}/payments`, 'POST', {
       amount: 1.005,
       note: 'Half-up rounding test'
+    }, cookieA);
+    assert.equal(rejected.status, 400);
+
+    const payRes = await call(`${API_PREFIX}/dispatches/${id3}/payments`, 'POST', {
+      amount: 1.01,
+      note: 'Exact paise payment'
     }, cookieA);
     assert.equal(payRes.status, 201);
     assert.equal(payRes.data.invoiceTotal, 100.10);

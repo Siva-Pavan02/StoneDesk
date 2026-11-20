@@ -355,13 +355,7 @@ export default function NewLoad({
       });
       onSaved(record);
     } catch (err) {
-      setError(
-        err.status === 409
-          ? "This invoice changed since you opened it. Cancel to reload the latest bill, then try again."
-          : err.status === 403
-            ? "You are not permitted to edit this invoice."
-            : err.message,
-      );
+      setError(err.status === 403 ? "You are not permitted to edit this invoice." : err.message);
     } finally {
       lock.current = false;
       setBusy(false);
@@ -391,14 +385,6 @@ export default function NewLoad({
         return { no, lines };
       });
   }, [rows, review]);
-  const areaFormat = useMemo(
-    () =>
-      new Intl.NumberFormat(locale, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      }),
-    [locale],
-  );
   const countFormat = useMemo(() => new Intl.NumberFormat(locale), [locale]);
   const reviewDate = (iso) => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(iso || "")) return iso;
@@ -704,7 +690,7 @@ export default function NewLoad({
                     </p>
                   )}
                   <p className="font-semibold">
-                    {r.rateUnit === "UNIT" ? "" : `${areaFormat.format(r.sqFt)}\u00A0sq\u00A0ft · `}
+                    {r.rateUnit === "UNIT" ? "" : `${r.billableAreaSqFt}\u00A0sq\u00A0ft · `}
                     {money(r.lineTotal)}
                   </p>
                   {!review && (

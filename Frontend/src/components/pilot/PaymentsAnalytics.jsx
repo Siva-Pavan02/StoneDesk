@@ -112,15 +112,15 @@ export default function PaymentsAnalytics({ analytics, selectedPeriod = '3', onP
       </div>
       <dl className="payments-kpi-grid">
         <div className="payments-kpi">
-          <dt><span className="payments-eyebrow">All time</span>Outstanding balance</dt>
+          <dt><span className="payments-eyebrow">As of today</span>Outstanding balance</dt>
           <dd className="payments-hero-amount">{money(current.outstanding)}</dd>
         </div>
         <div className="payments-kpi">
-          <dt><span className="payments-eyebrow">All time</span>Unpaid invoices</dt>
+          <dt><span className="payments-eyebrow">As of today</span>Unpaid invoices</dt>
           <dd>{count(current.unpaidInvoices)}</dd>
         </div>
         <div className="payments-kpi">
-          <dt><span className="payments-eyebrow">All time</span>Partially paid</dt>
+          <dt><span className="payments-eyebrow">As of today</span>Partially paid</dt>
           <dd>{count(current.partialInvoices)}</dd>
         </div>
         <div className="payments-kpi">
@@ -132,10 +132,13 @@ export default function PaymentsAnalytics({ analytics, selectedPeriod = '3', onP
           <dd>{count(current.completedInvoices)}</dd>
         </div>
       </dl>
+      {paymentAnalytics.excludedCompletionCount > 0 && <p className="analytics-note" role="status">
+        {count(paymentAnalytics.excludedCompletionCount)} legacy paid {paymentAnalytics.excludedCompletionCount === 1 ? 'invoice has' : 'invoices have'} incomplete revision history and {paymentAnalytics.excludedCompletionCount === 1 ? 'is' : 'are'} excluded from the paid-in-full count.
+      </p>}
     </section>
     <section className="payments-receivables" aria-labelledby={`${id}-parties`}>
       <div className="payments-section-heading">
-        <div><h2 id={`${id}-parties`}>Outstanding by party</h2><p className="analytics-note">All-time balances from unpaid and partially paid invoices.</p></div>
+        <div><h2 id={`${id}-parties`}>Outstanding by party</h2><p className="analytics-note">Balances due as of today from unpaid and partially paid invoices.</p></div>
       </div>
       {outstandingParties.length ? <><div className="payments-party-labels" aria-hidden="true"><span>Party</span><span>Balance due</span><span>Invoices</span></div><ol className="payments-party-list">
         {outstandingParties.map(party => <li key={party.party}>

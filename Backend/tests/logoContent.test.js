@@ -17,7 +17,7 @@ test('storeLogo writes content-addressed PNGs and snapshot() stores only a refer
   const saved = { dir: process.env.UPLOAD_DIR, mode: process.env.LOGO_STORAGE };
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'stonedesk-logo-content-'));
   process.env.UPLOAD_DIR = directory;
-  delete process.env.LOGO_STORAGE;
+  process.env.LOGO_STORAGE = 'local';
   t.after(async () => {
     if (saved.dir === undefined) delete process.env.UPLOAD_DIR; else process.env.UPLOAD_DIR = saved.dir;
     if (saved.mode === undefined) delete process.env.LOGO_STORAGE; else process.env.LOGO_STORAGE = saved.mode;

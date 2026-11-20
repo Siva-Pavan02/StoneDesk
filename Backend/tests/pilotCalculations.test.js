@@ -31,3 +31,19 @@ test('legacy piece records remain calculable with display fields', () => {
   assert.equal(inventory[0].pieces[0].lengthDisplay, '10');
   assert.equal(totals(inventory, 8500).netBillableAmount, 13500);
 });
+
+test('version 2 rounds each row before summing and keeps exact billable area', () => {
+  const inventory = processInventory([{ stoneType: 'Stone', finish: 'Polished', ratePerSqFt: 10,
+    measurementRows: [1, 2, 3].map(rowNo => ({ rowNo, lengthFt: 1.3335, widthFt: 1, quantity: 1, category: 'Regular' })) }]);
+  assert.deepEqual(inventory[0].measurementRows.map(row => row.lineTotal), [13.34, 13.34, 13.34]);
+  assert.deepEqual(inventory[0].measurementRows.map(row => row.billableAreaSqFt), ['1.3335', '1.3335', '1.3335']);
+  assert.equal(inventory[0].lineTotal, 40.02);
+  assert.equal(totals(inventory, 0).baseMaterialTotal, 40.02);
+  assert.equal(totals(inventory, 0).calculationVersion, 2);
+});
+
+test('version 2 preserves paise instead of rounding .75 to a rupee', () => {
+  const inventory = processInventory([{ stoneType: 'Stone', finish: 'Polished', ratePerSqFt: 40.5,
+    measurementRows: [{ lengthFt: 3.25, widthFt: 2.5, quantity: 4, category: 'Regular' }] }]);
+  assert.equal(totals(inventory, 150.5).netBillableAmount, 1466.75);
+});

@@ -296,11 +296,12 @@ export default function BillView({ record, onBack, onResume, onEdit, onChanged, 
       setConfirmingDelete(false);
       onDeleted?.(record.id);
     } catch (err) {
-      // The admin delete removes any payments with the invoice, and returns 404 when it is already gone.
       setDeleteError(err.status === 404
         ? 'This invoice was already deleted. Go back to the dashboard.'
         : err.status === 403
           ? 'You are not permitted to delete this invoice.'
+          : err.status === 409
+            ? 'This invoice has recorded payments and cannot be deleted.'
           : `The invoice wasn’t deleted. Try again.${err?.message ? ` (${err.message})` : ''}`);
       setConfirmingDelete(false);
       focusSoon('[data-delete-trigger]');
@@ -316,7 +317,7 @@ export default function BillView({ record, onBack, onResume, onEdit, onChanged, 
       onDeleted?.(record.id);
     } catch (err) {
       setDeleteError(err.status === 409
-        ? 'This draft was finalized or changed. Go back to the dashboard and try again.'
+        ? 'This draft changed or has a recorded payment. Refresh and try again.'
         : err.status === 403
           ? 'You are not permitted to delete this draft.'
           : `The draft wasn’t deleted. Try again.${err?.message ? ` (${err.message})` : ''}`);
@@ -391,7 +392,7 @@ export default function BillView({ record, onBack, onResume, onEdit, onChanged, 
       <section className="invoice-admin-row invoice-admin-delete" aria-labelledby="invoice-delete-title" data-state={confirmingDelete ? 'confirming' : 'idle'}>
         <div className="invoice-admin-copy" aria-live="polite">
           <h2 id="invoice-delete-title">{confirmingDelete ? 'Delete this invoice?' : 'Delete invoice'}</h2>
-          <p>{confirmingDelete ? 'This removes the invoice and its recorded payments. This can’t be undone.' : 'Recorded payments are deleted too.'}</p>
+          <p>{confirmingDelete ? 'This permanently removes the invoice if it has no recorded payments.' : 'Invoices with recorded payments cannot be deleted.'}</p>
           <ErrorMessage error={deleteError} />
         </div>
         <div className="action-row shrink-0">

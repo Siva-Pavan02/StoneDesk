@@ -164,11 +164,18 @@ exports.updateLoadingList = async (req, res, next) => {
       where: { id: req.params.id, organizationId: req.user.organizationId },
     });
     if (!existing) return res.status(404).json({ error: "Not found" });
+    let expectedUpdatedAt = existing.updatedAt;
+    if (req.body.updatedAt !== undefined) {
+      const token = req.body.updatedAt;
+      if (typeof token !== 'string' || !Number.isFinite(Date.parse(token)) || new Date(token).toISOString() !== token)
+        return res.status(400).json({ error: 'A valid updatedAt is required. Refresh and try again.' });
+      expectedUpdatedAt = new Date(token);
+    }
     const result = await prisma.loadingList.updateMany({
       where: {
         id: req.params.id,
         organizationId: req.user.organizationId,
-        updatedAt: existing.updatedAt,
+        updatedAt: expectedUpdatedAt,
       },
       data: fields({ ...existing, ...req.body }),
     });

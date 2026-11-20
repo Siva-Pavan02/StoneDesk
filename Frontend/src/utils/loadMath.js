@@ -1,33 +1,47 @@
-// Shared load arithmetic. Must stay identical to Backend/utils/pilotCalculations.js.
-// Areas/material subtotals retain two-decimal rounding; only net payable uses
-// the .75 business rule after raw charges plus the stored fee are summed;
-// per-row values are rounded for display only.
+import Decimal from 'decimal.js';
 
-// Half-up to 2 decimals. toPrecision(15) removes binary noise first (1.005 -> 1.01).
+// Preview math mirrors Backend/utils/pilotCalculations.js. Money is rounded per row.
+const D = Decimal.clone({ precision: 40, rounding: Decimal.ROUND_HALF_UP });
+const MONEY_MAX_PAISA = new D('999999999999');
+const decimal = value => new D(String(value));
+const money = value => {
+  const rounded = decimal(value).toDecimalPlaces(2, D.ROUND_HALF_UP);
+  if (!rounded.isFinite() || rounded.isNegative() || rounded.times(100).greaterThan(MONEY_MAX_PAISA)) {
+    throw new Error('Calculation exceeds supported range');
+  }
+  return Number(rounded.toFixed(2));
+};
+
 export function round2(value) {
-  const cents = Math.round(Number((Math.abs(value) * 100).toPrecision(15)));
-  return (value < 0 ? -cents : cents) / 100 || 0;
+  return Number(decimal(value).toDecimalPlaces(2, D.ROUND_HALF_UP).toFixed(2)) || 0;
 }
 export const fixed2 = value => round2(Number(value) || 0).toFixed(2);
-export const rawArea = row => (row.rateUnit === 'UNIT' ? 0 : row.lengthFt * row.widthFt * (row.quantity ?? 1));
-export const rawAmount = row => (row.rateUnit === 'UNIT' ? (row.quantity ?? 1) * (row.rate ?? row.ratePerSqFt ?? 0) : rawArea(row) * (row.ratePerSqFt || 0));
+export const exactArea = row => row.rateUnit === 'UNIT' ? new D(0) : decimal(row.lengthFt).times(row.widthFt).times(row.quantity ?? 1);
+export const rawArea = row => exactArea(row).toNumber();
+export const exactAmount = row => row.rateUnit === 'UNIT'
+  ? decimal(row.quantity ?? 1).times(row.rate ?? row.ratePerSqFt ?? 0)
+  : exactArea(row).times(row.rate ?? row.ratePerSqFt ?? 0);
+export const rawAmount = row => exactAmount(row).toNumber();
+export const rowAmount = row => money(exactAmount(row));
 
-// Returns the same summary the server computes for these rows.
 export function summarize(rows, fee) {
-  let sqFt = 0, amount = 0, totalPieces = 0;
-  for (const row of rows) { sqFt += rawArea(row); amount += rawAmount(row); totalPieces += row.quantity ?? 1; }
-  // Match payload grouping and server summation order for an identical raw net.
-  const amounts = new Map();
-  for (const row of rows) {
-    const key = JSON.stringify([row.stoneType, row.finish, row.ratePerSqFt, row.rateUnit || 'SQ_FT']);
-    amounts.set(key, (amounts.get(key) || 0) + rawAmount(row));
-  }
-  const rawNet = [...amounts.values()].reduce((sum, value) => sum + value, 0) + round2(Number(fee) || 0);
-  const baseMaterialTotal = round2(amount), loadingAndRoyaltyFees = round2(Number(fee) || 0);
-  return { totalPieces, totalDispatchVolumeSqFt: round2(sqFt), baseMaterialTotal, loadingAndRoyaltyFees, netBillableAmount: netTotal(rawNet) };
+  // The draft fee is edited as text. Keep the preview usable while it is blank
+  // or incomplete; payload() performs the strict paise validation on save.
+  let feeDecimal;
+  try { feeDecimal = decimal(fee === '' ? 0 : fee); } catch { feeDecimal = new D(0); }
+  if (!feeDecimal.isFinite() || feeDecimal.isNegative()) feeDecimal = new D(0);
+  const area = rows.reduce((sum, row) => sum.plus(exactArea(row)), new D(0));
+  const base = rows.reduce((sum, row) => sum.plus(rowAmount(row)), new D(0));
+  const baseMaterialTotal = money(base);
+  const loadingAndRoyaltyFees = money(feeDecimal);
+  return {
+    totalPieces: rows.reduce((sum, row) => sum + (row.quantity ?? 1), 0),
+    totalDispatchVolumeSqFt: round2(area),
+    baseMaterialTotal,
+    loadingAndRoyaltyFees,
+    netBillableAmount: money(base.plus(feeDecimal)),
+    calculationVersion: 2,
+  };
 }
 
-// Net payable only: tolerate binary noise around .75; preserve every other value.
-export function netTotal(value) {
-  return Math.abs(value - Math.floor(value) - 0.75) <= 1e-9 ? Math.floor(value) + 1 : value;
-}
+export function netTotal(value) { return money(value); }

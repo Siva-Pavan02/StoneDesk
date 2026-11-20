@@ -28,8 +28,8 @@ test('loading lists retain IDs, validate JSON and persist updates', async t => {
   // write bumps it, so the loser's updateMany matches no row and returns 409.
   const req0 = changed.data.requirements[0];
   const [c1, c2] = await Promise.all([
-    call('PUT', '/' + id, { requirements: [{ ...req0, loadedQuantity: 2 }] }),
-    call('PUT', '/' + id, { requirements: [{ ...req0, loadedQuantity: 3 }] })
+    call('PUT', '/' + id, { updatedAt: changed.data.updatedAt, requirements: [{ ...req0, loadedQuantity: 2 }] }),
+    call('PUT', '/' + id, { updatedAt: changed.data.updatedAt, requirements: [{ ...req0, loadedQuantity: 3 }] })
   ]);
   const okCount = [c1, c2].filter(r => r.status === 200).length;
   const conflictCount = [c1, c2].filter(r => r.status === 409).length;

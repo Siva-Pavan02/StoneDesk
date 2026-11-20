@@ -246,6 +246,81 @@ test('Dispatch API', async (t) => {
     assert.equal((await request('DELETE', `/${finalized.data.id}`)).status, 200);
   });
 
+  await t.test('A revision cannot lower an invoice below committed payments', async () => {
+    const created = await request('POST', '/', validPayload);
+    const id = created.data.id;
+    const finalized = await request('POST', `/${id}/finalize`);
+    assert.equal(finalized.status, 200);
+    assert.equal(finalized.data.summary.calculationVersion, 2);
+    assert.ok(finalized.data.summary.issuedAt);
+    assert.equal(finalized.data.summary.issuedAt, finalized.data.summary.effectiveAt);
+
+    const missingToken = await request('PUT', `/${id}/revise`, { inventory: validPayload.inventory });
+    assert.equal(missingToken.status, 400);
+
+    const stale = await request('PUT', `/${id}/revise`, { updatedAt: '2000-01-01T00:00:00.000Z', inventory: validPayload.inventory });
+    assert.equal(stale.status, 409);
+
+    const received = Number(finalized.data.summary.netBillableAmount) - 100;
+    await prisma.invoicePayment.create({ data: { organizationId: org.id, dispatchId: id, amount: received } });
+    const lower = await request('PUT', `/${id}/revise`, {
+      updatedAt: finalized.data.updatedAt,
+      inventory: [{ ...validPayload.inventory[0], ratePerSqFt: 1 }]
+    });
+    assert.equal(lower.status, 409);
+    assert.match(lower.data.error, /payment|received|below/i);
+    let current = (await request('GET', `/${id}`)).data;
+    assert.equal(current.summary.netBillableAmount, finalized.data.summary.netBillableAmount);
+    assert.equal(current.revisions.length, 0);
+    assert.equal(await prisma.invoicePayment.count({ where: { dispatchId: id, organizationId: org.id } }), 1);
+
+    const higher = await request('PUT', `/${id}/revise`, {
+      updatedAt: current.updatedAt,
+      inventory: [{ ...validPayload.inventory[0], ratePerSqFt: 200 }]
+    });
+    assert.equal(higher.status, 200);
+    assert.ok(Number(higher.data.summary.netBillableAmount) > received);
+    assert.equal(higher.data.summary.issuedAt, finalized.data.summary.issuedAt);
+    assert.ok(higher.data.summary.effectiveAt);
+    assert.equal(higher.data.revisions.length, 1);
+    assert.equal(higher.data.revisions[0].priorTotal, finalized.data.summary.netBillableAmount);
+    assert.equal(higher.data.revisions[0].resultingTotal, higher.data.summary.netBillableAmount);
+    assert.equal(higher.data.revisions[0].paymentStatusBefore, 'PARTIALLY_PAID');
+    assert.equal(higher.data.revisions[0].paymentStatusAfter, 'PARTIALLY_PAID');
+    assert.equal(await prisma.invoicePayment.count({ where: { dispatchId: id, organizationId: org.id } }), 1);
+
+    const exact = await request('PUT', `/${id}/revise`, {
+      updatedAt: higher.data.updatedAt,
+      inventory: [{ ...validPayload.inventory[0], ratePerSqFt: 98 }]
+    });
+    assert.equal(exact.status, 200);
+    assert.equal(Number(exact.data.summary.netBillableAmount), received);
+    assert.equal(exact.data.revisions[1].paymentStatusAfter, 'PAID');
+  });
+
+  await t.test('Payments prevent deleting finalized invoices and anomalous drafts', async () => {
+    const finalizedDraft = await request('POST', '/', validPayload);
+    const finalized = await request('POST', `/${finalizedDraft.data.id}/finalize`);
+    const invoiceId = finalized.data.id;
+    await prisma.invoicePayment.create({ data: { organizationId: org.id, dispatchId: invoiceId, amount: 100 } });
+    const rejected = await request('DELETE', `/${invoiceId}`);
+    assert.equal(rejected.status, 409);
+    assert.equal((await request('GET', `/${invoiceId}`)).status, 200);
+    assert.equal(await prisma.invoicePayment.count({ where: { dispatchId: invoiceId } }), 1);
+
+    const fullDraft = await request('POST', '/', validPayload);
+    const full = await request('POST', `/${fullDraft.data.id}/finalize`);
+    await prisma.invoicePayment.create({ data: { organizationId: org.id, dispatchId: full.data.id, amount: full.data.summary.netBillableAmount } });
+    assert.equal((await request('DELETE', `/${full.data.id}`)).status, 409);
+    assert.equal(await prisma.invoicePayment.count({ where: { dispatchId: full.data.id } }), 1);
+
+    const draft = await request('POST', '/', validPayload);
+    await prisma.invoicePayment.create({ data: { organizationId: org.id, dispatchId: draft.data.id, amount: 1 } });
+    assert.equal((await request('DELETE', `/${draft.data.id}`)).status, 409);
+    assert.equal((await request('GET', `/${draft.data.id}`)).status, 200);
+    assert.equal(await prisma.invoicePayment.count({ where: { dispatchId: draft.data.id } }), 1);
+  });
+
   await t.test('Saving a load remembers truck and destination once', async () => {
     await prisma.masterSettings.update({ where: { id: org.id }, data: { savedTrucks: [], savedDestinations: [] } });
     const first = await request('POST', '/', { ...validPayload, logistics: { truckNumber: 'tn01ab1234', buyerDestination: ' Kadapa ' } });

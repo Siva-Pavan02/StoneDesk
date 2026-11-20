@@ -156,6 +156,7 @@
 .payment-stat[data-tone="due"] dd { color: var(--ui-warning); }
 .payment-progress { height: 2px; overflow: hidden; border-radius: 2px; background: #f1f0ed; }
 .payment-progress > span { display: block; height: 100%; background: var(--ui-accent); transform-origin: left center; transition: transform 600ms cubic-bezier(.16, 1, .3, 1); }
+.payment-statement-action { display: flex; justify-content: flex-end; }
 .payment-history-block { display: grid; gap: 8px; }
 .pilot .payment-history-block h3 { color: var(--bill-muted); font-size: 11px; font-weight: 500; letter-spacing: .05em; line-height: 1.4; text-transform: uppercase; }
 .payment-history-block ul { display: grid; margin: 0; padding: 0; list-style: none; }

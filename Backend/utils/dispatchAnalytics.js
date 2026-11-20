@@ -118,6 +118,7 @@ function buildPaymentAnalytics(records, payments, now = new Date(), period = '30
   const trend = new Map();
   const finalized = records.filter(record => FINALIZED.has(record.status));
   const paymentsByDispatch = new Map();
+  let excludedCompletionCount = 0;
 
   if (days !== null) {
     for (let date = range.from; date <= range.to; date = addDays(date, 1)) {
@@ -153,14 +154,15 @@ function buildPaymentAnalytics(records, payments, now = new Date(), period = '30
     const invoiceTotal = figure(record.summary?.netBillableAmount);
     if (invoiceTotal === null) continue;
     const party = getParty(record);
-    party.billed += invoiceTotal;
+    const eligible = new Date(record.date) < periodEnd;
+    if (eligible) party.billed += invoiceTotal;
     const invoicePayments = paymentsByDispatch.get(record.id) || [];
     const paymentSummary = derivePaymentSummary(invoiceTotal, invoicePayments);
-    party.outstanding += paymentSummary.balance;
-    if (invoiceTotal > 0 && paymentSummary.received === 0) party.unpaidInvoices += 1;
-    else if (paymentSummary.received > 0 && paymentSummary.balance > 0) party.partialInvoices += 1;
-    let receivedBefore = 0;
-    let countedCompletion = false;
+    if (eligible) {
+      party.outstanding += paymentSummary.balance;
+      if (invoiceTotal > 0 && paymentSummary.received === 0) party.unpaidInvoices += 1;
+      else if (paymentSummary.received > 0 && paymentSummary.balance > 0) party.partialInvoices += 1;
+    }
     for (const payment of invoicePayments) {
       const createdAt = new Date(payment.createdAt);
       if ((!range.currentStart || createdAt >= range.currentStart) && createdAt < periodEnd) {
@@ -168,8 +170,13 @@ function buildPaymentAnalytics(records, payments, now = new Date(), period = '30
         trendFor(istDay(createdAt)).received += Number(payment.amount);
       }
       else if (previousPeriodStart && createdAt >= previousPeriodStart && createdAt < previousEnd) previous.received += Number(payment.amount);
-      if (!countedCompletion && receivedBefore < invoiceTotal && receivedBefore + Number(payment.amount) >= invoiceTotal) {
-        const completedDay = istDay(createdAt);
+    }
+    if (eligible) {
+      const { paidCompletion } = require('./paymentCompletion');
+      const completion = paidCompletion(record, invoicePayments);
+      if (completion.excluded) excludedCompletionCount += 1;
+      if (completion.event) {
+        const completedDay = istDay(completion.event);
         if ((!range.from || completedDay >= range.from) && completedDay <= range.to) {
           party.completedInvoiceTotal += invoiceTotal;
           party.completedInvoices += 1;
@@ -177,9 +184,7 @@ function buildPaymentAnalytics(records, payments, now = new Date(), period = '30
           point.completedInvoiceTotal += invoiceTotal;
           point.completedInvoices += 1;
         }
-        countedCompletion = true;
       }
-      receivedBefore += Number(payment.amount);
     }
   }
 
@@ -209,6 +214,7 @@ function buildPaymentAnalytics(records, payments, now = new Date(), period = '30
   return {
     period: { from: range.from, to: range.to, days, timezone: TIMEZONE },
     current,
+    excludedCompletionCount,
     previous,
     trend: [...trend.values()].sort((a, b) => a.date.localeCompare(b.date)).map(point => ({
       ...point,

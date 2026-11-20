@@ -1,8 +1,9 @@
-// Half-up rounding to 2 decimals. toPrecision(15) removes binary noise first, so
-// 1.005 rounds to 1.01 and the result does not depend on summation order.
+const { Prisma } = require('@prisma/client');
+const { toDecimal } = require('./invoiceMoney');
+
+// Half-up rounding to 2 decimals for display-only area and legacy callers.
 function round2(val) {
-  const cents = Math.round(Number((Math.abs(val) * 100).toPrecision(15)));
-  return (val < 0 ? -cents : cents) / 100 || 0;
+  return Number(toDecimal(val).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP).toFixed(2)) || 0;
 }
 exports.round2 = round2;
 
@@ -24,8 +25,8 @@ exports.calculatePiece = function(lengthFt, widthFt) {
   };
 }
 
-// Net payable only: tolerate binary noise around .75; preserve every other value.
+// Version 2 has one paise-level net rule; the historical stored total remains authoritative.
 function netTotal(value) {
-  return Math.abs(value - Math.floor(value) - 0.75) <= 1e-9 ? Math.floor(value) + 1 : value;
+  return round2(value);
 }
 exports.netTotal = netTotal;

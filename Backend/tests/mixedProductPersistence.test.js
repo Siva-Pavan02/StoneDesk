@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { randomBytes, createHash } = require('node:crypto');
+const { randomBytes, randomUUID, createHash } = require('node:crypto');
 const database = require('./database');
 const app = require('../app');
 
@@ -21,7 +21,9 @@ test('mixed products survive persistence, lifecycle, isolation and payment races
   }
   const admin = await session('Admin', org.id), manager = await session('YardManager', org.id), dispatcher = await session('Dispatcher', org.id), outsider = await session('Admin', other.id);
   async function call(method, route, body, cookie = admin) {
-    const r = await fetch(base + route, { method, headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+    const payload = method === 'POST' && /\/dispatches\/[^/]+\/payments$/.test(route) && body && !Object.hasOwn(body, 'clientRequestId')
+      ? { ...body, clientRequestId: randomUUID() } : body;
+    const r = await fetch(base + route, { method, headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: payload === undefined ? undefined : JSON.stringify(payload) });
     return { status: r.status, data: await r.json() };
   }
   const body = { clientRequestId: 'mixed-integration-001', partyName: 'Buyer', supervisor: 'Manager', logistics: { truckNumber: 'TEST01', buyerDestination: 'Yard' }, loadingAndRoyaltyFees: 0,

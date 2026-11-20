@@ -1,10 +1,14 @@
 const { randomUUID } = require("node:crypto");
+const { Prisma } = require("@prisma/client");
 const prisma = require("../utils/prisma");
 const calc = require("../utils/pilotCalculations");
+const { invoiceTotalDecimal, validateInvoiceMoney } = require("../utils/invoiceMoney");
+const { paidCompletion } = require("../utils/paymentCompletion");
 const { round2 } = require("../utils/dispatchCalculations");
 const { snapshot } = require("../utils/businessBranding");
 const {
   buildAnalytics,
+  istDay,
   windows,
   ANALYTICS_PERIODS,
 } = require("../utils/dispatchAnalytics");
@@ -17,6 +21,17 @@ const { rememberDispatchReferences } = require("../utils/savedReferences");
 
 // Kept small to bound the analytics heap; the larger DB-side aggregation rewrite is deliberately deferred.
 const ANALYTICS_RECORD_CAP = 5000;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function requestError(status, message) {
+  return Object.assign(new Error(message), { status });
+}
+
+function paymentStatus(total, received) {
+  if (total.isZero() || received.greaterThanOrEqualTo(total)) return 'PAID';
+  if (received.greaterThan(0)) return 'PARTIALLY_PAID';
+  return 'PAYMENT_DUE';
+}
 
 function details(body) {
   const supervisor = calc.text(body.supervisor, "manager");
@@ -168,6 +183,8 @@ exports.updateDraft = async (req, res, next) => {
 
 exports.finalizeDispatch = async (req, res, next) => {
   try {
+    if (!UUID_REGEX.test(req.params.id))
+      return res.status(404).json({ error: "Not found" });
     // Parallelize: fetch dispatch and settings simultaneously
     const [dispatch, settings] = await Promise.all([
       prisma.dispatch.findFirst({
@@ -186,37 +203,51 @@ exports.finalizeDispatch = async (req, res, next) => {
     ]);
     if (!dispatch) return res.status(404).json({ error: "Not found" });
     if (dispatch.status !== "Draft") return res.json(dispatch);
-    const inventory = calc.processInventory(dispatch.inventory);
-    const summary = calc.totals(
-      inventory,
-      dispatch.summary.loadingAndRoyaltyFees,
-    );
     const businessSnapshot = await snapshot(settings, req.user.organizationId);
-
-    const updateResult = await prisma.dispatch.updateMany({
-      where: {
-        id: dispatch.id,
-        organizationId: req.user.organizationId,
-        status: "Draft",
-        updatedAt: dispatch.updatedAt,
-      },
-      data: { inventory, summary, businessSnapshot, status: "Dispatched" },
-    });
-
-    if (!updateResult.count)
-      return res
-        .status(409)
-        .json({ error: "Load changed. Refresh and try again." });
-    await rememberDispatchReferences(
-      prisma,
-      req.user.organizationId,
-      dispatch.logistics,
-    );
-    res.json(
-      await prisma.dispatch.findFirst({
+    const result = await prisma.$transaction(async (tx) => {
+      const [locked] = await tx.$queryRaw`
+        SELECT id FROM "Dispatch"
+        WHERE id = ${dispatch.id}::uuid
+          AND "organizationId" = ${req.user.organizationId}::uuid
+        FOR UPDATE
+      `;
+      if (!locked) throw requestError(404, "Not found");
+      const current = await tx.dispatch.findFirst({
         where: { id: dispatch.id, organizationId: req.user.organizationId },
-      }),
-    );
+      });
+      if (current.status !== "Draft") return { record: current, changed: false };
+      if (current.updatedAt.getTime() !== dispatch.updatedAt.getTime())
+        throw requestError(409, "Load changed. Refresh and try again.");
+
+      const inventory = calc.processInventory(current.inventory);
+      const summary = calc.totals(inventory, current.summary.loadingAndRoyaltyFees);
+      const [{ at }] = await tx.$queryRaw`SELECT clock_timestamp() AS at`;
+      const effectiveAt = at.toISOString();
+      const stampedSummary = { ...summary, issuedAt: effectiveAt, effectiveAt };
+      const updated = await tx.dispatch.updateMany({
+        where: {
+          id: current.id,
+          organizationId: req.user.organizationId,
+          status: "Draft",
+          updatedAt: current.updatedAt,
+        },
+        data: { inventory, summary: stampedSummary, businessSnapshot, status: "Dispatched" },
+      });
+      if (!updated.count) throw requestError(409, "Load changed. Refresh and try again.");
+      return {
+        changed: true,
+        record: await tx.dispatch.findFirst({
+          where: { id: current.id, organizationId: req.user.organizationId },
+        }),
+      };
+    });
+    if (result.changed)
+      await rememberDispatchReferences(
+        prisma,
+        req.user.organizationId,
+        result.record.logistics,
+      );
+    res.json(result.record);
   } catch (err) {
     next(err);
   }
@@ -228,74 +259,92 @@ exports.reviseDispatch = async (req, res, next) => {
   try {
     const id = req.params.id;
     const organizationId = req.user.organizationId;
-    const dispatch = await prisma.dispatch.findFirst({
-      where: { id, organizationId },
-    });
-    if (!dispatch) return res.status(404).json({ error: "Not found" });
-    if (!FINALIZED_STATUSES.includes(dispatch.status))
-      return res
-        .status(409)
-        .json({ error: "Only a finalized invoice can be revised." });
-
-    // Client's last-read timestamp: a stale edit must not overwrite a newer revision.
-    if (req.body.updatedAt !== undefined) {
-      const clientTime = new Date(req.body.updatedAt).getTime();
-      if (clientTime !== new Date(dispatch.updatedAt).getTime())
-        return res
-          .status(409)
-          .json({ error: "Load changed. Refresh and try again." });
-    }
-
+    if (!UUID_REGEX.test(id)) return res.status(404).json({ error: "Not found" });
+    const token = req.body?.updatedAt;
+    if (typeof token !== "string" || !Number.isFinite(Date.parse(token)) || new Date(token).toISOString() !== token)
+      return res.status(400).json({ error: "A valid updatedAt is required. Refresh and try again." });
     const { updatedAt: _clientUpdatedAt, ...body } = req.body;
-    const merged = { ...dispatch, ...body };
-    if (dispatch.partyName === null && !Object.hasOwn(body, "partyName"))
-      delete merged.partyName;
-    const metadata = details(merged);
-    const inventory = calc.processInventory(merged.inventory);
-    const fee =
-      body.loadingAndRoyaltyFees ?? dispatch.summary?.loadingAndRoyaltyFees;
-    const summary = calc.totals(inventory, fee);
+    const result = await prisma.$transaction(async (tx) => {
+      // Payment creation takes the same lock before checking the balance.
+      const [locked] = await tx.$queryRaw`
+        SELECT id FROM "Dispatch"
+        WHERE id = ${id}::uuid
+          AND "organizationId" = ${organizationId}::uuid
+        FOR UPDATE
+      `;
+      if (!locked) throw requestError(404, "Not found");
+      const dispatch = await tx.dispatch.findFirst({ where: { id, organizationId } });
+      if (!FINALIZED_STATUSES.includes(dispatch.status))
+        throw requestError(409, "Only a finalized invoice can be revised.");
+      if (dispatch.updatedAt.getTime() !== new Date(token).getTime())
+        throw requestError(409, "Load changed. Refresh and try again.");
 
-    // Snapshot of the currently committed version, taken before applying new values.
-    const revisionSnapshot = {
-      inventory: dispatch.inventory,
-      summary: dispatch.summary,
-      logistics: dispatch.logistics,
-      supervisor: dispatch.supervisor,
-      partyName: dispatch.partyName,
-      date: dispatch.date,
-      // businessSnapshot is not copied: branding never changes on revise, and the
-      // history view falls back to the record's own businessSnapshot.
-      revisedAt: new Date().toISOString(),
-      revisedByUserId: req.user.id,
-    };
-    const revisions = [
-      ...(Array.isArray(dispatch.revisions) ? dispatch.revisions : []),
-      revisionSnapshot,
-    ];
+      const merged = { ...dispatch, ...body };
+      if (dispatch.partyName === null && !Object.hasOwn(body, "partyName"))
+        delete merged.partyName;
+      const metadata = details(merged);
+      const inventory = calc.processInventory(merged.inventory);
+      const fee = body.loadingAndRoyaltyFees ?? dispatch.summary?.loadingAndRoyaltyFees;
+      const summary = calc.totals(inventory, fee);
+      const currentTotal = invoiceTotalDecimal(dispatch.summary);
+      const newTotal = invoiceTotalDecimal(summary);
+      const paymentTotal = await tx.invoicePayment.aggregate({
+        where: { dispatchId: id, organizationId },
+        _sum: { amount: true },
+      });
+      const received = paymentTotal._sum.amount || new Prisma.Decimal(0);
+      if (newTotal.lessThan(received))
+        throw requestError(409, "Invoice total cannot be below recorded payments.");
 
-    // dispatchSlipNumber and status are intentionally omitted so they stay unchanged.
-    const updateResult = await prisma.dispatch.updateMany({
-      where: {
-        id: dispatch.id,
-        organizationId,
-        status: { in: FINALIZED_STATUSES },
-        updatedAt: dispatch.updatedAt,
-      },
-      data: { ...metadata, inventory, summary, revisions },
+      const [{ at }] = await tx.$queryRaw`SELECT clock_timestamp() AS at`;
+      const revisedAt = at.toISOString();
+      const stampedSummary = {
+        ...summary,
+        ...(dispatch.summary?.issuedAt ? { issuedAt: dispatch.summary.issuedAt } : {}),
+        effectiveAt: revisedAt,
+      };
+      // Preserve the prior issued version. Branding stays on the invoice itself.
+      const revisionSnapshot = {
+        inventory: dispatch.inventory,
+        summary: dispatch.summary,
+        logistics: dispatch.logistics,
+        supervisor: dispatch.supervisor,
+        partyName: dispatch.partyName,
+        date: dispatch.date,
+        revisedAt,
+        revisedByUserId: req.user.id,
+        priorTotal: Number(currentTotal.toFixed(2)),
+        resultingTotal: Number(newTotal.toFixed(2)),
+        paymentStatusBefore: paymentStatus(currentTotal, received),
+        paymentStatusAfter: paymentStatus(newTotal, received),
+      };
+      const revisions = [
+        ...(Array.isArray(dispatch.revisions) ? dispatch.revisions : []),
+        revisionSnapshot,
+      ];
+      const updated = await tx.dispatch.updateMany({
+        where: {
+          id,
+          organizationId,
+          status: { in: FINALIZED_STATUSES },
+          updatedAt: dispatch.updatedAt,
+        },
+        data: { ...metadata, inventory, summary: stampedSummary, revisions },
+      });
+      if (!updated.count) throw requestError(409, "Load changed. Refresh and try again.");
+      return {
+        metadata,
+        record: await tx.dispatch.findFirst({ where: { id, organizationId } }),
+      };
     });
-    if (updateResult.count === 0)
-      return res
-        .status(409)
-        .json({ error: "Load changed. Refresh and try again." });
     await rememberDispatchReferences(
       prisma,
       organizationId,
-      metadata.logistics,
+      result.metadata.logistics,
     );
 
     await auditLog("dispatch.update", req, { dispatchId: id });
-    res.json(await prisma.dispatch.findUnique({ where: { id: dispatch.id } }));
+    res.json(result.record);
   } catch (err) {
     next(err);
   }
@@ -359,72 +408,42 @@ exports.deleteDispatch = async (req, res, next) => {
   try {
     const id = req.params.id;
     const organizationId = req.user.organizationId;
-    const dispatch = await prisma.dispatch.findFirst({
-      where: { id, organizationId },
-      select: {
-        id: true,
-        status: true,
-        _count: { select: { payments: true } },
-      },
-    });
-    if (!dispatch) return res.status(404).json({ error: "Not found" });
-    // Anyone who can edit drafts may delete one; finalized invoices stay Admin-only.
-    const isAdmin = req.user.role === "Admin";
-    if (dispatch.status !== "Draft" && !isAdmin)
-      return res
-        .status(403)
-        .json({ error: "Your role does not allow this action" });
-    // Only an Admin may remove a load that has payments; its payments are removed with it.
-    // Payment -> Dispatch is onDelete: Restrict, so payments are deleted first in the same transaction.
-    // Payments are only recorded on finalized bills, which non-admins already cannot delete, so the
-    // check below is not normally reachable. It stays as defense in depth.
-    if (dispatch._count.payments > 0 && !isAdmin)
-      return res
-        .status(403)
-        .json({
-          error: "Only an Admin can delete a load with recorded payments.",
-        });
-
-    // Non-admins re-check status so a draft finalized meanwhile is not deleted.
-    const { deleteResult, paymentsRemoved } = await prisma
-      .$transaction(async (tx) => {
-        const payments = isAdmin
-          ? await tx.invoicePayment.deleteMany({
-              where: { dispatchId: id, organizationId },
-            })
-          : { count: 0 };
-        const result = await tx.dispatch.deleteMany({
-          where: {
-            id,
-            organizationId,
-            ...(isAdmin ? {} : { status: "Draft" }),
-          },
-        });
-        // Roll back the payment removal if the load itself was not deleted.
-        if (result.count === 0)
-          throw Object.assign(new Error("dispatch-not-deleted"), {
-            notDeleted: true,
-          });
-        return { deleteResult: result, paymentsRemoved: payments.count };
-      })
-      .catch((err) => {
-        if (err.notDeleted)
-          return { deleteResult: { count: 0 }, paymentsRemoved: 0 };
-        throw err;
+    if (!UUID_REGEX.test(id)) return res.status(404).json({ error: "Not found" });
+    const deletedStatus = await prisma.$transaction(async (tx) => {
+      // Payment creation and revision take this same dispatch lock.
+      const [locked] = await tx.$queryRaw`
+        SELECT id FROM "Dispatch"
+        WHERE id = ${id}::uuid
+          AND "organizationId" = ${organizationId}::uuid
+        FOR UPDATE
+      `;
+      if (!locked) throw requestError(404, "Not found");
+      const dispatch = await tx.dispatch.findFirst({
+        where: { id, organizationId },
+        select: { id: true, status: true },
       });
-    if (deleteResult.count === 0)
-      return isAdmin
-        ? res.status(404).json({ error: "Not found" })
-        : res
-            .status(409)
-            .json({ error: "Load changed. Refresh and try again." });
+      const isAdmin = req.user.role === "Admin";
+      if (dispatch.status !== "Draft" && !isAdmin)
+        throw requestError(403, "Your role does not allow this action");
+      if (await tx.invoicePayment.count({ where: { dispatchId: id, organizationId } }))
+        throw requestError(409, "Invoices with recorded payments cannot be deleted.");
 
+      const removed = await tx.dispatch.deleteMany({
+        where: {
+          id,
+          organizationId,
+          ...(!isAdmin ? { status: "Draft" } : {}),
+        },
+      });
+      if (!removed.count) throw requestError(409, "Load changed. Refresh and try again.");
+      return dispatch.status;
+    });
     await auditLog("dispatch.delete", req, {
       dispatchId: id,
-      status: dispatch.status,
-      paymentsRemoved,
+      status: deletedStatus,
+      paymentsRemoved: 0,
     });
-    res.json({ ok: true, id, paymentsRemoved });
+    res.json({ ok: true, id, paymentsRemoved: 0 });
   } catch (err) {
     next(err);
   }
@@ -436,6 +455,7 @@ exports.getById = async (req, res, next) => {
       where: { id: req.params.id, organizationId: req.user.organizationId },
     });
     if (!dispatch) return res.status(404).json({ error: "Not found" });
+    validateInvoiceMoney(dispatch.summary, dispatch.inventory);
     res.json(dispatch);
   } catch (err) {
     next(err);
@@ -451,6 +471,7 @@ exports.getBySlip = async (req, res, next) => {
       },
     });
     if (!dispatch) return res.status(404).json({ error: "Not found" });
+    validateInvoiceMoney(dispatch.summary, dispatch.inventory);
     res.json(dispatch);
   } catch (err) {
     next(err);
@@ -479,7 +500,7 @@ exports.analytics = async (req, res, next) => {
           orderBy: { date: "desc" },
           take: ANALYTICS_RECORD_CAP + 1,
         });
-    const [records, paymentRows, paymentTrendRows, allTimeRows, todayStatusRows] =
+    const [records, paymentRows, paymentTrendRows, allTimeRows, todayStatusRows, completionRows, invalidMoneyRows] =
       await Promise.all([
         recordsQuery,
         prisma.$queryRaw`
@@ -488,9 +509,16 @@ exports.analytics = async (req, res, next) => {
           COALESCE(NULLIF(BTRIM(d."partyName"), ''), 'Unspecified party') AS party,
           CASE
             WHEN d.summary->>'netBillableAmount' ~ '^[0-9]+([.][0-9]+)?$'
-            THEN (d.summary->>'netBillableAmount')::numeric
+            THEN ROUND((d.summary->>'netBillableAmount')::numeric, 2)
             ELSE 0::numeric
           END AS invoice_total
+        FROM "Dispatch" d
+        WHERE d."organizationId" = ${req.user.organizationId}::uuid
+          AND d.status IN ('Dispatched', 'Delivered')
+          AND d.date < ${range.end}
+      ), payment_sources AS (
+        SELECT d.id,
+          COALESCE(NULLIF(BTRIM(d."partyName"), ''), 'Unspecified party') AS party
         FROM "Dispatch" d
         WHERE d."organizationId" = ${req.user.organizationId}::uuid
           AND d.status IN ('Dispatched', 'Delivered')
@@ -500,12 +528,6 @@ exports.analytics = async (req, res, next) => {
         FROM "InvoicePayment" ip
         WHERE ip."organizationId" = ${req.user.organizationId}::uuid
         GROUP BY ip."dispatchId"
-      ),
-      paid_invoices AS (
-        SELECT f.id, f.party, f.invoice_total
-        FROM finalized f
-        JOIN payment_totals pt ON pt."dispatchId" = f.id
-        WHERE f.invoice_total > 0 AND pt.received >= f.invoice_total
       ),
       party_balances AS (
         SELECT f.party,
@@ -519,7 +541,7 @@ exports.analytics = async (req, res, next) => {
       ),
       current_receipts AS (
         SELECT f.party, SUM(ip.amount) AS received
-        FROM finalized f
+        FROM payment_sources f
         JOIN "InvoicePayment" ip ON ip."dispatchId" = f.id
         WHERE ip."organizationId" = ${req.user.organizationId}::uuid
           AND (${allTime} OR ip."createdAt" >= ${currentPeriodStart})
@@ -528,7 +550,7 @@ exports.analytics = async (req, res, next) => {
       ),
       previous_receipts AS (
         SELECT f.party, SUM(ip.amount) AS received
-        FROM finalized f
+        FROM payment_sources f
         JOIN "InvoicePayment" ip ON ip."dispatchId" = f.id
         WHERE ip."organizationId" = ${req.user.organizationId}::uuid
           AND NOT ${allTime}
@@ -536,34 +558,13 @@ exports.analytics = async (req, res, next) => {
           AND ip."createdAt" < ${currentPeriodStart}
         GROUP BY f.party
       ),
-      payment_cumulative AS (
-        SELECT f.id, f.party, f.invoice_total, ip."createdAt",
-          ip.amount,
-          SUM(ip.amount) OVER (PARTITION BY f.id ORDER BY ip."createdAt", ip.id) AS cumulative_received
-        FROM paid_invoices f
-        JOIN "InvoicePayment" ip ON ip."dispatchId" = f.id
-        WHERE ip."organizationId" = ${req.user.organizationId}::uuid
-          AND f.invoice_total > 0
-      ),
-      recent_completions AS (
-        SELECT party, SUM(invoice_total) AS completed_invoice_total, COUNT(*)::int AS completed_invoices
-        FROM payment_cumulative
-        WHERE cumulative_received >= invoice_total
-          AND cumulative_received - amount < invoice_total
-          AND (${allTime} OR "createdAt" >= ${currentPeriodStart})
-          AND "createdAt" < ${range.end}
-        GROUP BY party
-      ),
       party_names AS (
         SELECT party FROM party_balances
         UNION SELECT party FROM current_receipts
         UNION SELECT party FROM previous_receipts
-        UNION SELECT party FROM recent_completions
       )
       SELECT n.party,
         COALESCE(cr.received, 0) AS received,
-        COALESCE(rc.completed_invoice_total, 0) AS completed_invoice_total,
-        COALESCE(rc.completed_invoices, 0) AS completed_invoices,
         COALESCE(pb.billed, 0) AS billed,
         COALESCE(pb.outstanding, 0) AS outstanding,
         COALESCE(pb.unpaid_invoices, 0) AS unpaid_invoices,
@@ -571,58 +572,28 @@ exports.analytics = async (req, res, next) => {
         COALESCE(pr.received, 0) AS previous_received
       FROM party_names n
       LEFT JOIN current_receipts cr ON cr.party = n.party
-      LEFT JOIN recent_completions rc ON rc.party = n.party
       LEFT JOIN party_balances pb ON pb.party = n.party
       LEFT JOIN previous_receipts pr ON pr.party = n.party
       ORDER BY outstanding DESC, received DESC, n.party
     `,
         prisma.$queryRaw`
-      WITH finalized AS (
-        SELECT d.id,
-          CASE
-            WHEN d.summary->>'netBillableAmount' ~ '^[0-9]+([.][0-9]+)?$'
-            THEN (d.summary->>'netBillableAmount')::numeric
-            ELSE 0::numeric
-          END AS invoice_total
-        FROM "Dispatch" d
-        WHERE d."organizationId" = ${req.user.organizationId}::uuid
-          AND d.status IN ('Dispatched', 'Delivered')
-      ),
-      payment_timeline AS (
-        SELECT f.id, f.invoice_total, ip."createdAt" AS occurred_at, ip.amount,
-          SUM(ip.amount) OVER (PARTITION BY f.id ORDER BY ip."createdAt", ip.id) AS cumulative_received
-        FROM finalized f
-        JOIN "InvoicePayment" ip ON ip."dispatchId" = f.id
+      WITH events AS (
+        SELECT
+          CASE WHEN ${allTime}
+            THEN DATE_TRUNC('month', ip."createdAt" + INTERVAL '5 hours 30 minutes')::date
+            ELSE (ip."createdAt" + INTERVAL '5 hours 30 minutes')::date
+          END AS bucket,
+          ip.amount AS received
+        FROM "InvoicePayment" ip
+        JOIN "Dispatch" d ON d.id = ip."dispatchId"
         WHERE ip."organizationId" = ${req.user.organizationId}::uuid
-      ),
-      events AS (
-        SELECT
-          CASE WHEN ${allTime}
-            THEN DATE_TRUNC('month', occurred_at + INTERVAL '5 hours 30 minutes')::date
-            ELSE (occurred_at + INTERVAL '5 hours 30 minutes')::date
-          END AS bucket,
-          amount AS received, 0::numeric AS completed_invoice_total, 0::int AS completed_invoices
-        FROM payment_timeline
-        WHERE (${allTime} OR occurred_at >= ${currentPeriodStart})
-          AND occurred_at < ${range.end}
-        UNION ALL
-        SELECT
-          CASE WHEN ${allTime}
-            THEN DATE_TRUNC('month', occurred_at + INTERVAL '5 hours 30 minutes')::date
-            ELSE (occurred_at + INTERVAL '5 hours 30 minutes')::date
-          END AS bucket,
-          0::numeric AS received, invoice_total AS completed_invoice_total, 1::int AS completed_invoices
-        FROM payment_timeline
-        WHERE invoice_total > 0
-          AND cumulative_received >= invoice_total
-          AND cumulative_received - amount < invoice_total
-          AND (${allTime} OR occurred_at >= ${currentPeriodStart})
-          AND occurred_at < ${range.end}
+          AND d."organizationId" = ${req.user.organizationId}::uuid
+          AND d.status IN ('Dispatched', 'Delivered')
+          AND (${allTime} OR ip."createdAt" >= ${currentPeriodStart})
+          AND ip."createdAt" < ${range.end}
       ),
       event_totals AS (
-        SELECT bucket, SUM(received) AS received,
-          SUM(completed_invoice_total) AS completed_invoice_total,
-          SUM(completed_invoices)::int AS completed_invoices
+        SELECT bucket, SUM(received) AS received
         FROM events
         GROUP BY bucket
       ),
@@ -642,9 +613,7 @@ exports.analytics = async (req, res, next) => {
         WHERE NOT ${allTime} OR first_bucket.value IS NOT NULL
       )
       SELECT TO_CHAR(calendar.bucket, 'YYYY-MM-DD') AS date,
-        COALESCE(event_totals.received, 0) AS received,
-        COALESCE(event_totals.completed_invoice_total, 0) AS completed_invoice_total,
-        COALESCE(event_totals.completed_invoices, 0) AS completed_invoices
+        COALESCE(event_totals.received, 0) AS received
       FROM calendar
       LEFT JOIN event_totals USING (bucket)
       ORDER BY calendar.bucket
@@ -654,7 +623,7 @@ exports.analytics = async (req, res, next) => {
       WITH source AS (
         SELECT d.date, d.status,
           BTRIM(d.logistics->>'buyerDestination') AS destination,
-          CASE WHEN d.summary->>'netBillableAmount' ~ '^[0-9]+([.][0-9]+)?$' THEN (d.summary->>'netBillableAmount')::numeric END AS billed,
+          CASE WHEN d.summary->>'netBillableAmount' ~ '^[0-9]+([.][0-9]+)?$' THEN ROUND((d.summary->>'netBillableAmount')::numeric, 2) END AS billed,
           CASE WHEN d.summary->>'totalDispatchVolumeSqFt' ~ '^[0-9]+([.][0-9]+)?$' THEN (d.summary->>'totalDispatchVolumeSqFt')::numeric END AS area,
           CASE WHEN d.summary->>'totalPieces' ~ '^[0-9]+([.][0-9]+)?$' THEN (d.summary->>'totalPieces')::numeric END AS pieces
         FROM "Dispatch" d
@@ -721,24 +690,101 @@ exports.analytics = async (req, res, next) => {
               _count: { _all: true },
             })
           : Promise.resolve([]),
+        prisma.$queryRaw`
+          SELECT d.id, d.date, d.summary, d.revisions,
+            COALESCE(NULLIF(BTRIM(d."partyName"), ''), 'Unspecified party') AS party,
+            JSONB_AGG(JSONB_BUILD_OBJECT(
+              'id', ip.id, 'amount', ip.amount::text, 'createdAt', ip."createdAt"
+            ) ORDER BY ip."createdAt", ip.id) AS payments
+          FROM "Dispatch" d
+          JOIN "InvoicePayment" ip ON ip."dispatchId" = d.id
+            AND ip."organizationId" = ${req.user.organizationId}::uuid
+          WHERE d."organizationId" = ${req.user.organizationId}::uuid
+            AND d.status IN ('Dispatched', 'Delivered')
+            AND d.date < ${range.end}
+            AND d.summary->>'netBillableAmount' ~ '^[0-9]+([.][0-9]+)?$'
+          GROUP BY d.id
+          HAVING ROUND((d.summary->>'netBillableAmount')::numeric, 2) > 0
+            AND SUM(ip.amount) >= ROUND((d.summary->>'netBillableAmount')::numeric, 2)
+        `,
+        prisma.$queryRaw`
+          SELECT d.id FROM "Dispatch" d
+          WHERE d."organizationId" = ${req.user.organizationId}::uuid
+            AND d.status IN ('Dispatched', 'Delivered')
+            AND d.date < ${range.end}
+            AND d.summary->>'calculationVersion' = '2'
+            AND CASE
+              WHEN jsonb_typeof(d.summary->'baseMaterialTotal') IS DISTINCT FROM 'number'
+                OR jsonb_typeof(d.summary->'loadingAndRoyaltyFees') IS DISTINCT FROM 'number'
+                OR jsonb_typeof(d.summary->'netBillableAmount') IS DISTINCT FROM 'number'
+                THEN true
+              WHEN d.summary->>'baseMaterialTotal' !~ '^(0|[1-9][0-9]*)([.][0-9]{1,2})?$'
+                OR d.summary->>'loadingAndRoyaltyFees' !~ '^(0|[1-9][0-9]*)([.][0-9]{1,2})?$'
+                OR d.summary->>'netBillableAmount' !~ '^(0|[1-9][0-9]*)([.][0-9]{1,2})?$'
+                THEN true
+              ELSE (d.summary->>'baseMaterialTotal')::numeric > 9999999999.99
+                OR (d.summary->>'loadingAndRoyaltyFees')::numeric > 9999999999.99
+                OR (d.summary->>'netBillableAmount')::numeric > 9999999999.99
+                OR (d.summary->>'baseMaterialTotal')::numeric +
+                   (d.summary->>'loadingAndRoyaltyFees')::numeric <>
+                   (d.summary->>'netBillableAmount')::numeric
+            END
+          LIMIT 1
+        `,
       ]);
+    if (invalidMoneyRows.length) {
+      console.error('Invoice analytics rejected invalid version-2 summary', invalidMoneyRows[0].id);
+      throw requestError(500, 'Invoice totals need review.');
+    }
     if (records.length > ANALYTICS_RECORD_CAP)
       calc.bad("Too many records to analyse");
+    const completionByParty = new Map();
+    const completionByBucket = new Map();
+    let excludedCompletionCount = 0;
+    for (const row of completionRows) {
+      const result = paidCompletion(row, row.payments);
+      if (result.excluded) {
+        excludedCompletionCount += 1;
+        continue;
+      }
+      if (!result.event || result.event >= range.end ||
+          (!allTime && result.event < currentPeriodStart)) continue;
+      const party = completionByParty.get(row.party) || { total: new Prisma.Decimal(0), count: 0 };
+      party.total = party.total.plus(invoiceTotalDecimal(row.summary));
+      party.count += 1;
+      completionByParty.set(row.party, party);
+      const day = istDay(result.event);
+      const bucket = allTime ? `${day.slice(0, 7)}-01` : day;
+      const point = completionByBucket.get(bucket) || { total: new Prisma.Decimal(0), count: 0 };
+      point.total = point.total.plus(invoiceTotalDecimal(row.summary));
+      point.count += 1;
+      completionByBucket.set(bucket, point);
+    }
     const parties = paymentRows
       .map((row) => ({
         party: row.party,
         billed: round2(Number(row.billed)),
         received: round2(Number(row.received)),
-        completedInvoiceTotal: round2(Number(row.completed_invoice_total)),
-        completedInvoices: Number(row.completed_invoices),
+        completedInvoiceTotal: 0,
+        completedInvoices: 0,
         outstanding: round2(Number(row.outstanding)),
         unpaidInvoices: Number(row.unpaid_invoices),
         partialInvoices: Number(row.partial_invoices),
       }))
       .filter(
         (party) =>
-          party.received || party.completedInvoices || party.outstanding,
+          party.received || party.outstanding || completionByParty.has(party.party),
       );
+    for (const [name, completion] of completionByParty) {
+      let party = parties.find(item => item.party === name);
+      if (!party) {
+        party = { party: name, billed: 0, received: 0, outstanding: 0,
+          unpaidInvoices: 0, partialInvoices: 0, completedInvoiceTotal: 0, completedInvoices: 0 };
+        parties.push(party);
+      }
+      party.completedInvoiceTotal = Number(completion.total.toFixed(2));
+      party.completedInvoices = completion.count;
+    }
     const paymentTotals = parties.reduce(
       (totals, party) => {
         for (const key of Object.keys(totals)) totals[key] += party[key];
@@ -831,10 +877,11 @@ exports.analytics = async (req, res, next) => {
         trend: paymentTrendRows.map((point) => ({
           date: point.date,
           received: round2(Number(point.received)),
-          completedInvoiceTotal: round2(Number(point.completed_invoice_total)),
-          completedInvoices: Number(point.completed_invoices),
+          completedInvoiceTotal: Number((completionByBucket.get(point.date)?.total || new Prisma.Decimal(0)).toFixed(2)),
+          completedInvoices: completionByBucket.get(point.date)?.count || 0,
         })),
         parties,
+        excludedCompletionCount,
       },
     });
   } catch (err) {
@@ -886,12 +933,13 @@ exports.receivables = async (req, res, next) => {
       ), invoices AS (
         SELECT d.id, d."dispatchSlipNumber", d.date,
           CASE WHEN d.summary->>'netBillableAmount' ~ '^[0-9]+([.][0-9]+)?$'
-            THEN (d.summary->>'netBillableAmount')::numeric ELSE 0::numeric END AS invoice_total,
+            THEN ROUND((d.summary->>'netBillableAmount')::numeric, 2) ELSE 0::numeric END AS invoice_total,
           COALESCE(pt.received, 0::numeric) AS received
         FROM "Dispatch" d
         LEFT JOIN payment_totals pt ON pt."dispatchId" = d.id
         WHERE d."organizationId" = ${req.user.organizationId}::uuid
           AND d.status IN ('Dispatched', 'Delivered')
+          AND d.date < ${windows(new Date(), 1).end}
           AND COALESCE(NULLIF(BTRIM(d."partyName"), ''), 'Unspecified party') = ${party.trim()}
       )
       SELECT id, "dispatchSlipNumber", date, invoice_total, received,
@@ -966,6 +1014,11 @@ exports.list = async (req, res, next) => {
       take: limit + 1,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
     });
+    for (const dispatch of dispatches) {
+      // List responses carry summaries; invalid version-2 money must not be
+      // presented as a usable balance or passed into a buyer invoice.
+      validateInvoiceMoney(dispatch.summary);
+    }
     const hasMore = dispatches.length > limit;
     if (hasMore) dispatches.pop();
     const nextCursor = hasMore ? dispatches[dispatches.length - 1].id : null;

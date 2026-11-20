@@ -11,6 +11,7 @@ const API_PREFIX = '/api';
 // This suite must never connect to the configured business database.
 test('HTTP boundaries protect logs, browser responses and organization logos', async t => {
   process.env.NODE_ENV = 'test';
+  process.env.LOGO_STORAGE = 'local';
   process.env.APP_ORIGIN = 'https://yard.example';
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'stonedesk-security-'));
   process.env.UPLOAD_DIR = directory;

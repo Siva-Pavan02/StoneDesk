@@ -44,7 +44,7 @@ test('A third-decimal raw net payable prints and is spoken at 2 decimal places t
     lorryNumber: 'AP-01', destination: 'City', supervisor: 'Mgr', loadingRoyalty: '0',
     groups: [{ id: 1, entries: [{ id: '1-1', type: 'regular', lengthFt: '1', widthFt: '1', quantity: 1, ratePerSqFt: '10.001' }] }] });
 
-  const rawNet = new D(netTotal(new D('10.001').toNumber()));
+  const rawNet = new D('10.001');
   assert.ok(rawNet.decimalPlaces() > 2, 'the raw net payable carries a third decimal');
   const expected = rawNet.toDecimalPlaces(2, D.ROUND_HALF_UP);
   assert.equal(model.totals.netPayable, expected.toFixed(2), 'printed total is 2dp');

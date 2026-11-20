@@ -1,5 +1,5 @@
 import { parseFraction } from './fractionParser.js';
-import { round2, rawArea, rawAmount } from './loadMath.js';
+import { round2, exactArea, rowAmount } from './loadMath.js';
 export { summarize } from './loadMath.js';
 export const DRAFT_KEY = 'stonedesk:pilot-draft:v1';
 export const money = value => round2(Number(value) || 0).toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 });
@@ -161,8 +161,10 @@ export async function readDraft(storage = localStorage, organizationId, clientRe
 export function previewRows(rows) {
   return rows.map(row => ({
     ...row,
-    sqFt: row.rateUnit === 'UNIT' ? 0 : round2(rawArea(row)),
-    lineTotal: row.rateUnit === 'UNIT' ? round2((row.quantity ?? 1) * Number(row.rate ?? row.ratePerSqFt ?? 0)) : round2(rawAmount(row)),
+    calculationVersion: 2,
+    billableAreaSqFt: row.rateUnit === 'UNIT' ? undefined : exactArea(row).toString(),
+    sqFt: row.rateUnit === 'UNIT' ? 0 : round2(exactArea(row)),
+    lineTotal: rowAmount(row),
   }));
 }
 // Reprice only the summary group selected in this draft; product defaults stay unchanged.
@@ -233,7 +235,9 @@ export function payload(draft) {
   }
   if (!draft.rows.length) throw new Error('Add at least one measurement row');
   const fee = Number(draft.fee);
-  if (draft.fee === '' || !Number.isFinite(fee) || fee < 0) throw new Error('Enter valid loading/royalty charges');
+  if (draft.fee === '' || !Number.isFinite(fee) || fee < 0 || !/^(?:\d+)(?:\.\d{1,2})?$/.test(String(draft.fee))) {
+    throw new Error('Loading/royalty charges must have at most two decimal places');
+  }
   const groups = new Map();
   for (const row of draft.rows) {
     const rateUnit = row.rateUnit === 'UNIT' ? 'UNIT' : 'SQ_FT';

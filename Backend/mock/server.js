@@ -12,6 +12,7 @@ const calc = require("../utils/pilotCalculations");
 const { round2 } = require("../utils/dispatchCalculations");
 // Shared with the real controller so money rounding and status cannot drift.
 const { derivePaymentSummary } = require("../utils/paymentSummary");
+const { invoiceTotalDecimal, validateInvoiceMoney } = require("../utils/invoiceMoney");
 const { organizationCode } = require("../utils/organizationCode");
 const { buildAnalytics, buildPaymentAnalytics, windows, ANALYTICS_PERIODS } = require("../utils/dispatchAnalytics");
 const { authFlags, requiresCurrentPassword, buildResetUrl } = require("../utils/authFlags");
@@ -20,8 +21,8 @@ const { canAddProduct } = require("../utils/roles");
 const { MAX_SAVED_REFERENCES, referenceKey, removeReference, rememberReference } = require("../utils/savedReferences");
 const { productFinish, validateRateUnit, normalizeStoneRates, publicSettings } = require("../utils/productRates");
 
-const PORT = process.env.MOCK_PORT || 5001;
-const DATA_FILE = path.join(__dirname, "mock-data.json");
+const PORT = Number(process.env.MOCK_PORT ?? 5001);
+const DATA_FILE = process.env.MOCK_DATA_FILE ? path.resolve(process.env.MOCK_DATA_FILE) : path.join(__dirname, "mock-data.json");
 const ORG = "unit_04";
 const now = () => new Date().toISOString();
 
@@ -122,7 +123,15 @@ function seed() {
         status: "Dispatched",
         inventory,
         summary: calc.totals(inventory, 2500),
-        businessSnapshot: null,
+        businessSnapshot: {
+          businessName: "Original Stone Works",
+          address: "Kadapa, Andhra Pradesh",
+          phone: "+91 98765 43210",
+          bankDetails: "UPI: originalstone@upi",
+          gstNumber: "",
+          tradeLicense: "",
+          logo: null,
+        },
         revisions: [],
         createdAt: now(),
         updatedAt: now(),
@@ -144,6 +153,19 @@ db.invitations ||= [];
 db.payments ||= [];
 // Older mock-data.json files predate the revisions column (default [] in Postgres).
 for (const d of db.dispatches) if (!Array.isArray(d.revisions)) d.revisions = [];
+// Repair only the bundled seed fixture from mock databases created before it
+// had branding. User-created records are left untouched.
+for (const d of db.dispatches) if (d.id === 'dispatch_001' && !d.businessSnapshot) {
+  d.businessSnapshot = {
+    businessName: db.settings.businessName,
+    address: db.settings.address,
+    phone: db.settings.phone,
+    bankDetails: db.settings.bankDetails || '',
+    gstNumber: db.settings.gstNumber || '',
+    tradeLicense: db.settings.tradeLicense || '',
+    logo: null,
+  };
+}
 // Older mock-data.json files predate the bankDetails column (default '' in Postgres).
 db.settings.bankDetails ??= "";
 // Older mock-data.json files predate the rateUnit field (default SQ_FT).
@@ -813,6 +835,7 @@ dispatches.get(
     }
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit);
+    for (const dispatch of page) validateInvoiceMoney(dispatch.summary, dispatch.inventory);
     res.json({
       data: page.map((d) =>
         Object.fromEntries(LIST_FIELDS.map((k) => [k, d[k]])),
@@ -824,6 +847,9 @@ dispatches.get(
 dispatches.get(
   "/analytics",
   wrap((req, res) => {
+    for (const dispatch of db.dispatches) {
+      if (dispatch.status !== 'Draft') validateInvoiceMoney(dispatch.summary, dispatch.inventory);
+    }
     const at = new Date();
     const period = req.query.period ?? "3";
     if (typeof period !== "string" || !ANALYTICS_PERIODS.has(period)) fail(400, "Invalid analytics period");
@@ -835,6 +861,48 @@ dispatches.get(
     res.json({
       ...buildAnalytics(records, at, period),
       paymentAnalytics: buildPaymentAnalytics(db.dispatches, db.payments, at, period)
+    });
+  }),
+);
+dispatches.get(
+  "/receivables",
+  wrap((req, res) => {
+    const party = req.query.party;
+    if (typeof party !== 'string' || !party.trim() || party.length > 120) calc.bad('Invalid party');
+    let cursorDate = null;
+    let cursorId = null;
+    if (req.query.cursor !== undefined) {
+      try {
+        if (typeof req.query.cursor !== 'string' || req.query.cursor.length > 240) throw new Error();
+        const value = JSON.parse(Buffer.from(req.query.cursor, 'base64url').toString('utf8'));
+        if (!Array.isArray(value) || value.length !== 2 || !Number.isFinite(new Date(value[0]).getTime()) || typeof value[1] !== 'string') throw new Error();
+        cursorDate = value[0];
+        cursorId = value[1];
+      } catch { calc.bad('Invalid receivables cursor'); }
+    }
+    const end = windows(new Date(), 1).end;
+    const rows = db.dispatches.filter(d =>
+      FINALIZED_STATUSES.includes(d.status) && new Date(d.date) < end &&
+      (d.partyName?.trim() || 'Unspecified party') === party.trim()
+    ).map(d => {
+      validateInvoiceMoney(d.summary, d.inventory);
+      return { dispatch: d, payment: derivePaymentSummary(d.summary, dispatchPayments(d.id)) };
+    }).filter(({ payment }) => payment.balance > 0)
+      .sort((a, b) => new Date(a.dispatch.date) - new Date(b.dispatch.date) || a.dispatch.id.localeCompare(b.dispatch.id))
+      .filter(({ dispatch }) => !cursorDate || dispatch.date > cursorDate || (dispatch.date === cursorDate && dispatch.id > cursorId));
+    const page = rows.slice(0, 20);
+    const last = page.at(-1)?.dispatch;
+    res.json({
+      data: page.map(({ dispatch, payment }) => ({
+        id: dispatch.id,
+        dispatchSlipNumber: dispatch.dispatchSlipNumber,
+        date: dispatch.date,
+        status: payment.status,
+        invoiceTotal: payment.invoiceTotal,
+        received: payment.received,
+        balance: payment.balance,
+      })),
+      nextCursor: rows.length > 20 ? Buffer.from(JSON.stringify([last.date, last.id])).toString('base64url') : null,
     });
   }),
 );
@@ -853,6 +921,7 @@ dispatches.get(
   wrap((req, res) => {
     const d = findDispatch(req.params.id);
     if (!d) fail(404, "Not found");
+    validateInvoiceMoney(d.summary, d.inventory);
     res.json(d);
   }),
 );
@@ -864,14 +933,16 @@ const dispatchPayments = (dispatchId) =>
 const formatPayment = (p) => ({
   id: p.id,
   amount: Number(new Prisma.Decimal(p.amount).toFixed(2)),
+  clientRequestId: p.clientRequestId || null,
   note: p.note ?? null,
   createdAt: p.createdAt,
   createdBy: p.createdBy ?? null,
 });
 const paymentsResponse = (dispatch) => {
+  validateInvoiceMoney(dispatch.summary, dispatch.inventory);
   const payments = dispatchPayments(dispatch.id);
   return {
-    ...derivePaymentSummary(dispatch.summary?.netBillableAmount, payments),
+    ...derivePaymentSummary(dispatch.summary, payments),
     payments: payments.map(formatPayment),
   };
 };
@@ -883,11 +954,49 @@ dispatches.get(
     res.json(paymentsResponse(d));
   }),
 );
+dispatches.get(
+  "/:id/payment-statement",
+  wrap((req, res) => {
+    const d = findDispatch(req.params.id);
+    if (!d) fail(404, "Not found");
+    if (d.status === "Draft") fail(409, "Payment statements require a finalized invoice");
+    validateInvoiceMoney(d.summary, d.inventory);
+    const payments = [...dispatchPayments(d.id)].reverse();
+    const total = invoiceTotalDecimal(d.summary);
+    const received = payments.reduce((sum, p) => sum.plus(p.amount), new Prisma.Decimal(0));
+    const balance = Prisma.Decimal.max(total.minus(received), 0);
+    const excess = Prisma.Decimal.max(received.minus(total), 0);
+    res.json({
+      asOf: now(), timeZone: "Asia/Kolkata",
+      invoice: {
+        id: d.id, number: d.dispatchSlipNumber, date: d.date, partyName: d.partyName,
+        revisionNumber: (Array.isArray(d.revisions) ? d.revisions.length : 0) + 1,
+        calculationVersion: d.summary?.calculationVersion || 1,
+        total: total.toFixed(2),
+      },
+      payments: payments.map(p => ({
+        id: p.id, amount: new Prisma.Decimal(p.amount).toFixed(2),
+        note: p.note ?? null, createdAt: p.createdAt, createdBy: p.createdBy ?? null,
+      })),
+      received: received.toFixed(2), balance: balance.toFixed(2),
+      excess: excess.toFixed(2),
+      status: total.isZero() || received.greaterThanOrEqualTo(total)
+        ? "PAID" : received.isZero() ? "PAYMENT_DUE" : "PARTIALLY_PAID",
+    });
+  }),
+);
 dispatches.post(
   "/:id/payments",
   allow("Admin", "Dispatcher"),
   wrap((req, res) => {
     const d = findDispatch(req.params.id);
+    if (!d) fail(404, "Not found");
+    validateInvoiceMoney(d.summary, d.inventory);
+    const requestId = req.body.clientRequestId;
+    if (typeof requestId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId)) {
+      fail(400, 'Refresh the page and try this payment again');
+    }
+    const clientRequestId = requestId.toLowerCase();
     // Amount and note are validated before the lookup, mirroring the real
     // controller, which only reads the dispatch inside its transaction.
     const rawAmount = req.body.amount;
@@ -898,7 +1007,8 @@ dispatches.post(
     )
       fail(400, "Invalid payment amount");
     if (rawAmount > 10000000) fail(400, "Payment amount exceeds limit");
-    const payDecimal = new Prisma.Decimal(round2(rawAmount).toFixed(2));
+    const payDecimal = new Prisma.Decimal(String(rawAmount));
+    if (!payDecimal.times(100).isInteger()) fail(400, 'Payment amount must have at most two decimal places');
     if (payDecimal.lessThanOrEqualTo(0)) fail(400, "Invalid payment amount");
     let note = null;
     if (req.body.note !== undefined && req.body.note !== null) {
@@ -908,11 +1018,17 @@ dispatches.post(
         fail(400, "Note must be at most 255 characters");
       note = trimmed || null;
     }
-    if (!d) fail(404, "Not found");
     if (d.status === "Draft")
       fail(400, "Payments can only be recorded on finalized dispatches");
+    const replay = db.payments.find(p => p.organizationId === ORG && p.clientRequestId === clientRequestId);
+    if (replay) {
+      if (replay.dispatchId !== d.id || !new Prisma.Decimal(replay.amount).equals(payDecimal) || (replay.note ?? null) !== note) {
+        fail(409, 'Payment request ID was already used for a different payment');
+      }
+      return res.status(200).json(paymentsResponse(d));
+    }
     const current = derivePaymentSummary(
-      d.summary?.netBillableAmount,
+      d.summary,
       dispatchPayments(d.id),
     );
     if (payDecimal.greaterThan(current.balance))
@@ -923,6 +1039,7 @@ dispatches.post(
     db.payments.unshift({
       id: "payment_" + randomUUID().slice(0, 8),
       organizationId: ORG,
+      clientRequestId,
       dispatchId: d.id,
       amount: Number(payDecimal.toFixed(2)),
       note,
@@ -944,11 +1061,11 @@ dispatches.put(
     if (!FINALIZED_STATUSES.includes(d.status))
       fail(409, "Only a finalized invoice can be revised.");
     // Client's last-read timestamp: a stale edit must not overwrite a newer revision.
-    if (req.body.updatedAt !== undefined) {
-      const clientTime = new Date(req.body.updatedAt).getTime();
-      if (clientTime !== new Date(d.updatedAt).getTime())
-        fail(409, "Load changed. Refresh and try again.");
-    }
+    if (typeof req.body.updatedAt !== "string" || !Number.isFinite(Date.parse(req.body.updatedAt)) ||
+        new Date(req.body.updatedAt).toISOString() !== req.body.updatedAt)
+      fail(400, "A valid updatedAt is required. Refresh and try again.");
+    if (new Date(req.body.updatedAt).getTime() !== new Date(d.updatedAt).getTime())
+      fail(409, "Load changed. Refresh and try again.");
     const { updatedAt: _clientUpdatedAt, ...body } = req.body;
     const merged = { ...d, ...body };
     if (d.partyName == null && !Object.hasOwn(body, "partyName"))
@@ -957,6 +1074,13 @@ dispatches.put(
     const inventory = calc.processInventory(merged.inventory);
     const fee = body.loadingAndRoyaltyFees ?? d.summary?.loadingAndRoyaltyFees;
     const summary = calc.totals(inventory, fee);
+    const currentTotal = invoiceTotalDecimal(d.summary);
+    const newTotal = invoiceTotalDecimal(summary);
+    const received = dispatchPayments(d.id).reduce((sum, p) => sum.plus(p.amount), new Prisma.Decimal(0));
+    if (newTotal.lessThan(received)) fail(409, "Invoice total cannot be below recorded payments.");
+    const revisedAt = now();
+    summary.issuedAt = d.summary?.issuedAt || d.updatedAt;
+    summary.effectiveAt = revisedAt;
     // Snapshot of the currently committed version, taken before applying new values.
     const revisionSnapshot = {
       inventory: d.inventory,
@@ -966,8 +1090,12 @@ dispatches.put(
       partyName: d.partyName,
       date: d.date,
       // Like the real controller, revisions do not copy businessSnapshot.
-      revisedAt: new Date().toISOString(),
+      revisedAt,
       revisedByUserId: currentUser().id,
+      priorTotal: Number(currentTotal.toFixed(2)),
+      resultingTotal: Number(newTotal.toFixed(2)),
+      paymentStatusBefore: derivePaymentSummary(d.summary, dispatchPayments(d.id)).status,
+      paymentStatusAfter: derivePaymentSummary(summary, dispatchPayments(d.id)).status,
     };
     const revisions = [
       ...(Array.isArray(d.revisions) ? d.revisions : []),
@@ -990,14 +1118,11 @@ dispatches.delete(
     // Any role may delete a Draft; only Admin may delete a finalized invoice.
     if (db.dispatches[index].status !== "Draft" && currentUser().role !== "Admin")
       fail(403, "Your role does not allow this action");
-    const paymentsRemoved = db.payments.filter((p) => p.dispatchId === id).length;
-    if (paymentsRemoved && currentUser().role !== "Admin")
-      fail(403, "Only an Admin can delete a load with recorded payments.");
-    // Admin delete removes the load's payments with it.
-    db.payments = db.payments.filter((p) => p.dispatchId !== id);
+    if (db.payments.some((p) => p.dispatchId === id))
+      fail(409, "Invoices with recorded payments cannot be deleted.");
     db.dispatches.splice(index, 1);
     save();
-    res.json({ ok: true, id, paymentsRemoved });
+    res.json({ ok: true, id, paymentsRemoved: 0 });
   }),
 );
 dispatches.put(
@@ -1033,6 +1158,8 @@ dispatches.post(
     const s = db.settings;
     d.inventory = calc.processInventory(d.inventory);
     d.summary = calc.totals(d.inventory, d.summary.loadingAndRoyaltyFees);
+    d.summary.issuedAt = now();
+    d.summary.effectiveAt = d.summary.issuedAt;
     d.businessSnapshot = {
       businessName: s.businessName,
       address: s.address,
@@ -1211,7 +1338,7 @@ app.use((err, req, res, next) =>
   res.status(err.status || 500).json({ error: err.message }),
 );
 
-app.listen(PORT, (error) => {
+const listener = app.listen(PORT, (error) => {
   if (error) {
     console.error(
       `Failed to start mock server on port ${PORT}: ${error.message}`,
@@ -1219,6 +1346,6 @@ app.listen(PORT, (error) => {
     process.exit(1);
   }
   console.log(
-    `Mock StoneDesk API running on http://localhost:${PORT} (data: ${DATA_FILE})`,
+    `Mock StoneDesk API running on http://localhost:${listener.address().port} (data: ${DATA_FILE})`,
   );
 });

@@ -1,15 +1,18 @@
 const { Prisma } = require('@prisma/client');
-const { round2 } = require('./dispatchCalculations');
+const { invoiceTotalDecimal } = require('./invoiceMoney');
 
 function derivePaymentSummary(rawInvoiceTotal, rawPayments = []) {
-  const invoiceTotal = new Prisma.Decimal(round2(Math.max(0, Number(rawInvoiceTotal) || 0)).toFixed(2));
+  const invoiceTotal = invoiceTotalDecimal(rawInvoiceTotal);
   const received = rawPayments.reduce(
-    (acc, p) => acc.add(p?.amount !== undefined ? new Prisma.Decimal(p.amount) : 0),
+    (acc, p) => acc.add(p?.amount !== undefined ? new Prisma.Decimal(String(p.amount)) : 0),
     new Prisma.Decimal(0)
   );
 
   const balance = invoiceTotal.greaterThan(received)
     ? invoiceTotal.sub(received)
+    : new Prisma.Decimal(0);
+  const excess = received.greaterThan(invoiceTotal)
+    ? received.sub(invoiceTotal)
     : new Prisma.Decimal(0);
 
   let status = 'PAYMENT_DUE';
@@ -25,6 +28,7 @@ function derivePaymentSummary(rawInvoiceTotal, rawPayments = []) {
     invoiceTotal: Number(invoiceTotal.toFixed(2)),
     received: Number(received.toFixed(2)),
     balance: Number(balance.toFixed(2)),
+    excess: Number(excess.toFixed(2)),
     status
   };
 }

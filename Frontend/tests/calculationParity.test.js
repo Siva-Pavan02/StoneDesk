@@ -27,12 +27,12 @@ test('frontend and backend round2 agree on edge values', () => {
 
 test('F3: live preview summary equals the saved server summary', () => {
   const rows = [draftRow('Granite', 40.5, 3, 2, 12, 'TOP'), draftRow('Black', 60, parseFraction('4½').numeric, parseFraction('2 1/4').numeric, 4)];
-  const expected = { totalPieces: 16, totalDispatchVolumeSqFt: 112.5, baseMaterialTotal: 5346, loadingAndRoyaltyFees: 2500, netBillableAmount: 7846 };
+  const expected = { totalPieces: 16, totalDispatchVolumeSqFt: 112.5, baseMaterialTotal: 5346, loadingAndRoyaltyFees: 2500, netBillableAmount: 7846, calculationVersion: 2 };
   assert.deepEqual(summarize(rows, 2500), expected);
   assert.deepEqual(serverRecord(rows, 2500).summary, expected);
 });
 
-test('F4: preview, server and bill round once at the end', () => {
+test('F4: preview, server and bill sum rounded row amounts', () => {
   const rows = [1, 2, 3].map(() => draftRow('Granite', 10, 1.333, 1, 1));
   const preview = previewRows(rows);
   assert.deepEqual(preview.map(r => r.sqFt), [1.33, 1.33, 1.33]);
@@ -74,8 +74,8 @@ test('property: preview, server and bill totals agree for random loads', () => {
     assert.equal(overview.totalSqFt, record.summary.totalDispatchVolumeSqFt);
     assert.equal(overview.totalAmount, record.summary.baseMaterialTotal);
     assert.equal(overview.pieces, record.summary.totalPieces);
-    const rawAmount = record.inventory.reduce((sum, g) => sum + g.measurementRows.reduce((n, r) => n + r.lengthFt * r.widthFt * r.quantity * g.ratePerSqFt, 0), 0);
-    assert.equal(record.summary.netBillableAmount, netTotal(rawAmount + fee));
+    const lineAmount = record.inventory.reduce((sum, g) => sum + g.measurementRows.reduce((n, r) => n + r.lineTotal, 0), 0);
+    assert.equal(record.summary.netBillableAmount, netTotal(lineAmount + fee));
   }
 });
 

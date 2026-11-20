@@ -5,6 +5,15 @@ import { Button, Card } from "./Controls.jsx";
 import Icon from "./Icon.jsx";
 import DashboardAnalytics from "./DashboardAnalytics.jsx";
 
+const istDateFormatter = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit'
+});
+const istDay = value => {
+  const parts = Object.fromEntries(istDateFormatter.formatToParts(new Date(value)).map(part => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+};
+const currentIstDay = istDay(Date.now());
+
 // Hash links: let Cmd/Ctrl/Shift/middle-click open a new tab, handle plain clicks in-app.
 const isPlainClick = (e) =>
   e.button === 0 && !(e.metaKey || e.ctrlKey || e.shiftKey || e.altKey);
@@ -118,13 +127,13 @@ export default function LoadHub({
     } catch (err) {
       const message = isDraft
         ? err?.status === 409
-          ? "This draft was finalized or changed. Refresh and try again."
+          ? err?.message || "This draft was finalized or changed. Refresh and try again."
           : err?.status === 403
             ? "You are not permitted to delete this draft."
             : err?.message ||
               "Could not delete the draft."
         : err?.status === 409
-          ? "This load changed. Refresh and try again."
+          ? err?.message || "This load changed. Refresh and try again."
           : err?.status === 403
             ? "Only an Admin can delete this load."
             : err?.message ||
@@ -184,7 +193,7 @@ export default function LoadHub({
             <span className="load-delete-question" role="status">
               {isDraft
                 ? "Delete this draft?"
-                : "Delete this invoice and its payments?"}
+                : "Delete this invoice? Invoices with recorded payments cannot be deleted."}
             </span>
             <button
               type="button"
@@ -265,7 +274,9 @@ export default function LoadHub({
   const heading = titles[view] || titles.home;
   const visible = view === "home" ? filtered.slice(0, 5) : filtered;
   const stateLabel = (item) =>
-    item.status === "Draft"
+    item.status !== "Draft" && Number.isFinite(new Date(item.date).getTime()) && istDay(item.date) > currentIstDay
+      ? "Future-dated"
+      : item.status === "Draft"
         ? "Draft"
         : item.status === "Delivered"
           ? "Delivered"

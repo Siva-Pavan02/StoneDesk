@@ -49,6 +49,10 @@ export function getInvoicePayments(dispatchId) {
   return request(`/dispatches/${encodeURIComponent(dispatchId)}/payments`);
 }
 
+export function getPaymentStatement(dispatchId) {
+  return request(`/dispatches/${encodeURIComponent(dispatchId)}/payment-statement`);
+}
+
 export function createInvoicePayment(dispatchId, payload) {
   return request(`/dispatches/${encodeURIComponent(dispatchId)}/payments`, {
     method: 'POST',

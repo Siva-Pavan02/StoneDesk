@@ -1,9 +1,18 @@
-import { round2, rawArea, rawAmount } from './loadMath.js';
+import Decimal from 'decimal.js';
+import { round2, rawAmount } from './loadMath.js';
+
+const amountOf = line => line.calculationVersion === 2 && line.lineTotal != null
+  ? new Decimal(line.lineTotal) : new Decimal(rawAmount(line));
+const amountTotal = lines => lines.reduce((sum, line) => sum.plus(amountOf(line)), new Decimal(0)).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
+const areaOf = line => (line.rateUnit === 'UNIT' ? new Decimal(0) :
+  line.billableAreaSqFt != null ? new Decimal(line.billableAreaSqFt) :
+    new Decimal(line.lengthFt).times(line.widthFt).times(line.quantity));
+const areaTotal = lines => lines.reduce((sum, line) => sum.plus(areaOf(line)), new Decimal(0)).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
 
 // Totals sum unrounded areas/amounts (from dimensions) and round once, matching the server summary.
 // Regular is derived as total - top so Regular + Top always equals the total shown.
 function totalOf(lines) {
-  return { quantity: lines.reduce((n, l) => n + l.quantity, 0), sqFt: round2(lines.reduce((n, l) => n + rawArea(l), 0)), amount: round2(lines.reduce((n, l) => n + rawAmount(l), 0)) };
+  return { quantity: lines.reduce((n, l) => n + l.quantity, 0), sqFt: areaTotal(lines), amount: amountTotal(lines) };
 }
 function split(lines) {
   const total = totalOf(lines), top = totalOf(lines.filter(l => l.category === 'TOP'));
@@ -14,8 +23,10 @@ export function billRows(dispatch, financial = true) {
     const rows = group.measurementRows?.length ? group.measurementRows : (group.pieces || []).map(p => ({ ...p, quantity: 1, category: 'Regular' }));
     // Records saved before row numbers existed used the old group position as the row.
     return rows.map(row => ({ rowNo: row.rowNo ?? groupIndex + 1, stoneType: group.stoneType, finish: group.finish, lengthFt: row.lengthFt, widthFt: row.widthFt,
-      quantity: row.quantity, category: row.category || 'Regular', sqFt: row.sqFt, rateUnit: row.rateUnit || group.rateUnit || 'SQ_FT',
-      ...(financial ? { ratePerSqFt: group.ratePerSqFt, lineTotal: row.lineTotal } : {}) }));
+      quantity: row.quantity, category: row.category || 'Regular', sqFt: row.sqFt,
+      billableAreaSqFt: row.billableAreaSqFt, rateUnit: row.rateUnit || group.rateUnit || 'SQ_FT',
+      ...(financial ? { ratePerSqFt: group.ratePerSqFt, lineTotal: row.lineTotal,
+        calculationVersion: dispatch.summary?.calculationVersion || 1 } : {}) }));
   });
 }
 // Groups bill lines by their entered row number. Row numbers are kept as entered (never renumbered);
@@ -41,7 +52,7 @@ export function subtotals(rows) {
     const key = JSON.stringify([r.stoneType, r.finish, r.category, r.ratePerSqFt, r.rateUnit || 'SQ_FT']);
     if (!groups.has(key)) groups.set(key, { ...r, quantity: 0, sqFt: 0, lineTotal: 0 });
     const g = groups.get(key);
-    g.quantity += r.quantity; g.sqFt += rawArea(r); g.lineTotal += rawAmount(r);
+    g.quantity += r.quantity; g.sqFt = new Decimal(g.sqFt).plus(areaOf(r)).toNumber(); g.lineTotal = new Decimal(g.lineTotal).plus(amountOf(r)).toNumber();
   }
   return [...groups.values()].map(g => ({ ...g, sqFt: round2(g.sqFt), lineTotal: round2(g.lineTotal) }));
 }

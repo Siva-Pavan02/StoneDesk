@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import Decimal from 'decimal.js';
 import { Button, ErrorMessage, FieldError } from './Controls.jsx';
 import { money } from '../../utils/pilotDraft.js';
 import { createInvoicePayment } from '../../lib/pilotApi.js';
@@ -12,6 +13,7 @@ export default function AddPaymentDialog({ open, dispatchId, invoiceTotal, recei
   // Validation of the amount shows under the amount input; `error` is for the server.
   const [amountError, setAmountError] = useState('');
   const amountInput = useRef(null);
+  const requestAttempt = useRef(null);
   const unsaved = open && !busy && (amount !== '' || note.trim() !== '');
   useEffect(() => {
     if (!unsaved) return;
@@ -24,6 +26,7 @@ export default function AddPaymentDialog({ open, dispatchId, invoiceTotal, recei
     const el = dialog.current;
     if (!el) return;
     if (open && !el.open) {
+      requestAttempt.current = { id: crypto.randomUUID(), intent: null };
       setAmount('');
       setNote('');
       setError('');
@@ -38,8 +41,8 @@ export default function AddPaymentDialog({ open, dispatchId, invoiceTotal, recei
     e.preventDefault();
     if (busy) return;
     const num = Number(amount);
-    const invalid = !Number.isFinite(num) || num <= 0
-      ? 'Enter a valid amount greater than zero'
+    const invalid = !Number.isFinite(num) || num <= 0 || !new Decimal(amount).times(100).isInteger()
+      ? 'Enter a valid amount in rupees and paise'
       : num > balance
         ? `Amount cannot exceed balance due (${money(balance)})`
         : '';
@@ -52,9 +55,17 @@ export default function AddPaymentDialog({ open, dispatchId, invoiceTotal, recei
     setBusy(true);
     setError('');
     try {
+      const normalizedNote = note.trim();
+      const intent = JSON.stringify([num, normalizedNote]);
+      if (!requestAttempt.current || (requestAttempt.current.intent && requestAttempt.current.intent !== intent)) {
+        requestAttempt.current = { id: crypto.randomUUID(), intent };
+      } else {
+        requestAttempt.current.intent = intent;
+      }
       const updated = await createInvoicePayment(dispatchId, {
         amount: num,
-        note: note.trim() || undefined
+        note: normalizedNote || undefined,
+        clientRequestId: requestAttempt.current.id,
       });
       onSaved(updated);
     } catch (err) {

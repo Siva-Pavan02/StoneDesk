@@ -10,6 +10,7 @@ router.get('/analytics', controller.analytics);
 router.get('/receivables', controller.receivables);
 router.get('/:id', controller.getById);
 router.get('/:id/payments', paymentController.getPayments);
+router.get('/:id/payment-statement', paymentController.getPaymentStatement);
 router.post('/:id/payments', allowRoles('Admin', 'Dispatcher'), paymentController.createPayment);
 router.get('/slip/:dispatchSlipNumber', controller.getBySlip);
 router.put('/:id/revise', allowRoles('Admin'), controller.reviseDispatch);

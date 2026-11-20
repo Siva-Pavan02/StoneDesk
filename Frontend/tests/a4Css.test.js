@@ -12,9 +12,9 @@ test('Monochrome invoice palette preserves A4 print geometry', () => {
     '--tint: #f9f9f9', '--total-bg: #f3f3f3', '--subtotal-bg: #f3f3f3', '--subtotal-border: #d1d1d1', '--subtotal-marker: #6b6b6b', '--column-rule: #e5e5e5'])
     assert.ok(css.includes(value), value);
   for (const old of ['#242424', '#666666', '#353535', '#dddddd', '#eef3fa', '#8297b0', 'Segoe UI', '#203d36', '#526661', '#17645d']) assert.ok(!css.replace(/\.a4-preview-feedback[^}]*\}/g, '').includes(old), old);
-  assert.match(css, /@page \{ size: A4 portrait; margin: 12mm; \}/);
+  assert.match(css, /@page\s*\{\s*size: A4 portrait;\s*margin: 12mm;\s*\}/);
   assert.match(css, /@media print \{[\s\S]*min-block-size: 272\.5mm/);
-  assert.match(css, /\.page-height-ruler \{[^}]*inline-size: 186mm; block-size: 272\.5mm/);
+  assert.match(css, /\.page-height-ruler\s*\{[^}]*inline-size: 186mm;\s*block-size: 272\.5mm/);
 });
 
 test('three @font-face rules point at bundled Noto Sans files with the OFL licence', () => {
@@ -61,5 +61,5 @@ test('printed invoice uses only grayscale colors; warning red stays outside the 
   for (const [, r, g, b] of invoiceCss.matchAll(/rgb\((\d+) (\d+) (\d+)/g)) {
     assert.equal(r, g); assert.equal(g, b);
   }
-  assert.match(css, /thead th \{ background: var\(--total-bg\); color: var\(--ink\)/);
+  assert.match(css, /\.a4-invoice thead th\s*\{\s*background: var\(--total-bg\);\s*color: var\(--ink\)/);
 });

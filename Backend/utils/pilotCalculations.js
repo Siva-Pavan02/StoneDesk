@@ -1,29 +1,21 @@
 const { validateRateUnit } = require('./productRates');
-const { calculatePiece, round2, netTotal } = require('./dispatchCalculations');
+const { calculatePiece, round2 } = require('./dispatchCalculations');
+const { toDecimal, requirePaise, moneyNumber, validateInvoiceMoney } = require('./invoiceMoney');
 
 function bad(message) {
   const error = new Error(message);
   error.status = 400;
   throw error;
 }
-function round(value) {
-  if (!Number.isFinite(value) || Math.abs(value) > Number.MAX_SAFE_INTEGER / 100) bad('Calculation exceeds supported range');
-  return round2(value);
+function areaNumber(value) {
+  const decimal = toDecimal(value, 'area');
+  if (decimal.abs().greaterThan(Number.MAX_SAFE_INTEGER / 100)) bad('Calculation exceeds supported range');
+  return round2(decimal.toNumber());
 }
-// Areas and material subtotals retain two-decimal rounding; net payable alone
-// uses the .75 business rule on raw charges plus the stored fee.
-// Row values are rounded for display only and are never added up.
-const rawArea = row => (row.rateUnit === 'UNIT' ? 0 : row.lengthFt * row.widthFt * (row.quantity ?? 1));
-function rawTotals(group) {
+const decimalArea = row => toDecimal(row.lengthFt, 'length').times(toDecimal(row.widthFt, 'width')).times(row.quantity ?? 1);
+function sumRows(group, key) {
   const rows = group.measurementRows.length ? group.measurementRows : group.pieces;
-  return rows.reduce((sum, row) => {
-    if (row.rateUnit === 'UNIT' || group.rateUnit === 'UNIT') {
-      const quantity = row.quantity ?? 1;
-      return { sqFt: sum.sqFt, amount: sum.amount + quantity * group.ratePerSqFt };
-    }
-    const area = rawArea(row);
-    return { sqFt: sum.sqFt + area, amount: sum.amount + area * group.ratePerSqFt };
-  }, { sqFt: 0, amount: 0 });
+  return rows.reduce((sum, row) => sum.plus(key === 'area' ? row.rateUnit === 'UNIT' || group.rateUnit === 'UNIT' ? 0 : row.billableAreaSqFt : row.lineTotal), toDecimal(0));
 }
 function number(value, label, positive = false) {
   if (typeof value !== 'number' || !Number.isFinite(value) || (positive ? value <= 0 : value < 0)) bad(`Invalid ${label}`);
@@ -59,13 +51,13 @@ function processInventory(raw) {
         const rowNo = row.rowNo ?? groupIndex + 1;
         if (!Number.isSafeInteger(rowNo) || rowNo < 1 || rowNo > 20) bad('Row number must be a whole number from 1 to 20');
         if (isUnit) {
-          const lineTotal = round(row.quantity * ratePerSqFt);
+          const lineTotal = moneyNumber(toDecimal(row.quantity).times(ratePerSqFt), 'row amount');
           return { rowNo, quantity: row.quantity, category, rateUnit: 'UNIT', sqFt: 0, lineTotal };
         }
-        const area = lengthFt * widthFt * row.quantity;
+        const area = toDecimal(lengthFt).times(widthFt).times(row.quantity);
         return { rowNo, lengthFt, widthFt, quantity: row.quantity, category,
           lengthDisplay: String(lengthFt), widthDisplay: String(widthFt),
-          sqFt: round(area), lineTotal: round(area * ratePerSqFt) };
+          billableAreaSqFt: area.toString(), sqFt: areaNumber(area), lineTotal: moneyNumber(area.times(ratePerSqFt), 'row amount') };
       });
     } else {
       if (groupRateUnit === 'UNIT') bad('Unit products require quantity rows');
@@ -74,23 +66,31 @@ function processInventory(raw) {
         if (!p || typeof p !== 'object') bad('Invalid piece');
         const lengthFt = number(p.lengthFt, 'length', true);
         const widthFt = number(p.widthFt, 'width', true);
-        return { ...calculatePiece(lengthFt, widthFt), lengthDisplay: String(lengthFt), widthDisplay: String(widthFt) };
+        const area = toDecimal(lengthFt).times(widthFt);
+        return { ...calculatePiece(lengthFt, widthFt), lengthDisplay: String(lengthFt), widthDisplay: String(widthFt),
+          billableAreaSqFt: area.toString(), lineTotal: moneyNumber(area.times(ratePerSqFt), 'piece amount') };
       });
     }
-    const raw = rawTotals({ ratePerSqFt, pieces, measurementRows, rateUnit: groupRateUnit });
-    const result = { stoneType, finish, ratePerSqFt, pieces, measurementRows, totalSqFt: round(raw.sqFt), lineTotal: round(raw.amount) };
+    const normalized = { ratePerSqFt, pieces, measurementRows, rateUnit: groupRateUnit };
+    const result = { stoneType, finish, ratePerSqFt, pieces, measurementRows,
+      totalSqFt: areaNumber(sumRows(normalized, 'area')),
+      lineTotal: moneyNumber(sumRows(normalized, 'lineTotal'), 'group amount') };
     if (groupRateUnit === 'UNIT') result.rateUnit = 'UNIT';
     return result;
   });
 }
 function totals(inventory, fee) {
   number(fee, 'loading/royalty charges');
+  const feeDecimal = requirePaise(fee, 'loading/royalty charges');
   const totalPieces = inventory.reduce((sum, g) => sum + (g.measurementRows.length ? g.measurementRows.reduce((n, r) => n + r.quantity, 0) : g.pieces.length), 0);
-  const raw = inventory.map(rawTotals);
-  const totalDispatchVolumeSqFt = round(raw.reduce((sum, g) => sum + g.sqFt, 0));
-  const baseMaterialTotal = round(raw.reduce((sum, g) => sum + g.amount, 0));
-  const rawNet = raw.reduce((sum, g) => sum + g.amount, 0) + round(fee);
-  round(rawNet); // Retain the existing finite/range validation, not its rounded result.
-  return { totalPieces, totalDispatchVolumeSqFt, baseMaterialTotal, loadingAndRoyaltyFees: round(fee), netBillableAmount: netTotal(rawNet) };
+  const totalDispatchVolumeSqFt = areaNumber(inventory.reduce((sum, group) => sum.plus(sumRows(group, 'area')), toDecimal(0)));
+  const base = inventory.reduce((sum, group) => sum.plus(group.lineTotal), toDecimal(0));
+  const summary = { totalPieces, totalDispatchVolumeSqFt,
+    baseMaterialTotal: moneyNumber(base, 'material total'),
+    loadingAndRoyaltyFees: moneyNumber(feeDecimal, 'loading/royalty charges'),
+    netBillableAmount: moneyNumber(base.plus(feeDecimal), 'invoice total'),
+    calculationVersion: 2 };
+  validateInvoiceMoney(summary, inventory);
+  return summary;
 }
 module.exports = { bad, number, text, processInventory, totals };

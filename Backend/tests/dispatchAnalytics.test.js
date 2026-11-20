@@ -150,8 +150,8 @@ test('payment analytics groups recent collections and full payments by party wit
   const result = buildPaymentAnalytics(records, payments, now);
   assert.deepEqual(result.current, {
     received: 450,
-    completedInvoiceTotal: 250,
-    completedInvoices: 1,
+    completedInvoiceTotal: 1150,
+    completedInvoices: 2,
     outstanding: 2100,
     unpaidInvoices: 2,
     partialInvoices: 1
@@ -163,7 +163,10 @@ test('payment analytics groups recent collections and full payments by party wit
     date: point.date,
     completedInvoiceTotal: point.completedInvoiceTotal,
     completedInvoices: point.completedInvoices
-  })), [{ date: '2026-10-01', completedInvoiceTotal: 250, completedInvoices: 1 }]);
+  })), [
+    { date: '2026-10-03', completedInvoiceTotal: 250, completedInvoices: 1 },
+    { date: '2026-10-04', completedInvoiceTotal: 900, completedInvoices: 1 }
+  ]);
   assert.deepEqual(result.parties.find(party => party.party === 'Granite Co'), {
     party: 'Granite Co',
     billed: 2750,
@@ -174,7 +177,7 @@ test('payment analytics groups recent collections and full payments by party wit
     unpaidInvoices: 2,
     partialInvoices: 1
   });
-  assert.equal(result.parties.some(party => party.party === 'Marble Co'), false);
+  assert.equal(result.parties.some(party => party.party === 'Marble Co'), true);
   assert.equal(result.parties.some(party => party.party === 'Draft Co'), false);
 });
 
@@ -188,9 +191,9 @@ test('payment analytics counts completion on the Kolkata calendar date', () => {
   assert.equal(result.previous.received, 50);
   assert.equal(result.current.received, 50);
   assert.equal(result.current.completedInvoiceTotal, 100);
-  assert.deepEqual(result.trend.find(point => point.date === '2026-09-10'), {
-    date: '2026-09-10',
-    received: 50,
+  assert.deepEqual(result.trend.find(point => point.date === '2026-10-01'), {
+    date: '2026-10-01',
+    received: 0,
     completedInvoiceTotal: 100,
     completedInvoices: 1
   });

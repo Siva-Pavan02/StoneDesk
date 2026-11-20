@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Button, ErrorMessage } from './Controls.jsx';
 import { money } from '../../utils/pilotDraft.js';
-import { getInvoicePayments } from '../../lib/pilotApi.js';
+import { getInvoicePayments, getPaymentStatement } from '../../lib/pilotApi.js';
 import AddPaymentDialog from './AddPaymentDialog.jsx';
 
 const formatDate = (iso) =>
@@ -13,6 +13,9 @@ export default function PaymentSection({ dispatchId, canRecordPayment = true, on
   const [error, setError] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [exportError, setExportError] = useState('');
+  const exportLock = useRef(false);
   // The dialog unmounts on close; return focus to its trigger, or the heading if the trigger is gone.
   const addButton = useRef(null);
   const heading = useRef(null);
@@ -51,6 +54,34 @@ export default function PaymentSection({ dispatchId, canRecordPayment = true, on
     setData(updatedSummary);
     onPaymentsChanged?.();
     closeDialog();
+  }
+
+  async function downloadStatement() {
+    if (exportLock.current) return;
+    exportLock.current = true;
+    setExportBusy(true);
+    setExportError('');
+    try {
+      const snapshot = await getPaymentStatement(dispatchId);
+      const { paymentStatementPdf } = await import('../../utils/paymentStatementPdf.js');
+      const output = await paymentStatementPdf(snapshot);
+      const url = URL.createObjectURL(output.blob);
+      try {
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = output.filename;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+      } finally {
+        setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      }
+    } catch (err) {
+      setExportError(`Payment statement couldn’t be prepared. Try again. (${err?.message || String(err)})`);
+    } finally {
+      exportLock.current = false;
+      setExportBusy(false);
+    }
   }
 
   if (loading && !data) {
@@ -128,6 +159,10 @@ export default function PaymentSection({ dispatchId, canRecordPayment = true, on
         </div>
       </dl>
       <div className="payment-progress" aria-hidden="true"><span style={{ transform: `scaleX(${progress / 100})` }} /></div>
+      <div className="payment-statement-action">
+        <Button label={exportBusy ? 'Preparing statement…' : 'Download payment statement'} disabled={exportBusy} onClick={downloadStatement} />
+      </div>
+      <ErrorMessage error={exportError} />
 
       {payments.length > 0 && (
         <div className="payment-history-block">

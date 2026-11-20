@@ -142,6 +142,7 @@ export function prepareA4Invoice(input) {
   if (!Array.isArray(input.groups) || input.groups.length < 1) throw new Error('At least one measurement group is required.');
 
   const warnings = [], groupIds = new Set(), entryIds = new Set();
+  const perRowMoney = input.calculationVersion === 2;
   const rawGroups = input.groups.map(group => {
     const id = Number(group.id);
     if (!Number.isSafeInteger(id) || id < 1 || groupIds.has(id)) throw new Error(`Invalid or duplicate measurement group: ${group.id}.`);
@@ -164,10 +165,9 @@ export function prepareA4Invoice(input) {
       if (calculated == null && entry.authoritativeAmount == null) throw new Error(`Group ${id}, entry ${entryId} needs a rate or stored amount.`);
       const amount = entry.authoritativeAmount == null ? calculated : decimal(entry.authoritativeAmount, `Stored amount in group ${id}`, { monetary: true });
       if (calculated && !calculated.equals(amount)) warnings.push(`Group ${id}, entry ${entryId}: stored amount ${formatA4Money(amount)} differs from calculated ${formatA4Money(calculated)}. The stored line amount is shown.`);
-      // The server saves rounded line amounts but rounds the sum of exact charges once.
-      // Only use a rate to reconstruct that sum when it agrees with the saved line;
-      // a mismatched rate must never supersede an authoritative saved amount.
-      const unroundedAmount = rawCharge && calculated.equals(amount) ? rawCharge : amount;
+      // Version 2 sums the stored paise amount of each row. Legacy invoices
+      // retain their original round-once behavior and authoritative total.
+      const unroundedAmount = perRowMoney ? amount : rawCharge && calculated.equals(amount) ? rawCharge : amount;
       return { id: entryId, type: entry.type, lengthFt: length ? length.toString() : '-', widthFt: width ? width.toString() : '-', quantity, rateUnit: isUnit ? 'UNIT' : 'SQ_FT',
         ratePerSqFt: rate?.toString() ?? null,
         area: area.toString(), amount: amount.toFixed(2, MONEY_ROUNDING), unroundedAmount: unroundedAmount.toString() };
@@ -194,7 +194,9 @@ export function prepareA4Invoice(input) {
   // Keep both printed category amounts reconcilable to the authoritative round-once total.
   const topAmount = stoneMaterialTotal.minus(regularAmount);
   const loadingRoyalty = decimal(input.loadingRoyalty, 'Loading / royalty', { monetary: true });
-  const calculatedNet = new D(netTotal(sum(all, 'unroundedAmount').plus(loadingRoyalty).toNumber()));
+  const calculatedNet = perRowMoney
+    ? materialTotal.plus(loadingRoyalty)
+    : new D(netTotal(sum(all, 'unroundedAmount').plus(loadingRoyalty).toNumber()));
   // A saved bill keeps its authoritative payable, including historical rounding.
   const netPayable = input.storedTotals?.netPayable == null ? calculatedNet
     : decimal(input.storedTotals.netPayable, 'Stored net payable');
@@ -311,6 +313,7 @@ export function a4InvoiceFromDispatch(record) {
       logo: business.logoDataUrl, signatoryName: business.signatoryName, bankDetails: business.bankDetails }, party: record?.partyName,
     lorryNumber: record?.logistics?.truckNumber, destination: record?.logistics?.buyerDestination,
     supervisor: record?.supervisor, groups: [...byNumber.values()], loadingRoyalty: record?.summary?.loadingAndRoyaltyFees,
+    calculationVersion: record?.summary?.calculationVersion || 1,
     storedTotals: { totalPieces: record?.summary?.totalPieces, totalArea: record?.summary?.totalDispatchVolumeSqFt,
       materialTotal: record?.summary?.baseMaterialTotal, netPayable: record?.summary?.netBillableAmount } });
   return { ...model, products: productSummary(record) };

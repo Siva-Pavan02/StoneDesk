@@ -15,6 +15,12 @@ The Express API uses Prisma 6 and server-only database credentials. Run commands
 
 ## Existing installations
 
+### Invoice payment request IDs (20 November 2026)
+
+Before deploying payment idempotency code, back up the intended application database and obtain the operator approval required for schema changes. Apply `prisma/changes/20261120_invoice_payment_idempotency.sql` once using an administrative connection in the application schema. The script adds nullable UUID `InvoicePayment.clientRequestId`, checks its type, and creates a partial unique index on `(organizationId, clientRequestId)` for non-null values. Legacy rows remain NULL. Its `IF NOT EXISTS` clauses make a second application safe, including on disposable test schemas created by `db push`.
+
+Then run `npx prisma generate` and `node scripts/protectDatabase.js` before deploying the backend and frontend together. Older open payment forms without a request ID receive a `400` response asking the user to refresh; they do not make an unprotected payment. This repository has no Prisma Migrate baseline, so do not run `migrate deploy` against an existing installation.
+
 The repository has no Prisma Migrate baseline. Review and apply the additive `prisma/changes/20261012_invitations.sql` once, with a backup and explicit operator approval. It creates and protects the invitation table without rewriting existing records. See [backend rollout instructions](../VERCEL.md) for ordering, connection modes and rollback limitations. Do not run `migrate deploy` as though a baseline exists.
 
 Apply the additive `prisma/changes/20261020_password_login.sql` once, with a backup and explicit operator approval, **before** deploying the code that uses it. The generated client selects the new `passwordLogin` column on every `User` read, so code running against a database that lacks the column fails every user query (login, session checks and all authenticated routes). Apply the SQL first, then run `npx prisma generate`. The change only adds `"passwordLogin" BOOLEAN NOT NULL DEFAULT true`; existing rows keep the default and still require the current password to change it.

@@ -43,6 +43,7 @@ export default function LoadingListScreen({ onClose, organizationId = 'unit_04',
   // Loaded lists from DB
   const [savedLists, setSavedLists] = useState([]);
   const [activeListId, setActiveListId] = useState(null);
+  const [activeListUpdatedAt, setActiveListUpdatedAt] = useState(null);
 
   // Inline validation and save feedback (no blocking alert()).
   const [reqErrors, setReqErrors] = useState({});
@@ -237,11 +238,13 @@ export default function LoadingListScreen({ onClose, organizationId = 'unit_04',
     try {
       // Both endpoints return the saved list, so update it locally instead of refetching everything.
       if (activeListId) {
-        const updated = await updateLoadingList(activeListId, payload);
+        const updated = await updateLoadingList(activeListId, { ...payload, updatedAt: activeListUpdatedAt });
+        setActiveListUpdatedAt(updated.updatedAt);
         setSavedLists(lists => lists.map(list => list.id === updated.id ? updated : list));
       } else {
         const created = await createLoadingList(payload);
         setActiveListId(created.id);
+        setActiveListUpdatedAt(created.updatedAt);
         setLoadingListNumber(created.loadingListNumber);
         setSavedLists(lists => [created, ...lists]);
       }
@@ -303,6 +306,7 @@ export default function LoadingListScreen({ onClose, organizationId = 'unit_04',
             const list = id ? await fetchLoadingList(id) : null;
             if (ticket !== detailTicket.current) return;
             setActiveListId(list?.id || null); setLoadingListNumber(list?.loadingListNumber || '');
+            setActiveListUpdatedAt(list?.updatedAt || null);
             setSupervisor(list?.supervisor || ''); setBuyerDestination(list?.buyerDestination || '');
             setStoneType(list?.stoneType || ''); setFinish(list?.finish || '');
             const opened = list ? structuredClone(list.requirements) : [];

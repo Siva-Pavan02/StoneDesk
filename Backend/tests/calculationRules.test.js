@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { processInventory, totals } = require('../utils/pilotCalculations');
 const { round2, calculatePiece, netTotal } = require('../utils/dispatchCalculations');
+const { Prisma } = require('@prisma/client');
 
 const row = (lengthFt, widthFt, quantity, category = 'Regular') => ({ lengthFt, widthFt, quantity, category });
 const group = (ratePerSqFt, measurementRows, stoneType = 'Granite') => ({ stoneType, finish: 'Polished', ratePerSqFt, measurementRows });
@@ -26,10 +27,10 @@ test('F3/F5: two rows with fee, TOP and Regular add up to the base', () => {
   const inventory = processInventory([group(40.5, [row(3, 2, 12, 'TOP')]), group(60, [row(4.5, 2.25, 4)], 'Black')]);
   assert.equal(inventory[1].measurementRows[0].sqFt, 40.5);
   assert.equal(inventory[1].lineTotal, 2430);
-  assert.deepEqual(totals(inventory, 2500), { totalPieces: 16, totalDispatchVolumeSqFt: 112.5, baseMaterialTotal: 5346, loadingAndRoyaltyFees: 2500, netBillableAmount: 7846 });
+  assert.deepEqual(totals(inventory, 2500), { totalPieces: 16, totalDispatchVolumeSqFt: 112.5, baseMaterialTotal: 5346, loadingAndRoyaltyFees: 2500, netBillableAmount: 7846, calculationVersion: 2 });
 });
 
-test('F4: totals sum raw values and round once', () => {
+test('F4: totals sum rounded row amounts', () => {
   const inventory = processInventory([group(10, [row(1.333, 1, 1), row(1.333, 1, 1), row(1.333, 1, 1)])]);
   assert.equal(inventory[0].measurementRows[0].sqFt, 1.33);
   assert.equal(inventory[0].measurementRows[0].lineTotal, 13.33);
@@ -62,7 +63,7 @@ test('calculatePiece rejects zero dimensions', () => {
   assert.deepEqual(calculatePiece(1.115, 1), { lengthFt: 1.115, widthFt: 1, sqFt: 1.12 });
 });
 
-test('property: totals equal round-once sums and net follows the net-only rule on raw charges plus fee', () => {
+test('property: totals equal the sum of rounded row charges plus fee', () => {
   let seed = 7;
   const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const quarter = () => Math.ceil(rand() * 40) / 4;
@@ -71,12 +72,17 @@ test('property: totals equal round-once sums and net follows the net-only rule o
       Array.from({ length: 1 + Math.floor(rand() * 6) }, () => row(quarter(), quarter(), 1 + Math.floor(rand() * 50), rand() < 0.3 ? 'TOP' : 'Regular')), `S${g}`));
     const fee = Math.round(rand() * 500000) / 100;
     const inventory = processInventory(groups), summary = totals(inventory, fee);
-    let sqFt = 0, amount = 0, pieces = 0;
-    for (const g of groups) for (const r of g.measurementRows) { const a = r.lengthFt * r.widthFt * r.quantity; sqFt += a; amount += a * g.ratePerSqFt; pieces += r.quantity; }
+    let sqFt = 0, amount = new Prisma.Decimal(0), pieces = 0;
+    for (const g of groups) for (const r of g.measurementRows) {
+      const a = r.lengthFt * r.widthFt * r.quantity;
+      sqFt += a;
+      amount = amount.plus(new Prisma.Decimal(String(r.lengthFt)).times(String(r.widthFt))
+        .times(r.quantity).times(String(g.ratePerSqFt)).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP));
+      pieces += r.quantity;
+    }
     assert.equal(summary.totalPieces, pieces);
     assert.equal(summary.totalDispatchVolumeSqFt, round2(sqFt));
-    assert.equal(summary.baseMaterialTotal, round2(amount));
-    const rawAmount = groups.reduce((sum, g) => sum + g.measurementRows.reduce((n, r) => n + r.lengthFt * r.widthFt * r.quantity * g.ratePerSqFt, 0), 0);
-    assert.equal(summary.netBillableAmount, netTotal(rawAmount + fee));
+    assert.equal(summary.baseMaterialTotal, Number(amount.toFixed(2)));
+    assert.equal(summary.netBillableAmount, Number(amount.plus(String(fee)).toFixed(2)));
   }
 });

@@ -1,18 +1,42 @@
 import { useId } from 'react';
 
 const count = value => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 }).format(Number(value) || 0);
+const istDateKey = value => {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date(value)).map(part => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+};
 
-export default function DashboardAnalytics({ analytics, recoveries = [], onRetry }) {
+export default function DashboardAnalytics({ analytics, period = 'today', onPeriodChange, recoveries = [], onRetry }) {
   const id = useId();
   const { data, error, loading } = analytics;
   const heading = <header className="analytics-heading">
     <h2 id={`${id}-heading`}>Load status</h2>
-    <p>All time</p>
+    <div className="analytics-period-filter" role="group" aria-label="Load status period">
+      {[['today', 'Today'], ['all', 'All']].map(([value, label]) =>
+        <button
+          key={value}
+          type="button"
+          aria-label={label}
+          aria-pressed={period === value}
+          onClick={() => onPeriodChange(value)}
+        >{label}</button>
+      )}
+    </div>
   </header>;
   if (!data) return <section className="dashboard-analytics" aria-labelledby={`${id}-heading`} aria-busy={loading}>{heading}<div className="analytics-state" role={loading ? 'status' : 'alert'}>{loading ? 'Loading overview…' : <>Analytics could not be loaded.<button type="button" onClick={onRetry}>Try again</button></>}</div></section>;
 
   const { statusCounts = {} } = data;
-  const unfinished = recoveries.filter(draft => !draft.serverId && draft.savedAt).length;
+  const today = data.today;
+  const unfinished = recoveries.filter(draft => {
+    if (draft.serverId || !draft.savedAt) return false;
+    if (period !== 'today') return true;
+    return istDateKey(draft.savedAt) === today;
+  }).length;
   const statuses = [
     ['Drafts', Number(statusCounts.Draft) || 0, 'var(--text-muted)'],
     ['Unfinished loads', unfinished, 'var(--ui-warning)'],

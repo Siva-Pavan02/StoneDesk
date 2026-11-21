@@ -1,0 +1,5 @@
+# StoneDesk
+
+StoneDesk helps stone yards record measurements, manage dispatches, and create clear load bills, buyer invoices, and driver slips in one workspace.
+
+- [StoneDesk home](https://stone-desk.vercel.app/)

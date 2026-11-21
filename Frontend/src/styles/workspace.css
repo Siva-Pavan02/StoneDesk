@@ -1002,7 +1002,7 @@ p.queue-sub {
   background: var(--ui-accent-soft);
   color: var(--ui-accent);
 }
-.dashboard-analytics { display: grid; gap: 16px; min-width: 0; }
+.dashboard-analytics { display: grid; gap: 16px; min-width: 0; min-height: 200px; }
 .analytics-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .analytics-heading h2 { font-size: 18px; font-weight: 700; }
 .analytics-heading p { color: var(--ui-muted); font-size: 13px; font-weight: 600; line-height: 1.5; white-space: nowrap; }

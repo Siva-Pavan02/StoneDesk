@@ -44,9 +44,7 @@ async function planPreview(model) {
 function InvoicePreview({ fitKey, children }) {
   const viewport = useRef(null);
   const content = useRef(null);
-  const size = useRef({ width: 0, height: 0, pageHeight: 0 });
   const fit = useRef(() => {});
-  const zoomPicker = useRef(null);
   const autoFit = useRef(true);
   const [zoom, setZoom] = useState(1);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
@@ -54,21 +52,22 @@ function InvoicePreview({ fitKey, children }) {
     const fitToScreen = () => {
       const sheet = content.current?.querySelector('.sample-sheet');
       if (!sheet || !content.current || !viewport.current) return;
-      const current = { width: sheet.offsetWidth, height: content.current.scrollHeight, pageHeight: sheet.offsetHeight };
-      size.current = current;
-      setDimensions(({ width, height }) => width === current.width && height === current.height ? { width, height } : current);
-      const next = Math.min(1, viewport.current.clientWidth / current.width, window.innerHeight * 0.76 / current.pageHeight);
-      setZoom(value => Math.abs(value - next) < 0.001 ? value : next);
+      const current = { width: sheet.offsetWidth, height: content.current.scrollHeight };
+      if (!current.width || !viewport.current.clientWidth) return;
+      setDimensions(previous => previous.width === current.width && previous.height === current.height ? previous : current);
+      if (autoFit.current) {
+        const next = Math.min(1, viewport.current.clientWidth / current.width);
+        setZoom(value => Math.abs(value - next) < 0.001 ? value : next);
+      }
     };
-    const resize = () => { if (autoFit.current) fitToScreen(); };
     fit.current = fitToScreen;
     autoFit.current = true;
     fitToScreen();
-    const observer = new ResizeObserver(resize);
+    const observer = new ResizeObserver(fitToScreen);
     observer.observe(viewport.current);
     observer.observe(content.current);
-    window.addEventListener('resize', resize);
-    return () => { observer.disconnect(); window.removeEventListener('resize', resize); };
+    window.addEventListener('resize', fitToScreen);
+    return () => { observer.disconnect(); window.removeEventListener('resize', fitToScreen); };
   }, [fitKey]);
   function changeZoom(amount) {
     autoFit.current = false;
@@ -77,29 +76,14 @@ function InvoicePreview({ fitKey, children }) {
       return next;
     });
   }
-  function setZoomLevel(level) {
-    autoFit.current = false;
-    setZoom(level);
-    if (zoomPicker.current) zoomPicker.current.open = false;
-  }
   return <>
     <div className="invoice-preview-controls" role="group" aria-label="Invoice preview controls">
       <div className="invoice-zoom-control" role="group" aria-label="Zoom level controls">
-        <button type="button" className="text-button invoice-zoom-step" aria-label="Zoom out by 25%" disabled={zoom <= 0.25} onClick={() => changeZoom(-0.25)}>−</button>
-        <details className="invoice-zoom-picker" ref={zoomPicker}>
-          <summary aria-label={`Zoom level, ${Math.round(zoom * 100)}%`}>
-            <span>Zoom</span><output aria-live="polite">{Math.round(zoom * 100)}%</output>
-          </summary>
-          <div className="invoice-zoom-presets" role="group" aria-label="Zoom level">
-            {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map(level => (
-              <button key={level} type="button" className="text-button" aria-pressed={Math.abs(zoom - level) < 0.001}
-                onClick={() => setZoomLevel(level)}>{level * 100}%</button>
-            ))}
-          </div>
-        </details>
-        <button type="button" className="text-button invoice-zoom-step" aria-label="Zoom in by 25%" disabled={zoom >= 2} onClick={() => changeZoom(0.25)}>+</button>
+        <button type="button" className="text-button invoice-zoom-step" aria-label="Zoom out by 10%" disabled={zoom <= 0.25} onClick={() => changeZoom(-0.1)}>−</button>
+        <output aria-live="polite" aria-label="Zoom level">{Math.round(zoom * 100)}%</output>
+        <button type="button" className="text-button invoice-zoom-step" aria-label="Zoom in by 10%" disabled={zoom >= 2} onClick={() => changeZoom(0.1)}>+</button>
       </div>
-      <button type="button" className="text-button invoice-auto-fit" onClick={() => { autoFit.current = true; fit.current(); }}>Auto fit</button>
+      <button type="button" className="text-button invoice-auto-fit" onClick={() => { autoFit.current = true; fit.current(); }}>Fit width</button>
     </div>
     <div className="invoice-preview-viewport" ref={viewport}>
       <div className="invoice-preview-stage" style={{ width: dimensions.width * zoom, height: dimensions.height * zoom }}>

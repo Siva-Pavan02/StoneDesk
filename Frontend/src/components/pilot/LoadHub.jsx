@@ -49,7 +49,12 @@ export default function LoadHub({
   onNew,
   updatedAt,
   analytics,
+  analyticsPeriod = 'today',
+  onAnalyticsPeriodChange,
   onRetryAnalytics,
+  priorityOnly = false,
+  hasDrafts = false,
+  onPriorityChange,
   admin = false,
   onDelete,
 }) {
@@ -95,7 +100,6 @@ export default function LoadHub({
       value === "all" ? "#entries" : `#entries?status=${value}`,
     );
   }
-  const [priorityOnly, setPriorityOnly] = useState(false);
   const [refreshPhase, setRefreshPhase] = useState("idle");
   const [now] = useState(() => Date.now());
   const doneTimer = useRef(null);
@@ -254,11 +258,9 @@ export default function LoadHub({
   const refreshBusy =
     refreshPhase === "refreshing" ||
     (loading && refreshPhase === "idle" && !loads.length);
-  const drafts = loads.filter((l) => l.status === "Draft");
   const search = query.trim().toLowerCase();
   const filtered = loads.filter(
     (l) =>
-      (!priorityOnly || view !== "home" || l.status === "Draft") &&
       (view !== "entries" || filter === "all" || l.status === filter) &&
       [
         l.partyName,
@@ -395,6 +397,8 @@ export default function LoadHub({
           {analytics && (
             <DashboardAnalytics
               analytics={analytics}
+              period={analyticsPeriod}
+              onPeriodChange={onAnalyticsPeriodChange}
               recoveries={recoveries}
               onRetry={onRetryAnalytics}
             />
@@ -471,8 +475,8 @@ export default function LoadHub({
           </h2>
           {view === "home" ? (
             <div className="dashboard-record-filter" role="group" aria-label="Load filter">
-              <button type="button" aria-pressed={!priorityOnly} onClick={() => setPriorityOnly(false)}>Recent</button>
-              {drafts.length > 0 && <button type="button" aria-pressed={priorityOnly} onClick={() => setPriorityOnly(true)}>Drafts</button>}
+              <button type="button" aria-pressed={!priorityOnly} onClick={() => onPriorityChange(false)}>Recent</button>
+              {(hasDrafts || priorityOnly) && <button type="button" aria-pressed={priorityOnly} onClick={() => onPriorityChange(true)}>Drafts</button>}
             </div>
           ) : (
             <button
@@ -515,8 +519,10 @@ export default function LoadHub({
               />
             </span>
             <h3 className="text-lg font-bold">
-              {search || priorityOnly
-                ? "No matching loads"
+              {priorityOnly
+                ? "No saved drafts"
+                : search
+                  ? "No matching loads"
                 : view === "entries" && filter === "Dispatched"
                   ? "No lorries on the road"
                   : view === "entries" && filter === "Draft"
@@ -526,11 +532,13 @@ export default function LoadHub({
                       : "A fresh page for your yard"}
             </h3>
             <p className="text-on-surface">
-              {search || priorityOnly
-                ? "Try another search or choose a different filter."
+              {priorityOnly
+                ? "Drafts will appear here after you save a load."
+                : search
+                  ? "Try another search or choose a different filter."
                 : view === "entries" && filter === "Dispatched"
                   ? "Finalize a bill to dispatch a load. It will appear here until it is delivered."
-                  : "Open navigation and choose New load to add measurements and prepare a bill."}
+                  : "Choose New load on the dashboard to add measurements and prepare a bill."}
             </p>
           </Card>
         )}
@@ -650,13 +658,13 @@ export default function LoadHub({
             </Card>
           );
         })}
-        {view === "home" && loads.length > 5 && (
+        {view === "home" && hasMore && (
           <a
             className="btn control-button control-button-secondary w-full"
-            {...pageLink("entries")}
+            {...pageLink(priorityOnly ? "entries?status=Draft" : "entries")}
           >
             <span className="control-label">
-              {"View all loads"}
+              {priorityOnly ? "View all drafts" : "View all loads"}
             </span>
           </a>
         )}

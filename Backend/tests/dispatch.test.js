@@ -99,6 +99,29 @@ test('Dispatch API', async (t) => {
     slipNumber = data.dispatchSlipNumber;
   });
 
+  await t.test('dashboard status counts fetch today by default and all only when requested', async () => {
+    const todayBefore = await request('GET', '/status-counts?period=today');
+    const allBefore = await request('GET', '/status-counts?period=all');
+    const defaultPeriod = await request('GET', '/status-counts');
+    assert.equal(todayBefore.status, 200);
+    assert.equal(allBefore.status, 200);
+    assert.equal(todayBefore.data.period, 'today');
+    assert.deepEqual(defaultPeriod.data.statusCounts, todayBefore.data.statusCounts);
+    assert.deepEqual(Object.keys(todayBefore.data).sort(), ['period', 'statusCounts', 'today', 'totalDrafts']);
+    assert.equal((await request('GET', '/status-counts?period=7')).status, 400);
+    const prior = await request('POST', '/', {
+      ...validPayload,
+      date: new Date(Date.now() - 86400000).toISOString(),
+    });
+    assert.equal(prior.status, 200);
+    const todayAfter = await request('GET', '/status-counts?period=today');
+    const allAfter = await request('GET', '/status-counts?period=all');
+    assert.deepEqual(todayAfter.data.statusCounts, todayBefore.data.statusCounts);
+    assert.equal(allAfter.data.statusCounts.Draft, allBefore.data.statusCounts.Draft + 1);
+    assert.equal(allAfter.data.totalDrafts, allBefore.data.totalDrafts + 1);
+    assert.equal((await request('DELETE', `/${prior.data.id}`)).status, 200);
+  });
+
   await t.test('13. Retrieve by ID', async () => {
     const { status, data } = await request('GET', `/${dispatchId}`);
     assert.equal(status, 200);

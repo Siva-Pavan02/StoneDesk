@@ -3,6 +3,7 @@ import { Card, Label } from './Controls.jsx';
 import { rowGroups, rowOverview, subtotals } from '../../utils/billData.js';
 import { productRateSuffix } from '../../utils/productForm.js';
 import { money } from '../../utils/pilotDraft.js';
+import { formatA4Rate } from '../../utils/a4InvoiceModel.js';
 import { fixed2, rawAmount, round2 } from '../../utils/loadMath.js';
 import Icon from './Icon.jsx';
 export default function LoadSummary({ rows, summary, groups, showGroups = true, variant = 'load', canEditPrice = false, onEditPrice }) {
@@ -34,7 +35,7 @@ export default function LoadSummary({ rows, summary, groups, showGroups = true, 
         </div>
         <strong className="shrink-0">{money(g.lineTotal)}</strong>
       </div>
-      <p className="load-summary-rate text-sm text-on-surface mt-1">{g.quantity} {g.rateUnit === 'UNIT' ? 'units' : 'pieces'}{g.rateUnit === 'UNIT' ? '' : ` · ${fixed2(g.sqFt)} sq ft`} · {money(g.ratePerSqFt)} {productRateSuffix(g)}</p>
+      <p className="load-summary-rate text-sm text-on-surface mt-1">{g.quantity} {g.rateUnit === 'UNIT' ? 'units' : 'pieces'}{g.rateUnit === 'UNIT' ? '' : ` · ${fixed2(g.sqFt)} sq ft`} · {formatA4Rate(g.ratePerSqFt)} {productRateSuffix(g)}</p>
     </div>)}
     <div className="flex justify-between gap-3"><Label label="Total pieces" /><strong>{summary.totalPieces ?? rows.reduce((sum, r) => sum + r.quantity, 0)}</strong></div>
     <div className="flex justify-between gap-3"><Label label="Total square feet" /><strong>{fixed2(summary.totalDispatchVolumeSqFt)}</strong></div>

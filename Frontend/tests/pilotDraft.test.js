@@ -19,6 +19,8 @@ test('invoice price edit changes only the selected summary group and its saved p
   assert.equal(unitEdited[3].rate, 55);
   assert.equal(unitEdited[3].ratePerSqFt, 55);
   assert.equal(summarize(unitEdited, 0).baseMaterialTotal, 800);
+  assert.throws(() => summarize(repriceGroupRows(original, regular, 10_000_000_000), 0), /supported range/);
+  assert.equal(original[0].ratePerSqFt, 40);
 });
 test('encrypted draft recovery preserves the latest edit and organization isolation', async () => {
   const store = storage(), first = { ...newDraft(), partyName: 'First', entry: { length: '3', width: '2' } }, last = { ...first, partyName: 'Latest' };

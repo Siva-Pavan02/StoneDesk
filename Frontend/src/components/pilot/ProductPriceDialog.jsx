@@ -23,7 +23,8 @@ export default function ProductPriceDialog({
       dialog.current?.querySelector('input[name="productPrice"]')?.focus();
       return;
     }
-    onSave(value);
+    const error = onSave(value);
+    if (error) setPriceError(error);
   }
 
   const unit = product?.rateUnit === "UNIT";
@@ -52,7 +53,7 @@ export default function ProductPriceDialog({
             name="productPrice"
             type="number"
             min="0"
-            step="0.01"
+            step="any"
             required
             autoFocus
             value={price}

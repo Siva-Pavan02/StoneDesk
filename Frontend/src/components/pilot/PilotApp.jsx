@@ -55,10 +55,15 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
   );
   const analyticsPeriodRef = useRef(analyticsPeriod);
   const analyticsRequest = useRef(0);
-  // Dashboard uses all-time counts; Payments keeps its own selected period.
   const analyticsRequestedPeriod = useRef(null);
-  // Dashboard and Payments share analytics data, refreshed after loads change.
   const analyticsStale = useRef(true);
+  const [homePeriod, setHomePeriod] = useState('today');
+  const [homeStatus, setHomeStatus] = useState({ data: null, error: '', loading: true });
+  const [totalDrafts, setTotalDrafts] = useState(null);
+  const homeStatusRequest = useRef(0);
+  const homeStatusRequestedPeriod = useRef(null);
+  const homeStatusStale = useRef(true);
+  const [homeLoadFilter, setHomeLoadFilter] = useState('recent');
   const loadsStale = useRef(true);
   const loadsKey = useRef(null);
   const loadsRequest = useRef(0);
@@ -71,7 +76,11 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
   const requestedPage = view.split(/[/?]/)[0];
   const listStatus = requestedPage === 'entries' ? new URLSearchParams(view.split('?')[1] || '').get('status') : null;
   const listParams = new URLSearchParams();
-  if (['home', 'entries'].includes(requestedPage) && search) listParams.set('q', search);
+  if (requestedPage === 'home') {
+    listParams.set('limit', '5');
+    if (homeLoadFilter === 'drafts') listParams.set('status', 'Draft');
+  }
+  if (requestedPage === 'entries' && search) listParams.set('q', search);
   if (listStatus && listStatus !== 'all') listParams.set('status', listStatus);
   const listPath = `/dispatches${listParams.size ? `?${listParams}` : ''}`;
   const admin = user.role === "Admin",
@@ -107,6 +116,22 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
         }));
     }
   }, [analyticsPeriod]);
+  const refreshHomeStatus = useCallback(async (period, clearData = false) => {
+    const ticket = ++homeStatusRequest.current;
+    homeStatusRequestedPeriod.current = period;
+    homeStatusStale.current = false;
+    setHomeStatus(prev => ({ ...prev, data: clearData ? null : prev.data, error: '', loading: true }));
+    try {
+      const data = await request(`/dispatches/status-counts?period=${period}`);
+      if (ticket === homeStatusRequest.current) {
+        setHomeStatus({ data, error: '', loading: false });
+        setTotalDrafts(data.totalDrafts);
+      }
+    } catch (err) {
+      if (ticket === homeStatusRequest.current)
+        setHomeStatus(prev => ({ ...prev, error: err.message || 'Unable to load status. Try again.', loading: false }));
+    }
+  }, []);
   const changeAnalyticsPeriod = useCallback((period) => {
     if (period === analyticsPeriod) return;
     analyticsPeriodRef.current = period;
@@ -120,6 +145,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
     const promise = request(listPath);
     loadsInFlight.current = { path: listPath, promise };
     setRefreshing(true);
+    setHistoryError('');
     try {
       const res = await promise;
       if (ticket !== loadsRequest.current) return;
@@ -300,6 +326,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
     setBillReturnView("home");
     navigate(`bill/${data.id}`);
     analyticsStale.current = true;
+    homeStatusStale.current = true;
     loadsStale.current = true;
   }
   // Drop a deleted dispatch from the cached list and ignore any list response
@@ -311,6 +338,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
     setLoads((prev) => prev.filter((l) => l.id !== id));
     if (record?.id === id) setRecord(null);
     analyticsStale.current = true;
+    homeStatusStale.current = true;
     loadsStale.current = true;
   }
   async function deleteLoad(id) {
@@ -318,7 +346,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
     await deleteDispatch(id);
     removeLoad(id);
     await dropLocalCopies(id);
-    if (current === "home") refreshAnalytics("all");
+    if (current === "home") await Promise.all([refreshHomeStatus(homePeriod), refreshLoads()]);
   }
   // A deleted server draft must not live on as an unfinished load on this phone.
   async function dropLocalCopies(id) {
@@ -348,10 +376,14 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
       (loadsInFlight.current && loadsInFlight.current.path !== listPath)) refreshLoads();
   }, [current, settings, listPath, refreshLoads]);
   useEffect(() => {
-    if (!["home", "payments"].includes(current) || !settings) return;
-    const period = current === "home" ? "all" : analyticsPeriod;
-    if (analyticsStale.current || analyticsRequestedPeriod.current !== period)
-      refreshAnalytics(period, analyticsRequestedPeriod.current !== period);
+    if (current !== 'home' || !settings) return;
+    if (homeStatusStale.current || homeStatusRequestedPeriod.current !== homePeriod)
+      refreshHomeStatus(homePeriod, homeStatusRequestedPeriod.current !== homePeriod);
+  }, [current, settings, homePeriod, refreshHomeStatus]);
+  useEffect(() => {
+    if (current !== 'payments' || !settings) return;
+    if (analyticsStale.current || analyticsRequestedPeriod.current !== analyticsPeriod)
+      refreshAnalytics(analyticsPeriod, analyticsRequestedPeriod.current !== analyticsPeriod);
   }, [current, settings, analyticsPeriod, refreshAnalytics]);
   let content;
   const openingBill =
@@ -486,7 +518,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
         <ErrorMessage error={historyError} />
         <LoadHub
           key={current}
-          loads={loads}
+          loads={loadsKey.current === listPath ? loads : []}
           admin={admin}
           onDelete={deleteLoad}
           view={current}
@@ -494,7 +526,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
             new URLSearchParams(view.split("?")[1] || "").get("status") ||
             "all"
           }
-          query={search}
+          query={current === 'home' ? '' : search}
           searchText={query}
           onSearchChange={setQuery}
           onFilterChange={value => navigate(value === 'all' ? 'entries' : `entries?status=${value}`)}
@@ -507,15 +539,24 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
             navigate(`bill/${id}`);
           }}
           onRefresh={() => {
-            if (current === "home") refreshAnalytics("all");
-            else analyticsStale.current = true;
+            if (current === 'home') return Promise.all([refreshHomeStatus(homePeriod), refreshLoads()]);
+            analyticsStale.current = true;
             return refreshLoads();
           }}
           onLoadMore={loadMore}
-          hasMore={!!nextCursor}
-          loading={refreshing}
-          analytics={analytics}
-          onRetryAnalytics={() => refreshAnalytics("all")}
+          hasMore={loadsKey.current === listPath && !!nextCursor}
+          loading={refreshing || (loadsKey.current !== listPath && !historyError)}
+          analytics={homeStatusRequestedPeriod.current === homePeriod
+            ? homeStatus
+            : { data: null, error: '', loading: true }}
+          analyticsPeriod={homePeriod}
+          onAnalyticsPeriodChange={setHomePeriod}
+          priorityOnly={homeLoadFilter === 'drafts'}
+          hasDrafts={totalDrafts === null
+            ? loads.some(load => load.status === 'Draft')
+            : totalDrafts > 0}
+          onPriorityChange={value => setHomeLoadFilter(value ? 'drafts' : 'recent')}
+          onRetryAnalytics={() => refreshHomeStatus(homePeriod)}
           recoveries={recoveries}
           maxDrafts={MAX_DRAFTS}
           onContinue={(draft) => {
@@ -536,7 +577,7 @@ export default function PilotApp({ user, onLogout, onUserChange }) {
       view={current}
       navigate={navigate}
       onLogout={logout}
-      attention={loads.filter((l) => l.status === "Draft").length}
+      attention={totalDrafts ?? loads.filter((l) => l.status === "Draft").length}
     >
       <ErrorMessage error={error} />
       <Suspense fallback={<p role="status">{"Loading…"}</p>}>

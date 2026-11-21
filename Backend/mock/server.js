@@ -845,6 +845,21 @@ dispatches.get(
   }),
 );
 dispatches.get(
+  "/status-counts",
+  wrap((req, res) => {
+    const period = req.query.period ?? 'today';
+    if (period !== 'today' && period !== 'all') calc.bad('Invalid load status period');
+    const range = windows(new Date(), 1);
+    const statusCounts = { Draft: 0, Dispatched: 0, Delivered: 0 };
+    for (const dispatch of db.dispatches) {
+      const date = new Date(dispatch.date);
+      if (date >= range.end || (period === 'today' && date < range.currentStart)) continue;
+      if (statusCounts[dispatch.status] !== undefined) statusCounts[dispatch.status] += 1;
+    }
+    res.json({ period, today: range.to, statusCounts, totalDrafts: db.dispatches.filter(d => d.status === 'Draft').length });
+  }),
+);
+dispatches.get(
   "/analytics",
   wrap((req, res) => {
     for (const dispatch of db.dispatches) {
@@ -1079,7 +1094,7 @@ dispatches.put(
     const received = dispatchPayments(d.id).reduce((sum, p) => sum.plus(p.amount), new Prisma.Decimal(0));
     if (newTotal.lessThan(received)) fail(409, "Invoice total cannot be below recorded payments.");
     const revisedAt = now();
-    summary.issuedAt = d.summary?.issuedAt || d.updatedAt;
+    if (d.summary?.issuedAt) summary.issuedAt = d.summary.issuedAt;
     summary.effectiveAt = revisedAt;
     // Snapshot of the currently committed version, taken before applying new values.
     const revisionSnapshot = {

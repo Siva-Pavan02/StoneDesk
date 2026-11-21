@@ -115,6 +115,20 @@ test('dashboard draft filter belongs with the loads activity heading', () => {
   assert.match(workspace, /button\[aria-pressed="true"\]/);
 });
 
+test('dashboard load status offers Today and All filters', () => {
+  const dashboard = readFileSync(join(SRC, 'components', 'pilot', 'DashboardAnalytics.jsx'), 'utf8');
+  const app = readFileSync(join(SRC, 'components', 'pilot', 'PilotApp.jsx'), 'utf8');
+  const workspace = readFileSync(join(SRC, 'styles', 'workspace.css'), 'utf8');
+  assert.match(dashboard, /aria-label="Load status period"/);
+  assert.match(dashboard, /\[\['today', 'Today'\], \['all', 'All'\]\]/);
+  assert.match(dashboard, /onPeriodChange\(value\)/);
+  assert.match(app, /useState\('today'\)/);
+  assert.match(app, /\/dispatches\/status-counts\?period=\$\{period\}/);
+  assert.match(app, /listParams\.set\('limit', '5'\)/);
+  assert.match(workspace, /\.analytics-period-filter/);
+  assert.match(workspace, /\.analytics-period-filter button\[aria-pressed="true"\]/);
+});
+
 test('payments period options use one capsule filter', () => {
   const payments = readFileSync(join(SRC, 'components', 'pilot', 'PaymentsAnalytics.jsx'), 'utf8');
   const workspace = readFileSync(join(SRC, 'styles', 'workspace.css'), 'utf8');

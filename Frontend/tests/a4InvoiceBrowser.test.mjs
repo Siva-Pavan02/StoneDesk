@@ -385,7 +385,14 @@ async function main() {
     await renderProductionCase(page, base, 'billion-scale-line-amount', largeMoney, { shot: true });
     const manyLargeMoney = oversizedFixture(64, 10);
     manyLargeMoney.groups[0].entries.forEach(entry => { entry.ratePerSqFt = '25000000.25'; });
-    await renderProductionCase(page, base, 'wrapped-amounts-across-pages', manyLargeMoney, { oversized: true });
+    const rangeError = await page.evaluate(async input => {
+      const { prepareA4Invoice } = await import('/src/utils/a4InvoiceModel.js');
+      try { prepareA4Invoice(input); return ''; }
+      catch (error) { return error.message; }
+    }, manyLargeMoney);
+    assert.match(rangeError, /supported range/);
+    manyLargeMoney.groups[0].entries.forEach(entry => { entry.ratePerSqFt = '2500000.25'; });
+    await renderProductionCase(page, base, 'wrapped-large-amounts', manyLargeMoney, { oversized: true });
     const unreadableLogo = varyingFixture(1);
     unreadableLogo.seller.logo = 'data:image/png;base64,AAAA';
     await renderProductionCase(page, base, 'unreadable-saved-logo', unreadableLogo, { logoFallback: true });

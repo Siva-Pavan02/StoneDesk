@@ -193,10 +193,10 @@ export default function NewLoad({
   }
   function saveProductPrice(nextRate) {
     if (!editingPrice) return;
-    setDraft((current) => ({
-      ...current,
-      rows: repriceGroupRows(current.rows, editingPrice, nextRate),
-    }));
+    const rows = repriceGroupRows(draft.rows, editingPrice, nextRate);
+    try { summarize(rows, draft.fee); }
+    catch { return "This price makes the invoice total too large."; }
+    setDraft((current) => ({ ...current, rows }));
     setEditingPrice(null);
   }
   const root = useRef(null);

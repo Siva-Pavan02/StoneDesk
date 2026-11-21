@@ -6,6 +6,7 @@ const { allowRoles } = require('../utils/auth');
 
 router.post('/', controller.createDraft);
 router.get('/', controller.list);
+router.get('/status-counts', controller.statusCounts);
 router.get('/analytics', controller.analytics);
 router.get('/receivables', controller.receivables);
 router.get('/:id', controller.getById);

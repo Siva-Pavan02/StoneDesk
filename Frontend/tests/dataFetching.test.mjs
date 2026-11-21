@@ -49,6 +49,10 @@ try {
           body.todayStatusCounts.Draft = 0;
         }
       }
+      else if (url.pathname === '/api/dispatches/status-counts') {
+        const period = url.searchParams.get('period') || 'today';
+        body = { period, today: '2026-11-21', statusCounts: { Draft: period === 'all' ? savedDraft ? 2 : 1 : 0, Dispatched: 0, Delivered: 0 }, totalDrafts: savedDraft ? 2 : 1 };
+      }
       else if (url.pathname === '/api/dispatches' && route.request().method() === 'POST') {
         const draft = route.request().postDataJSON();
         savedDraft = { ...row('new-draft'), ...draft, id: 'new-draft', status: 'Draft' };
@@ -86,15 +90,15 @@ try {
     await expect(page.getByText('fast Party', { exact: true }).filter({ visible: true }).first()).toBeVisible();
     await page.evaluate(() => { location.hash = 'home'; });
     await expect(page.locator('.dashboard-analytics')).toBeVisible();
-    await expect.poll(() => requests.filter(p => p === '/api/dispatches/analytics?period=all').length).toBe(1);
-    await expect(page.locator('.analytics-heading')).toContainText('All time');
-    await expect(page.locator('.analytics-legend li').first()).toHaveText(/Drafts\s*1/);
+    await expect.poll(() => requests.filter(p => p === '/api/dispatches/status-counts?period=today').length).toBe(1);
+    await expect(page.getByRole('button', { name: 'Today', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.analytics-legend li').first()).toHaveText(/Drafts\s*0/);
     const beforePayments = requests.length;
     await page.evaluate(() => { location.hash = 'payments'; });
     await expect(page.locator('.payments-analytics')).toBeVisible();
     assert.deepEqual(requests.slice(beforePayments), ['/api/dispatches/analytics?period=3']);
     assert.deepEqual((await page.locator('.payments-kpi dt').allInnerTexts()).map(value => value.replace(/\s+/g, ' ').trim()), [
-      'ALL TIME Outstanding balance', 'ALL TIME Unpaid invoices', 'ALL TIME Partially paid',
+      'AS OF TODAY Outstanding balance', 'AS OF TODAY Unpaid invoices', 'AS OF TODAY Partially paid',
       'LAST 3 DAYS Amount received', 'LAST 3 DAYS Invoices paid in full'
     ]);
     for (const [viewportWidth, viewportHeight] of [[320, 568], [360, 640], [390, 844], [640, 360], [768, 1024], [1024, 768], [1440, 900], [1920, 1080]]) {
@@ -162,7 +166,9 @@ try {
     await expect.poll(() => savedDraft?.status).toBe('Draft');
     await expect(page).toHaveURL(/#bill\/new-draft$/);
     await page.evaluate(() => { location.hash = 'home'; });
-    await expect.poll(() => requests.filter(p => p === '/api/dispatches/analytics?period=all').length).toBe(2);
+    await expect.poll(() => requests.filter(p => p === '/api/dispatches/status-counts?period=today').length).toBe(2);
+    await expect(page.locator('.analytics-legend li').first()).toHaveText(/Drafts\s*0/);
+    await page.getByRole('button', { name: 'All', exact: true }).click();
     await expect(page.locator('.analytics-legend li').first()).toHaveText(/Drafts\s*2/);
     assert.deepEqual(errors, []);
     console.log(`PASS ${width}px: lazy data fetching, Payments period, and saved draft dashboard status`);

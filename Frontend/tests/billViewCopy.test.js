@@ -40,15 +40,18 @@ test('BillView drives preview, PDF and print from the selected copy through the 
   assert.match(bill, /download did not complete/);
 });
 
-test('current and historical invoice previews share accessible fit and zoom controls', () => {
+test('current and historical invoice previews fit the available width and allow manual zoom', () => {
   assert.equal((bill.match(/<InvoicePreview /g) || []).length, 2);
-  assert.match(bill, /<div className="invoice-zoom-control" role="group" aria-label="Zoom level controls">[\s\S]*?aria-label="Zoom out by 25%" disabled=\{zoom <= 0\.25\} onClick=\{\(\) => changeZoom\(-0\.25\)\}[\s\S]*?<details className="invoice-zoom-picker"[\s\S]*?aria-label="Zoom in by 25%" disabled=\{zoom >= 2\} onClick=\{\(\) => changeZoom\(0\.25\)\}/);
-  assert.match(bill, /<summary aria-label=\{`Zoom level, \$\{Math\.round\(zoom \* 100\)\}%`\}>/);
-  assert.match(bill, /\[0\.25, 0\.5, 0\.75, 1, 1\.25, 1\.5, 1\.75, 2\]\.map\(level/);
-  assert.match(bill, /function setZoomLevel\(level\) \{\s*autoFit\.current = false;\s*setZoom\(level\);\s*if \(zoomPicker\.current\) zoomPicker\.current\.open = false;/);
-  assert.match(bill, /onClick=\{\(\) => \{ autoFit\.current = true; fit\.current\(\); \}\}>Auto fit/);
+  assert.match(bill, /const next = Math\.min\(1, viewport\.current\.clientWidth \/ current\.width\);/);
+  assert.doesNotMatch(bill, /window\.innerHeight \* 0\.76/);
+  assert.match(bill, /aria-label="Zoom out by 10%" disabled=\{zoom <= 0\.25\} onClick=\{\(\) => changeZoom\(-0\.1\)\}/);
+  assert.match(bill, /<output aria-live="polite" aria-label="Zoom level">\{Math\.round\(zoom \* 100\)\}%<\/output>/);
+  assert.match(bill, /aria-label="Zoom in by 10%" disabled=\{zoom >= 2\} onClick=\{\(\) => changeZoom\(0\.1\)\}/);
+  assert.match(bill, /function changeZoom\(amount\) \{\s*autoFit\.current = false;/);
+  assert.match(bill, /onClick=\{\(\) => \{ autoFit\.current = true; fit\.current\(\); \}\}>Fit width/);
   assert.match(bill, /new ResizeObserver/);
-  assert.match(bill, /window\.innerHeight \* 0\.76/);
+  assert.match(bill, /if \(autoFit\.current\) \{\s*const next = Math\.min\(1, viewport\.current\.clientWidth \/ current\.width\);/);
+  assert.match(bill, /new ResizeObserver\(fitToScreen\)/);
 });
 
 // Req 2.1, 2.2: the plan BillView hands to the preview is the one print and the PDF draw.

@@ -31,8 +31,10 @@ const fontFaces = INVOICE_FONT_FACES.map(face => ({
   base64: readFileSync(new URL(`../public/fonts/${face.file}`, import.meta.url)).toString('base64'),
 }));
 
-test('statement filename uses sanitized invoice number and IST as-of time', () => {
-  assert.equal(paymentStatementFilename(statement), 'Payment-Statement-GS-2026-42-20261121-0000-IST.pdf');
+test('statement filename distinguishes invoices and snapshots in IST', () => {
+  assert.equal(paymentStatementFilename(statement), 'Audit-Granite-GS-2026-42-00000001-Payment-Statement-21-11-2026-000000000.pdf');
+  assert.notEqual(paymentStatementFilename({ ...statement, asOf: '2026-11-20T18:30:00.001Z' }), paymentStatementFilename(statement));
+  assert.notEqual(paymentStatementFilename({ ...statement, invoice: { ...statement.invoice, id: '00000000-0000-4000-8000-000000000002' } }), paymentStatementFilename(statement));
 });
 
 test('statement PDF contains authoritative totals, payments, version, and IST as-of time', async () => {

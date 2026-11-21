@@ -9,6 +9,10 @@ process.env.NODE_ENV = 'test';
 // Integration tests use local temporary logos even when a developer's .env
 // configures production cloud storage. Individual cloud tests override this.
 process.env.LOGO_STORAGE = 'local';
+// Keep integration tests on the local rate limiter. Empty values also prevent
+// app.js's dotenv load from inheriting a real Redis service from .env.
+process.env.UPSTASH_REDIS_REST_URL = '';
+process.env.UPSTASH_REDIS_REST_TOKEN = '';
 const schema = 'stonedesk_test_' + randomUUID().replaceAll('-', '');
 if (!process.env.TEST_DATABASE_URL) throw new Error('Set TEST_DATABASE_URL in Backend/.env.test to a disposable PostgreSQL database.');
 function testUrl(value) {

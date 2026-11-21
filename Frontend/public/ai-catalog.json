@@ -1,0 +1,12 @@
+{
+  "name": "StoneDesk",
+  "specVersion": "1.0",
+  "description": "Load and invoice software for stone yards — record measurements, manage dispatches, and create buyer invoices and driver slips.",
+  "entryPoint": "/",
+  "entries": [
+    { "path": "/", "title": "StoneDesk home" }
+  ],
+  "routes": {
+    "home": "/"
+  }
+}

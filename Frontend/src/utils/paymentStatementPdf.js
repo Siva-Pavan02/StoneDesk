@@ -3,12 +3,20 @@ import { jsPDF } from 'jspdf';
 import { loadInvoicePdfFonts } from './a4InvoicePdfFonts.js';
 
 export function paymentStatementFilename(statement) {
-  const raw = String(statement?.invoice?.number || statement?.invoice?.id || 'invoice');
-  const invoiceNumber = raw.replace(/[^\p{L}\p{M}\p{N}-]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'invoice';
+  const sanitize = value => String(value || '')
+    .replace(/[^\p{L}\p{M}\p{N}-]+/gu, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+  const partyName = sanitize(statement?.invoice?.partyName) || 'Payment';
+  const invoiceNumber = sanitize(statement?.invoice?.number) || 'Invoice';
+  const invoiceId = sanitize(statement?.invoice?.id).slice(-8);
   const timestamp = new Date(statement?.asOf);
   if (!Number.isFinite(timestamp.getTime())) throw new Error('Invalid statement time');
   const ist = new Date(timestamp.getTime() + 330 * 60_000).toISOString();
-  return `Payment-Statement-${invoiceNumber}-${ist.slice(0, 10).replaceAll('-', '')}-${ist.slice(11, 16).replace(':', '')}-IST.pdf`;
+  const date = ist.slice(0, 10);
+  const [year, month, day] = date.split('-');
+  const time = ist.slice(11, 23).replace(/\D/g, '');
+  return `${partyName}-${invoiceNumber}${invoiceId ? `-${invoiceId}` : ''}-Payment-Statement-${day}-${month}-${year}-${time}.pdf`;
 }
 
 const MONEY = /^(0|[1-9]\d*)\.\d{2}$/;

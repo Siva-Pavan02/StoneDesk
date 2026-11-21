@@ -47,6 +47,15 @@ test('mock invoice payment, statement, revision and delete contracts match the r
   assert.equal(draft.status, 200);
   assert.equal(draft.data.summary.netBillableAmount, 1466.75);
   const id = draft.data.id;
+  const todayStatus = await call('/dispatches/status-counts?period=today');
+  const allStatus = await call('/dispatches/status-counts?period=all');
+  assert.equal(todayStatus.status, 200);
+  assert.equal(allStatus.status, 200);
+  assert.deepEqual((await call('/dispatches/status-counts')).data.statusCounts, todayStatus.data.statusCounts);
+  assert.equal(todayStatus.data.statusCounts.Draft >= 1, true);
+  assert.equal(todayStatus.data.today, allStatus.data.today);
+  assert.ok(allStatus.data.statusCounts.Draft >= todayStatus.data.statusCounts.Draft);
+  assert.equal((await call('/dispatches/status-counts?period=3')).status, 400);
   assert.equal((await call(`/dispatches/${id}/finalize`, 'POST', {})).status, 200);
   const key = randomUUID();
   const first = await call(`/dispatches/${id}/payments`, 'POST', { amount: 500.1, note: '  Bank  ', clientRequestId: key });
@@ -68,6 +77,8 @@ test('mock invoice payment, statement, revision and delete contracts match the r
   const analytics = await call('/dispatches/analytics?period=all');
   assert.equal(analytics.status, 200);
   assert.ok(analytics.data.paymentAnalytics.current.received >= 500.1);
+  const beforeFutureTodayStatus = await call('/dispatches/status-counts?period=today');
+  const beforeFutureAllStatus = await call('/dispatches/status-counts?period=all');
   const future = await call('/dispatches', 'POST', {
     supervisor: 'Supervisor', partyName: 'Future Buyer',
     date: new Date(Date.now() + 7 * 86400000).toISOString(),
@@ -78,6 +89,9 @@ test('mock invoice payment, statement, revision and delete contracts match the r
   });
   assert.equal(future.status, 200);
   assert.equal((await call(`/dispatches/${future.data.id}/finalize`, 'POST', {})).status, 200);
+  const afterFutureStatus = await call('/dispatches/status-counts?period=today');
+  assert.deepEqual(afterFutureStatus.data.statusCounts, beforeFutureTodayStatus.data.statusCounts);
+  assert.deepEqual((await call('/dispatches/status-counts?period=all')).data.statusCounts, beforeFutureAllStatus.data.statusCounts);
   assert.equal((await call(`/dispatches/${future.data.id}/payments`, 'POST', {
     amount: 100, clientRequestId: randomUUID(),
   })).status, 201);

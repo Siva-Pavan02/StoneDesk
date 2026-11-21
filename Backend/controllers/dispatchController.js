@@ -478,6 +478,29 @@ exports.getBySlip = async (req, res, next) => {
   }
 };
 
+exports.statusCounts = async (req, res, next) => {
+  try {
+    const period = req.query.period ?? 'today';
+    if (period !== 'today' && period !== 'all') calc.bad('Invalid load status period');
+    const range = windows(new Date(), 1);
+    const organizationId = req.user.organizationId;
+    const [rows, totalDrafts] = await Promise.all([
+      prisma.dispatch.groupBy({
+        by: ['status'],
+        where: {
+          organizationId,
+          date: { ...(period === 'today' ? { gte: range.currentStart } : {}), lt: range.end },
+        },
+        _count: { _all: true },
+      }),
+      prisma.dispatch.count({ where: { organizationId, status: 'Draft' } }),
+    ]);
+    const statusCounts = { Draft: 0, Dispatched: 0, Delivered: 0 };
+    for (const row of rows) statusCounts[row.status] = row._count._all;
+    res.json({ period, today: range.to, statusCounts, totalDrafts });
+  } catch (err) { next(err); }
+};
+
 exports.analytics = async (req, res, next) => {
   try {
     const now = new Date();

@@ -50,7 +50,7 @@ async function productionSnapshot() {
   const names = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: root, encoding: 'utf8' });
   const snapshot = {};
   for (const name of new Set(names.split('\0').filter(Boolean))) {
-    if (name === 'Frontend/tests/interfaceDesign.test.mjs') continue;
+    if (name === 'Frontend/tests/interfaceDesign.test.mjs' || name.startsWith('Backend/.tmp/')) continue;
     try { snapshot[name] = createHash('sha256').update(await fs.readFile(path.join(root, name))).digest('hex'); }
     catch (error) { if (error.code !== 'ENOENT' && error.code !== 'EISDIR') throw error; }
   }
@@ -161,11 +161,23 @@ async function makeCase(kind, language, width, options = {}) {
       }
       else if (apiPath === `/master-settings/${settings.organizationId}`) body = settings;
       else if (apiPath === '/dispatches') {
-        // The list response carries per-status totals for the filter counts (see dispatchController.list).
         const statusCounts = ['Draft', 'Dispatched', 'Delivered'].reduce((counts, status) => ({ ...counts, [status]: options.empty ? 0 : records.filter(record => record.status === status).length }), { all: options.empty ? 0 : records.length });
-        body = options.empty ? { data: [], nextCursor: null, statusCounts } : url.searchParams.has('cursor') ? { data: records.slice(6), nextCursor: null, statusCounts } : { data: records.slice(0, 6), nextCursor: 'mock-next', statusCounts };
+        const status = url.searchParams.get('status');
+        const rows = (options.empty ? [] : records).filter(record => !status || record.status === status);
+        const cursor = url.searchParams.get('cursor');
+        const start = cursor ? rows.findIndex(record => record.id === cursor) + 1 : 0;
+        const limit = Number(url.searchParams.get('limit') || 6);
+        const data = rows.slice(start, start + limit);
+        body = { data, nextCursor: start + limit < rows.length ? data.at(-1).id : null, statusCounts };
+      }
+      else if (apiPath === '/dispatches/status-counts') {
+        const period = url.searchParams.get('period') || 'today';
+        const rows = options.empty ? [] : records.filter(record => period === 'all' || record.date.startsWith('2026-10-08'));
+        body = { period, today: '2026-10-08', totalDrafts: options.empty ? 0 : records.filter(record => record.status === 'Draft').length,
+          statusCounts: Object.fromEntries(['Draft', 'Dispatched', 'Delivered'].map(status => [status, rows.filter(record => record.status === status).length])) };
       }
       else if (apiPath === '/dispatches/analytics') body = analyticsMock(options.empty, url.searchParams.get('period') || '3');
+      else if (apiPath === '/dispatches/receivables') body = { data: [], nextCursor: null };
       else if (/^\/dispatches\/[^/]+\/payments$/.test(apiPath)) {
         const record = records.find(record => record.id === apiPath.split('/')[2]);
         if (record) body = { invoiceTotal: record.summary.netBillableAmount, received: 0, balance: record.summary.netBillableAmount, status: 'PAYMENT_DUE', payments: [] };
@@ -254,7 +266,10 @@ async function makeCase(kind, language, width, options = {}) {
   }
   const main = () => page.locator('#workspace-main');
   const visibleRecords = () => width >= 1024 ? page.locator('.desktop-load-table tbody tr') : page.locator('.load-record:visible');
-  async function oneCreate() { await expect(page.getByRole('button', { name: 'Create a new load', exact: true })).toHaveCount(1); }
+  async function oneCreate() {
+    const home = await main().getAttribute('data-view') === 'home';
+    await expect(main().getByRole('button', { name: 'New load', exact: true })).toHaveCount(home ? 1 : 0);
+  }
   async function finish() {
     await check('Startup discovers the session through the public auth contract', async () => {
       assert.ok(result.api.some(request => request.method === 'GET' && request.path === '/auth/session'), 'App startup must reach the session fixture');
@@ -388,17 +403,17 @@ async function landing(language, width) {
 async function workspace(language, width) {
   const c = await makeCase('workspace', language, width);
   const { page, result, check, capture, overflow, nav, view, main, visibleRecords, oneCreate } = c;
-  await check('Mocked workspace opens with one global New load', async () => { await page.goto(`${base}/#home`, { waitUntil: 'domcontentloaded' }); await expect(page.locator('.dashboard-priority')).toBeVisible(); await oneCreate(); await expect(visibleRecords()).toHaveCount(5); });
+  await check('Mocked workspace opens with one dashboard New load action', async () => { await page.goto(`${base}/#home`, { waitUntil: 'domcontentloaded' }); await expect(page.locator('.dashboard-priority')).toBeVisible(); await oneCreate(); await expect(visibleRecords()).toHaveCount(5); });
   await overflow('dashboard', true);
   await check('Workspace stylesheet overrides are really applied', async () => {
-    await expect(page.locator('.dashboard-priority')).toHaveCSS('border-radius', '16px');
+    await expect(page.locator('.dashboard-priority')).toHaveCSS('display', 'flex');
     await expect(main()).toHaveCSS('padding-top', width < 768 ? '32px' : '40px');
-    await expect(page.locator('.workspace-create-load')).toHaveCSS('border-radius', '999px');
+    await expect(page.locator('.dashboard-create-load')).toHaveCSS('min-height', '44px');
     await expect(page.locator('.desktop-load-table')).toHaveCSS('display', width >= 1024 ? 'block' : 'none');
     await expect(page.locator('.mobile-load-record:visible')).toHaveCount(width >= 1024 ? 0 : 5);
   });
   await check('Header actions are visible, do not overlap and remain in viewport', async () => {
-    const boxes = await page.locator('.mobile-menu:visible, .workspace-organization, .workspace-search, .workspace-create-load, .workspace-notifications').evaluateAll(elements => elements.map(element => { const r = element.getBoundingClientRect(); return { name: element.className, left: r.left, right: r.right, top: r.top, bottom: r.bottom }; }));
+    const boxes = await page.locator('.mobile-menu:visible, .workspace-organization, .workspace-notifications').evaluateAll(elements => elements.map(element => { const r = element.getBoundingClientRect(); return { name: element.className, left: r.left, right: r.right, top: r.top, bottom: r.bottom }; }));
     result.header = boxes; assert.ok(boxes.every(box => box.left >= -1 && box.right <= width + 1), JSON.stringify(boxes));
     for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) assert.ok(!(Math.min(boxes[i].right, boxes[j].right) - Math.max(boxes[i].left, boxes[j].left) > 1 && Math.min(boxes[i].bottom, boxes[j].bottom) - Math.max(boxes[i].top, boxes[j].top) > 1), `${boxes[i].name} overlaps ${boxes[j].name}`);
   });
@@ -406,7 +421,7 @@ async function workspace(language, width) {
     const recent = page.locator('.dashboard-record-filter').getByRole('button', { name: 'Recent', exact: true });
     const drafts = page.locator('.dashboard-record-filter').getByRole('button', { name: 'Drafts', exact: true });
     await expect(recent).toHaveAttribute('aria-pressed', 'true'); await drafts.click();
-    await expect(drafts).toHaveAttribute('aria-pressed', 'true'); await expect(visibleRecords()).toHaveCount(2);
+    await expect(drafts).toHaveAttribute('aria-pressed', 'true'); await expect(visibleRecords()).toHaveCount(3);
     await expect(main().locator('.status-tag:visible:not(.status-draft)')).toHaveCount(0);
     await capture('dashboard-priority'); await recent.click(); await expect(recent).toHaveAttribute('aria-pressed', 'true'); await expect(visibleRecords()).toHaveCount(5);
   });
@@ -414,28 +429,26 @@ async function workspace(language, width) {
     await expect(main().locator('.dashboard-analytics h2')).toHaveText('Load status');
     await expect(main().locator('.dashboard-analytics .analytics-pie')).toBeVisible();
     await expect(main().locator('.dashboard-analytics .analytics-legend li')).toHaveCount(3);
-    await expect(main().locator('.dashboard-analytics .analytics-period-filter, .dashboard-analytics .analytics-summary')).toHaveCount(0);
+    await expect(main().locator('.dashboard-analytics .analytics-period-filter')).toHaveCount(1);
     await expect(main().locator('.payments-summary, .payments-trend-chart, .payments-party-bars, .payments-donut')).toHaveCount(0);
     await page.evaluate(() => { location.hash = 'payments'; });
     await view('payments');
     const payments = main().locator('.payments-analytics');
-    await expect(payments.getByRole('heading', { name: 'Payments', exact: true })).toBeVisible();
-    await expect(payments.locator('.payments-summary dt')).toHaveText(['Billed in period', 'Received in period', 'Invoices paid in full', 'Outstanding']);
-    await expect(payments.locator('.payments-summary dd')).toHaveText(['₹91,920.00', '₹45,000.00', '2₹30,000.00 invoice value', '₹15,000.00']);
-    await expect(payments.locator('.payments-summary > div').nth(3)).toContainText('All time');
-    await expect(payments.locator('.payments-donut-segment')).toHaveCount(4);
-    await expect(payments.locator('.payments-party-lines, .payments-party-line')).toHaveCount(0);
-    await expect(payments.locator('.payments-trend-chart, .payments-trend-line')).toHaveCount(0);
-    await expect(payments.locator('.payments-donut-total')).toHaveCount(0);
+    await expect(payments.getByRole('heading', { name: 'Payment insights', exact: true })).toBeVisible();
+    await expect(payments.locator('.payments-kpi dt')).toContainText(['Outstanding balance', 'Unpaid invoices', 'Partially paid', 'Amount received', 'Invoices paid in full']);
+    await expect(payments.locator('.payments-kpi dd')).toHaveText(['₹15,000.00', '2', '2', '₹45,000.00', '2']);
+    await expect(payments.locator('.payments-eyebrow')).toHaveText(['As of today', 'As of today', 'As of today', 'Last 3 days', 'Last 3 days']);
+    await expect(payments.locator('.payments-donut, .payments-trend-chart, .payments-party-amount-bar')).toHaveCount(0);
     await expect(payments.locator('.payments-party-list > li')).toHaveCount(4);
-    await expect(payments.locator('.payments-party-amount-bar')).toHaveCount(8);
-    await expect(payments.locator('.payments-party-amounts > div')).toHaveCount(8);
-    await expect(payments.locator('.payments-party-list').getByText('Total billed', { exact: true })).toHaveCount(4);
-    await expect(payments.locator('.payments-party-list').getByText('Due', { exact: true })).toHaveCount(4);
+    await expect(payments.locator('.payments-party-balance')).toHaveText(['₹6,000.00', '₹4,000.00', '₹3,000.00', '₹2,000.00']);
+    await payments.getByRole('button', { name: 'View unpaid invoices', exact: true }).first().click();
+    await expect(payments.getByRole('region', { name: 'Invoices with a balance for Sample Buyer 1' })).toBeVisible();
+    await expect(payments.getByText('No invoices with a balance remain for this party. Refresh to update the summary.')).toBeVisible();
+    await payments.getByRole('button', { name: 'Hide invoices', exact: true }).click();
     await expect(payments.getByRole('button', { name: '3 days', exact: true })).toHaveCSS('min-height', width <= 480 ? '34px' : '36px');
     const size = await payments.evaluate(element => ({ client: element.clientWidth, scroll: element.scrollWidth }));
     assert.ok(size.scroll <= size.client, `Payments analytics overflow: ${JSON.stringify(size)}`);
-    const allTime = payments.getByRole('group', { name: 'Payments period' }).getByRole('button', { name: 'All time', exact: true });
+    const allTime = payments.getByRole('group', { name: 'Payments period' }).getByRole('button', { name: 'All', exact: true });
     await Promise.all([
       page.waitForResponse(response => {
         const url = new URL(response.url());
@@ -444,16 +457,22 @@ async function workspace(language, width) {
       allTime.click()
     ]);
     await expect(allTime).toHaveAttribute('aria-pressed', 'true');
-    await expect(payments.locator('.payments-receivables .analytics-note')).toContainText('All-time');
+    await expect(payments.locator('.payments-eyebrow')).toHaveText(['As of today', 'As of today', 'As of today', 'All time', 'All time']);
     await overflow('payments', true);
     await page.evaluate(() => { location.hash = 'home'; });
     await view('home');
   });
-  await check('Refresh and both supporting metric navigation actions', async () => {
-    await Promise.all([page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/dispatches')), main().getByRole('button', { name: 'Refresh', exact: true }).click()]);
+  await check('Dashboard status period changes and returns to today', async () => {
+    const period = main().getByRole('group', { name: 'Load status period' });
+    const today = period.getByRole('button', { name: 'Today', exact: true });
+    const all = period.getByRole('button', { name: 'All', exact: true });
+    await expect(today).toHaveAttribute('aria-pressed', 'true');
+    await Promise.all([page.waitForResponse(response => response.url().includes('/dispatches/status-counts?period=all')), all.click()]);
+    await expect(all).toHaveAttribute('aria-pressed', 'true');
+    await expect(main().locator('.analytics-legend strong')).toHaveText(['3', '0', '5']);
+    await Promise.all([page.waitForResponse(response => response.url().includes('/dispatches/status-counts?period=today')), today.click()]);
+    await expect(today).toHaveAttribute('aria-pressed', 'true');
     await expect(visibleRecords()).toHaveCount(5);
-    await page.locator('.dashboard-metric-link').first().click(); await view('entries'); await expect(main().locator('.load-filter').nth(2)).toHaveAttribute('aria-pressed', 'true'); await expect(main().locator('.load-record')).toHaveCount(2); assert.equal(new URL(page.url()).hash, '#entries?status=Dispatched'); await oneCreate(); await nav('home');
-    await page.locator('.dashboard-metric-link').last().click(); await view('entries'); await nav('home');
   });
   if (width < 1024) {
     await check('Mobile native navigation dialog: close, Escape, focus and aria-expanded', async () => {
@@ -483,7 +502,7 @@ async function workspace(language, width) {
       assert.ok(links.every(link => link.display === 'flex' && link.width >= link.available - 2 && parseFloat(link.minHeight) >= 44), JSON.stringify(links));
     });
     if (await page.locator('#workspace-navigation-dialog').isVisible()) await page.keyboard.press('Escape');
-  } else await check('Desktop has five sidebar actions and a separate New load action', async () => { await expect(page.locator('.workspace-sidebar nav a:visible')).toHaveCount(5); await expect(page.locator('.mobile-menu')).not.toBeVisible(); await expect(page.locator('.bottom-nav')).toHaveCount(0); });
+  } else await check('Desktop has five sidebar actions and dashboard New load action', async () => { await expect(page.locator('.workspace-sidebar nav a:visible')).toHaveCount(5); await expect(page.locator('.dashboard-create-load')).toBeVisible(); await expect(page.locator('.mobile-menu')).not.toBeVisible(); await expect(page.locator('.bottom-nav')).toHaveCount(0); });
   await check('Notifications native dialog close, Escape and task navigation', async () => {
     const trigger = page.locator('.workspace-notifications'), dialog = page.locator('dialog[aria-labelledby="attention-title"]');
     await trigger.click(); await expect(dialog).toBeVisible(); await dialog.getByRole('button', { name: 'Close', exact: true }).click(); await expect(dialog).not.toBeVisible();
@@ -493,7 +512,7 @@ async function workspace(language, width) {
   await check('View all loads, all status filters and pagination', async () => {
     await main().getByRole('link', { name: 'View all loads', exact: true }).click(); await view('entries'); await expect(main().locator('.load-record')).toHaveCount(6);
     const filters = main().locator('.load-filters button');
-    for (let index = 1; index < 4; index++) { await filters.nth(index).click(); await expect(filters.nth(index)).toHaveAttribute('aria-pressed', 'true'); await expect(main().locator('.load-record')).toHaveCount(2); }
+    for (let index = 1; index < 4; index++) { await filters.nth(index).click(); await expect(filters.nth(index)).toHaveAttribute('aria-pressed', 'true'); await expect(main().locator('.load-record')).toHaveCount(index === 2 ? 2 : 3); }
     await filters.first().click(); await expect(main().locator('.load-record')).toHaveCount(6);
     await main().getByRole('button', { name: 'Load more', exact: true }).click(); await expect(main().locator('.load-record')).toHaveCount(8);
     await expect(main().getByRole('button', { name: 'Load more', exact: true })).toHaveCount(0);
@@ -580,7 +599,7 @@ async function workspace(language, width) {
     const passwordToggle = main().locator('.password-toggle').first(), currentPassword = main().locator('input[name="currentPassword"]');
     await expect(currentPassword).toHaveAttribute('type', 'password'); await passwordToggle.click(); await expect(currentPassword).toHaveAttribute('type', 'text'); await expect(passwordToggle).toHaveAttribute('aria-pressed', 'true');
     await passwordToggle.click(); await expect(currentPassword).toHaveAttribute('type', 'password');
-    await expect(main().locator('input[name="currentPassword"]')).toHaveValue(''); await expect(main().locator('input[name="password"]')).toHaveAttribute('minlength', '12'); await expect(main().getByRole('button', { name: 'Log out', exact: true })).toHaveCount(0);
+    await expect(main().locator('input[name="currentPassword"]')).toHaveValue(''); await expect(main().locator('input[name="password"]')).toHaveAttribute('minlength', '12'); await expect(main().getByRole('button', { name: 'Log out', exact: true })).toHaveCount(1);
   });
   await check('Business profile opens; wizard navigation never submits to the API', async () => {
     await expect(main().getByRole('link', { name: 'Business profile & default charges' })).toHaveCount(0);
@@ -649,22 +668,24 @@ async function workspace(language, width) {
     await view('settings');
   });
   await check('New load route hides global creation; local review/back actions are usable', async () => {
-    result.acceptConfirm = true; await page.locator('.workspace-create-load').click();
+    await nav('home'); result.acceptConfirm = true; await page.locator('.dashboard-create-load').click();
     await view('load'); result.acceptConfirm = false;
-    await expect(page.locator('.workspace-create-load')).toHaveCount(0); await expect(main().getByRole('heading', { name: 'New load', exact: true })).toBeVisible();
+    await expect(page.locator('.dashboard-create-load')).toHaveCount(0); await expect(main().getByRole('heading', { name: 'New load', exact: true })).toBeVisible();
     await main().getByLabel('Party name', { exact: true }).fill('Sample Preview Buyer');
     await main().getByLabel('Truck number', { exact: true }).fill('MOCK-PREVIEW-LORRY');
     await main().getByLabel('Destination', { exact: true }).fill('Sample North Yard');
-    const dimensions = main().locator('.grid-cols-3').filter({ has: main().getByLabel('Length (ft)', { exact: true }) });
+    const dimensions = main().locator('.grid-cols-3').filter({ has: page.getByLabel('Length (ft)', { exact: true }) });
     await expect(dimensions.getByLabel('Width (ft)', { exact: true })).toHaveCount(1);
     await expect(dimensions.getByLabel('Quantity', { exact: true })).toHaveCount(1);
+    const boxes = await Promise.all(['Length (ft)', 'Width (ft)', 'Quantity'].map(name => dimensions.getByLabel(name, { exact: true }).boundingBox()));
+    assert.ok(boxes.every(Boolean) && boxes.every(box => box.x >= -1 && box.x + box.width <= width + 1), `Measurement inputs overflow: ${JSON.stringify(boxes)}`);
     await expect(main().locator('.measurement-fractions')).toHaveCount(1);
     await main().getByLabel('Length (ft)', { exact: true }).fill('3');
     const fractions = main().locator('.measurement-fractions').first(); await fractions.locator('summary').click();
     await fractions.getByRole('button', { name: 'Add ½ foot to length', exact: true }).click();
     await expect(main().getByLabel('Length (ft)', { exact: true })).toHaveValue('3½');
     await main().getByLabel('Width (ft)', { exact: true }).fill('2');
-    await fractions.locator('summary').click();
+    if ((await fractions.getAttribute('open')) === null) await fractions.locator('summary').click();
     await fractions.getByRole('button', { name: 'Add ¼ foot to width', exact: true }).click();
     await expect(main().getByLabel('Width (ft)', { exact: true })).toHaveValue('2¼');
     await main().getByLabel('Quantity', { exact: true }).fill('30');
@@ -679,7 +700,7 @@ async function workspace(language, width) {
     await main().getByRole('button', { name: 'Back to dashboard', exact: true }).click(); await view('home'); await oneCreate();
   });
   await check('Unit products and mixed measurement review preserve quantities and area', async () => {
-    await page.locator('.workspace-create-load').click(); await view('load');
+    await page.locator('.dashboard-create-load').click(); await view('load');
     await main().getByLabel('Party name', { exact: true }).fill('Mixed preview buyer');
     await main().getByLabel('Truck number', { exact: true }).fill('MOCK-MIXED');
     await main().getByLabel('Destination', { exact: true }).fill('Sample North Yard');
@@ -715,7 +736,7 @@ async function workspace(language, width) {
     await main().getByRole('button', { name: 'Add Payment', exact: true }).click();
     const payment = page.locator('.add-payment-dialog');
     await payment.getByRole('button', { name: 'Save Payment', exact: true }).click();
-    await expect(payment).toContainText('Enter a valid amount greater than zero');
+    await expect(payment).toContainText('Enter a valid amount in rupees and paise');
     await payment.getByLabel('Amount Received (₹)', { exact: true }).fill('20000');
     await payment.getByRole('button', { name: 'Save Payment', exact: true }).click();
     await expect(payment).toContainText('Amount cannot exceed balance due');
@@ -888,7 +909,7 @@ async function workspace(language, width) {
   });
   await check('Welcome/workspace switch retains integrated styles; logout is mocked only', async () => {
     await nav('settings'); await expect(main().getByRole('tab')).toHaveCount(0); await page.evaluate(() => { window.location.hash = 'welcome'; }); await expect(page.locator('.marketing')).toBeVisible(); await expect(page.locator('.mk-login')).toHaveCount(0);
-    await page.locator('.mk-primary').first().click(); await view('home'); await expect(page.locator('.dashboard-priority')).toBeVisible(); await expect(page.locator('.dashboard-priority')).toHaveCSS('border-radius', '16px');
+    await page.locator('.mk-primary').first().click(); await view('home'); await expect(page.locator('.dashboard-priority')).toBeVisible(); await expect(page.locator('.dashboard-priority')).toHaveCSS('display', 'flex');
     const logoutName = { name: 'Log out', exact: true };
     if (width >= 1024) await page.locator('.workspace-sidebar').getByRole('button', logoutName).click();
     else { await page.locator('.mobile-menu').click(); await page.locator('#workspace-navigation-dialog').getByRole('button', logoutName).click(); }
